@@ -1,0 +1,26 @@
+services:
+  arrlink:
+    image: ghcr.io/yourname/arrlink:latest
+    build: .
+    container_name: arrlink
+    ports:
+      - "8270:8270"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: America/Toronto
+      LOG_LEVEL: info
+      CONFIG_DIR: /config
+      # M0: default open (LAN). M1: set to 'oidc' with the variables below.
+      AUTH_MODE: none
+      # AUTH_MODE: oidc
+      # OIDC_ISSUER: https://<provider>/application/o/<app>/
+      # OIDC_CLIENT_ID: <client-id>
+      # OIDC_CLIENT_SECRET: <client-secret>
+    volumes:
+      - ./arrlink/config:/config
+      # M2+: mount media read-only at the SAME paths Radarr/Sonarr see them,
+      # plus a writable /linked root on the same pool as the media.
+      # - /mnt/tank/media:/media:ro
+      # - /mnt/tank/linked:/linked
+    restart: unless-stopped
