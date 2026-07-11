@@ -8,12 +8,14 @@ from fastapi.responses import StreamingResponse
 
 from ..deps import get_db
 from ..state import State
+from .auth import CurrentUser
 
 router = APIRouter(prefix="/api", tags=["logs"])
 
 
 @router.get("/logs")
 def list_logs(
+    _user: CurrentUser,
     level: str | None = None,
     app_id: int | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
@@ -36,7 +38,7 @@ def list_logs(
 
 
 @router.get("/logs/stream")
-def logs_stream() -> StreamingResponse:
+def logs_stream(_user: CurrentUser) -> StreamingResponse:
     """Placeholder SSE endpoint — the real live feed lands with M3."""
 
     def generate():

@@ -10,13 +10,32 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-_MIGRATIONS: list[tuple[int, str]] = [
+
+def _migration_2(conn: sqlite3.Connection) -> None:
+    """M1: OIDC login states (PKCE) + refresh tokens on sessions."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}
+    if "refresh_token" not in cols:
+        conn.execute("ALTER TABLE sessions ADD COLUMN refresh_token TEXT")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS oidc_logins (
+            state TEXT PRIMARY KEY,
+            verifier TEXT NOT NULL,
+            nonce TEXT NOT NULL,
+            next_path TEXT,
+            created_at REAL NOT NULL
+        );
+        """
+    )
+
+
+_MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
     (
         1,
         """
@@ -126,6 +145,7 @@ _MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX IF NOT EXISTS idx_app_files_item ON app_files(item_id);
         """,
     ),
+    (2, _migration_2),
 ]
 
 
@@ -167,9 +187,12 @@ class State:
         )
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         current = row["version"] if row else 0
-        for version, sql in _MIGRATIONS:
+        for version, step in _MIGRATIONS:
             if version > current:
-                conn.executescript(sql)
+                if callable(step):
+                    step(conn)
+                else:
+                    conn.executescript(step)
                 conn.execute("DELETE FROM schema_version")
                 conn.execute(
                     "INSERT INTO schema_version (version) VALUES (?)", (version,)
