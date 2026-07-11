@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     oidc_issuer: str | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None
+    oidc_redirect_uri: str | None = None  # default: <origin>/api/auth/oidc/callback
     session_ttl_h: int = 12
 
     @property
