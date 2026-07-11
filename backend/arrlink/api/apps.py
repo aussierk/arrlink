@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from ..deps import get_db
 from ..state import State
+from .auth import CurrentUser
 
 router = APIRouter(prefix="/api/apps", tags=["apps"])
 
@@ -41,12 +42,14 @@ def _app_out(row: sqlite3.Row) -> dict:
 
 
 @router.get("")
-def list_apps(db: State = Depends(get_db)) -> list[dict]:
+def list_apps(_user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
     return [_app_out(r) for r in db.query("SELECT * FROM apps ORDER BY id")]
 
 
 @router.get("/{app_id}")
-def get_app(app_id: int, db: State = Depends(get_db)) -> dict:
+def get_app(
+    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
     row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
     if not row:
         raise HTTPException(404, "app not found")
@@ -54,7 +57,9 @@ def get_app(app_id: int, db: State = Depends(get_db)) -> dict:
 
 
 @router.post("", status_code=201)
-def create_app(body: AppIn, db: State = Depends(get_db)) -> dict:
+def create_app(
+    body: AppIn, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
     cur = db.execute(
         "INSERT INTO apps (name, type, url, api_key, enabled, poll_interval_s) "
         "VALUES (?,?,?,?,?,?)",
@@ -74,7 +79,9 @@ def create_app(body: AppIn, db: State = Depends(get_db)) -> dict:
 
 
 @router.patch("/{app_id}")
-def update_app(app_id: int, body: AppIn, db: State = Depends(get_db)) -> dict:
+def update_app(
+    app_id: int, body: AppIn, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
     if not db.query_one("SELECT id FROM apps WHERE id=?", (app_id,)):
         raise HTTPException(404, "app not found")
     db.execute(
@@ -95,7 +102,9 @@ def update_app(app_id: int, body: AppIn, db: State = Depends(get_db)) -> dict:
 
 
 @router.delete("/{app_id}", status_code=204)
-def delete_app(app_id: int, db: State = Depends(get_db)) -> None:
+def delete_app(
+    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
+) -> None:
     cur = db.execute("DELETE FROM apps WHERE id=?", (app_id,))
     db.commit()
     if cur.rowcount == 0:
@@ -104,7 +113,9 @@ def delete_app(app_id: int, db: State = Depends(get_db)) -> None:
 
 
 @router.post("/{app_id}/rescan")
-def rescan(app_id: int, db: State = Depends(get_db)) -> dict:
+def rescan(
+    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
     """Stub — manual rescan is implemented with the poller in M4."""
     row = db.query_one("SELECT name FROM apps WHERE id=?", (app_id,))
     if not row:

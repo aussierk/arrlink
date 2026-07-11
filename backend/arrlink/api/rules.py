@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ..deps import get_db
 from ..state import State
+from .auth import CurrentUser
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -54,7 +55,7 @@ def _rule_out(row) -> dict:
 
 
 @router.get("")
-def list_rules(db: State = Depends(get_db)) -> list[dict]:
+def list_rules(_user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
     rows = db.query(
         """
         SELECT r.*, a.name AS app_name
@@ -66,7 +67,9 @@ def list_rules(db: State = Depends(get_db)) -> list[dict]:
 
 
 @router.get("/{rule_id}")
-def get_rule(rule_id: int, db: State = Depends(get_db)) -> dict:
+def get_rule(
+    rule_id: int, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
     row = db.query_one("SELECT * FROM rules WHERE id=?", (rule_id,))
     if not row:
         raise HTTPException(404, "rule not found")
@@ -74,7 +77,9 @@ def get_rule(rule_id: int, db: State = Depends(get_db)) -> dict:
 
 
 @router.post("", status_code=201)
-def create_rule(body: RuleIn, db: State = Depends(get_db)) -> dict:
+def create_rule(
+    body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
     if body.app_scope is not None and not db.query_one(
         "SELECT id FROM apps WHERE id=?", (body.app_scope,)
     ):
@@ -101,7 +106,12 @@ def create_rule(body: RuleIn, db: State = Depends(get_db)) -> dict:
 
 
 @router.patch("/{rule_id}")
-def update_rule(rule_id: int, body: RuleIn, db: State = Depends(get_db)) -> dict:
+def update_rule(
+    rule_id: int,
+    body: RuleIn,
+    _user: CurrentUser,
+    db: State = Depends(get_db),
+) -> dict:
     if not db.query_one("SELECT id FROM rules WHERE id=?", (rule_id,)):
         raise HTTPException(404, "rule not found")
     if body.app_scope is not None and not db.query_one(
@@ -130,7 +140,9 @@ def update_rule(rule_id: int, body: RuleIn, db: State = Depends(get_db)) -> dict
 
 
 @router.delete("/{rule_id}", status_code=204)
-def delete_rule(rule_id: int, db: State = Depends(get_db)) -> None:
+def delete_rule(
+    rule_id: int, _user: CurrentUser, db: State = Depends(get_db)
+) -> None:
     cur = db.execute("DELETE FROM rules WHERE id=?", (rule_id,))
     db.commit()
     if cur.rowcount == 0:
@@ -139,7 +151,9 @@ def delete_rule(rule_id: int, db: State = Depends(get_db)) -> None:
 
 
 @router.post("/preview")
-def preview(body: RuleIn, db: State = Depends(get_db)) -> dict:
+def preview(
+    body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
     """Stub — live dry-run preview over the item snapshot arrives in M3."""
     return {
         "status": "stub",

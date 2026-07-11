@@ -1,7 +1,9 @@
 """ArrLink FastAPI app: JSON API + built SPA (Vite/React/TS)."""
 from __future__ import annotations
 
+import asyncio
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -11,7 +13,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import apps, health, logs, rules, settings as settings_api, tags
+from .api import apps, auth, health, logs, rules, settings as settings_api, tags
+from .auth import sessions as sess_mod
+from .auth.oidc import OidcClient
 from .config import get_settings, setup_logging
 from .state import State
 
@@ -31,14 +35,54 @@ def find_dist(here: Path) -> Path | None:
     return None
 
 
+async def _auth_sweep(db: State, settings) -> None:
+    """Background loop: silently refresh OIDC sessions nearing expiry."""
+    while True:
+        await asyncio.sleep(sess_mod.SWEEP_INTERVAL_S)
+        if settings.auth_mode != "oidc":
+            continue
+        try:
+
+            def _factory():
+                return OidcClient(
+                    settings.oidc_issuer,
+                    settings.oidc_client_id,
+                    settings.oidc_client_secret or "",
+                )
+
+            stats = await asyncio.to_thread(
+                sess_mod.run_sweep, db, _factory, settings.session_ttl_h
+            )
+            if stats["failed"]:
+                db.log_event(
+                    "warn",
+                    f"auth sweep: {stats['failed']} session(s) dropped, "
+                    f"{stats['refreshed']} refreshed",
+                )
+        except Exception as e:  # noqa: BLE001 - never crash the app
+            log.warning("auth sweep error: %s", e)
+
+
 def create_app(db_path: Path | None = None) -> FastAPI:
     """Build the app. `db_path` overrides the default (used by tests)."""
     settings = get_settings()
     setup_logging(settings.log_level)
+    db = State(db_path or settings.db_path)
 
-    app = FastAPI(title="ArrLink", version=__version__)
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        task: asyncio.Task | None = None
+        if settings.auth_mode == "oidc":
+            task = asyncio.create_task(_auth_sweep(db, settings))
+        try:
+            yield
+        finally:
+            if task:
+                task.cancel()
+
+    app = FastAPI(title="ArrLink", version=__version__, lifespan=lifespan)
     app.state.settings = settings
-    app.state.db = State(db_path or settings.db_path)
+    app.state.db = db
 
     # Permissive CORS only for the Vite dev server (:5173) during development.
     # In production the SPA is served from the same origin, so this is inert.
@@ -54,16 +98,12 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(apps.router)
     app.include_router(tags.router)
     app.include_router(rules.router)
     app.include_router(logs.router)
     app.include_router(settings_api.router)
-
-    @app.get("/api/auth/me")
-    def auth_me() -> dict:
-        # M1: OIDC session check. M0: report the configured auth mode.
-        return {"authenticated": False, "auth_mode": settings.auth_mode}
 
     dist = find_dist(Path(__file__).resolve())
     if dist:

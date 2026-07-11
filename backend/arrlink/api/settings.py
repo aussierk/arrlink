@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from ..deps import get_db
 from ..state import State
+from .auth import CurrentUser
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -20,12 +21,14 @@ class SettingValue(BaseModel):
 
 
 @router.get("")
-def get_all(db: State = Depends(get_db)) -> dict:
+def get_all(_user: CurrentUser, db: State = Depends(get_db)) -> dict:
     return db.all_settings()
 
 
 @router.put("/{key}")
-def set_setting(key: str, body: SettingValue, db: State = Depends(get_db)) -> dict:
+def set_setting(
+    key: str, body: SettingValue, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
     if not _KEY_RE.match(key):
         raise HTTPException(422, "invalid setting key")
     try:
@@ -37,5 +40,7 @@ def set_setting(key: str, body: SettingValue, db: State = Depends(get_db)) -> di
 
 
 @router.delete("/{key}", status_code=204)
-def delete_setting(key: str, db: State = Depends(get_db)) -> None:
+def delete_setting(
+    key: str, _user: CurrentUser, db: State = Depends(get_db)
+) -> None:
     db.delete_setting(key)

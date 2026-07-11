@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from ..deps import get_db
 from ..state import State, now
+from .auth import CurrentUser
 
 router = APIRouter(prefix="/api", tags=["tags"])
 
@@ -16,7 +17,9 @@ class TagImportIn(BaseModel):
 
 
 @router.get("/apps/{app_id}/tags")
-def list_tags(app_id: int, db: State = Depends(get_db)) -> list[dict]:
+def list_tags(
+    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
+) -> list[dict]:
     if not db.query_one("SELECT id FROM apps WHERE id=?", (app_id,)):
         raise HTTPException(404, "app not found")
     return [
@@ -29,7 +32,10 @@ def list_tags(app_id: int, db: State = Depends(get_db)) -> list[dict]:
 
 @router.post("/apps/{app_id}/tags/import", status_code=201)
 def import_tags(
-    app_id: int, body: TagImportIn, db: State = Depends(get_db)
+    app_id: int,
+    body: TagImportIn,
+    _user: CurrentUser,
+    db: State = Depends(get_db),
 ) -> dict:
     """M0 accepts a manual label list; M2 replaces this with a live API fetch."""
     if not db.query_one("SELECT id FROM apps WHERE id=?", (app_id,)):
