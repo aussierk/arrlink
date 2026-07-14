@@ -5,33 +5,47 @@ apps, import their tags, map tags to destination path/filename templates,
 and ArrLink continuously hardlinks matching media into organized folders —
 reacting to new imports and tag changes.
 
-> M0 scaffold: repo, Docker build, TypeScript SPA, FastAPI + SQLite
-> foundation. See `PLAN.md` for the full design and remaining milestones
-> (M1 OIDC auth → M7).
+> M1 done: OIDC auth (auto-login, PKCE, silent refresh). See `PLAN.md`
+> for the full design and remaining milestones (M2 Radarr adapter → M7).
 
-## Features (M0)
+## Features (through M1)
 
 - Multi-stage Docker image (Node 22 → Python 3.12-slim), `PUID`/`PGID`
   (starts as root to chown volumes, drops to `PUID`/`PGID` via gosu),
   healthcheck
+- **Auth (M1)**
+  - Generic **OIDC** (Auth Code + PKCE, **confidential client**): provider
+    discovery, code exchange, `state`/`nonce` validation, group/email
+    allow-lists (union; empty = anyone signed in)
+  - **Auto-login**: no in-app auth screen — if the browser already has a
+    provider session the OIDC round-trip is instant
+  - **Silent refresh**: 12 h local sessions; a background sweeper refreshes
+    them via the stored provider refresh token (provider token rotation
+    supported); rejected refreshes drop the session, which the SPA handles by
+    re-triggering the instant round-trip
+  - `none` / `password` fallback modes
+  - All data endpoints 401 without a session; `/api/health` stays open for
+    the container healthcheck
 - Vite + React + TypeScript + Tailwind SPA (dark theme)
-  - Dashboard (health, auth mode, connected apps)
+  - Auth gate (auto-login redirect, error surfaces, header user + sign out)
+  - Dashboard (health, auth, connected apps)
   - Apps (Radarr/Sonarr CRUD, API keys masked in responses)
   - Rules (matcher + dir/filename template CRUD, validation)
   - Logs (event history)
-  - Settings (runtime JSON key/value store)
+  - Settings (runtime JSON key/value store + OIDC allow-list editor)
 - FastAPI JSON API + SSE placeholder
-- SQLite (WAL) with versioned forward-only migrations; thread-local
-  connections
+- SQLite (WAL) with versioned forward-only migrations (v1: core, v2: OIDC);
+  thread-local connections
 
 ## Layout
 
 ```
 backend/arrlink/     FastAPI app
-  api/               apps, tags, rules, logs, settings, health
+  api/               auth, apps, tags, rules, logs, settings, health
+  auth/              oidc.py (discovery/PKCE/refresh), sessions.py (sweep)
   state.py           SQLite (WAL) + migrations
   config.py          env settings (pydantic-settings)
-  main.py            app factory + SPA static serving
+  main.py            app factory + auth-sweep lifespan + SPA static serving
 web/                 Vite + React + TS SPA
 tests/               pytest suite
 compose.yaml         deployment example
@@ -61,13 +75,29 @@ docker compose up -d
 # UI: http://<host>:8270
 ```
 
+### OIDC setup (M1)
+
+1. In your provider (e.g. authentik) create an **application** +
+   **provider** (OpenID Connect). In the application settings use the
+   **client** tab to get the **client id** and **client secret**
+   (confidential client).
+2. Redirect URI: `http(s)://<host>:8270/api/auth/oidc/callback`
+3. Set `AUTH_MODE=oidc`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
+   `OIDC_CLIENT_SECRET` in the compose file.
+4. (Optional) restrict access: Settings → Access control → allowed groups
+   and/or emails (empty = any authenticated user).
+
+> The **id_token is decoded but not signature-verified** (claims are read
+> from the userinfo endpoint over TLS; id_token is used for nonce/exp only).
+> This keeps the client dependency-free and works with any standard provider.
+
 ## Milestones
 
 | # | Scope | Status |
 |---|---|---|
 | M0 | scaffold, Docker, SPA shell, API/state foundation | ✅ done |
-| M1 | OIDC auth (PKCE, confidential client, silent refresh, allow-lists) | next |
-| M2 | Radarr adapter: ping, tag import | |
+| M1 | OIDC auth (PKCE, confidential client, silent refresh, allow-lists) | ✅ done |
+| M2 | Radarr adapter: ping, tag import | next |
 | M3 | rule matching, templates, live preview | |
 | M4 | poller, diff engine, hardlinker (Radarr) | |
 | M5 | Sonarr adapter (series + episode tags) | |

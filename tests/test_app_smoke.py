@@ -21,7 +21,7 @@ def test_health(client: TestClient):
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert body["schema_version"] == 1
+    assert body["schema_version"] == 2
 
 
 def test_auth_me_stub(client: TestClient):
@@ -238,8 +238,8 @@ def test_settings_roundtrip(client: TestClient):
 def test_migration_idempotent(tmp_path):
     s1 = State(tmp_path / "x.db")
     s2 = State(tmp_path / "x.db")  # second open must not fail
-    assert s1.query_one("SELECT version FROM schema_version")["version"] == 1
-    assert s2.query_one("SELECT version FROM schema_version")["version"] == 1
+    assert s1.query_one("SELECT version FROM schema_version")["version"] == 2
+    assert s2.query_one("SELECT version FROM schema_version")["version"] == 2
 
 
 def _make_dist(root: Path, body: str, asset: str) -> Path:

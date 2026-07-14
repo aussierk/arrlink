@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
-import Dashboard from './pages/Dashboard'
+import AuthGate from './components/AuthGate'
+import { api, type Me } from './lib/api'
 import Apps from './pages/Apps'
-import Rules from './pages/Rules'
+import Dashboard from './pages/Dashboard'
 import Logs from './pages/Logs'
+import Rules from './pages/Rules'
 import Settings from './pages/Settings'
 
 const nav = [
@@ -15,8 +18,22 @@ const nav = [
 
 export default function App() {
   return (
+    <AuthGate>
+      <Shell />
+    </AuthGate>
+  )
+}
+
+function Shell() {
+  const [me, setMe] = useState<Me | null>(null)
+
+  useEffect(() => {
+    api.me().then(setMe).catch(() => {})
+  }, [])
+
+  return (
     <div className="flex min-h-screen">
-      <aside className="w-56 shrink-0 border-r border-zinc-800 bg-zinc-900/60 p-4">
+      <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60 p-4">
         <div className="mb-8">
           <h1 className="text-lg font-semibold tracking-tight text-zinc-100">
             ArrLink
@@ -41,6 +58,19 @@ export default function App() {
             </NavLink>
           ))}
         </nav>
+        {me?.email && (
+          <div className="mt-auto flex items-center justify-between gap-2 border-t border-zinc-800 pt-4">
+            <span className="truncate text-xs text-zinc-400" title={me.email ?? ''}>
+              {me.name || me.email}
+            </span>
+            <button
+              onClick={() => void api.logout()}
+              className="text-xs text-zinc-500 hover:text-red-400"
+            >
+              sign out
+            </button>
+          </div>
+        )}
       </aside>
       <main className="flex-1 p-8">
         <Routes>

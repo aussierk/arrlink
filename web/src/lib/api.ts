@@ -7,11 +7,26 @@ export class ApiError extends Error {
   }
 }
 
+let redirecting = false
+
+/**
+ * A 401 means the local session is gone. Reload the SPA root so the
+ * AuthGate re-runs its mode-aware logic (OIDC round-trip, password prompt,
+ * or none-mode pass-through) instead of hardcoding one auth path here.
+ * Redirects at most once to avoid loops.
+ */
+export function redirectToLogin() {
+  if (redirecting) return
+  redirecting = true
+  window.location.assign('/')
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
   })
+  if (res.status === 401) redirectToLogin()
   if (!res.ok) {
     let detail = res.statusText
     try {
@@ -36,7 +51,12 @@ export type Health = {
   db: string
 }
 
-export type Me = { authenticated: boolean; auth_mode: string }
+export type Me = {
+  authenticated: boolean
+  auth_mode: string
+  email?: string | null
+  name?: string | null
+}
 
 export type AppItem = {
   id: number
@@ -98,6 +118,10 @@ export type LogEntry = {
 export const api = {
   health: () => req<Health>('/api/health'),
   me: () => req<Me>('/api/auth/me'),
+  logout: async () => {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    window.location.assign('/')
+  },
   listApps: () => req<AppItem[]>('/api/apps'),
   createApp: (b: AppInput) =>
     req<AppItem>('/api/apps', { method: 'POST', body: JSON.stringify(b) }),
@@ -121,4 +145,16 @@ export const api = {
 export function fmtTime(ts: number | null): string {
   if (!ts) return '—'
   return new Date(ts * 1000).toLocaleString()
+}
+
+export type AuthError = {
+  kind: 'auth_error'
+  value: string
+}
+
+export function readAuthErrorCookie(): string | null {
+  const m = document.cookie
+    .split('; ')
+    .find((c) => c.startsWith('arrlink_auth_error='))
+  return m ? decodeURIComponent(m.split('=')[1]) : null
 }

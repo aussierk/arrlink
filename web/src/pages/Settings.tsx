@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../lib/api'
+import { api, type Me } from '../lib/api'
 
 export default function Settings() {
   const [all, setAll] = useState<Record<string, unknown>>({})
@@ -7,10 +7,20 @@ export default function Settings() {
   const [value, setValue] = useState('{}')
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
+  const [me, setMe] = useState<Me | null>(null)
+  const [groupsText, setGroupsText] = useState('')
+  const [emailsText, setEmailsText] = useState('')
 
   const load = useCallback(async () => {
     try {
-      setAll(await api.getSettings())
+      const s = await api.getSettings()
+      setAll(s)
+      setGroupsText(
+        ((s['oidc_allowed_groups'] as string[] | undefined) ?? []).join(', '),
+      )
+      setEmailsText(
+        ((s['oidc_allowed_emails'] as string[] | undefined) ?? []).join(', '),
+      )
     } catch (e) {
       setErr(String(e))
     }
@@ -18,7 +28,23 @@ export default function Settings() {
 
   useEffect(() => {
     void load()
+    api.me().then(setMe).catch(() => {})
   }, [load])
+
+  async function saveAllowlist() {
+    setErr(null)
+    setOk(null)
+    const parse = (t: string) =>
+      t.split(',').map((s) => s.trim()).filter(Boolean)
+    try {
+      await api.setSetting('oidc_allowed_groups', parse(groupsText))
+      await api.setSetting('oidc_allowed_emails', parse(emailsText))
+      setOk('Allow-list saved.')
+      await load()
+    } catch (e) {
+      setErr(String(e))
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -57,9 +83,8 @@ export default function Settings() {
       <div>
         <h2 className="text-xl font-semibold">Settings</h2>
         <p className="text-sm text-zinc-500">
-          Runtime key/value settings (auth allow-lists, fs fallback, etc. land
-          with M1/M6). Environment-level settings (auth mode, OIDC vars) are
-          configured via the compose file.
+          Runtime settings. Environment-level settings (auth mode, OIDC
+          issuer/client) are configured via the compose file.
         </p>
       </div>
 
@@ -71,6 +96,46 @@ export default function Settings() {
       {ok && (
         <div className="rounded-md border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">
           {ok}
+        </div>
+      )}
+
+      {me?.auth_mode === 'oidc' && (
+        <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Access control
+          </h3>
+          <p className="text-xs text-zinc-500">
+            OIDC login is allowed for any authenticated user whose email is in
+            the email list <span className="text-zinc-400">or</span> whose group
+            is in the group list. Both empty = anyone signed in may use
+            ArrLink.
+          </p>
+          <label className="block text-sm">
+            <span className="mb-1 block text-zinc-400">Allowed groups</span>
+            <input
+              className={inputCls}
+              value={groupsText}
+              onChange={(e) => setGroupsText(e.target.value)}
+              placeholder="arrlink, family"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-zinc-400">Allowed emails</span>
+            <input
+              className={inputCls}
+              value={emailsText}
+              onChange={(e) => setEmailsText(e.target.value)}
+              placeholder="alice@example.com"
+            />
+          </label>
+          <div className="flex justify-end">
+            <button
+              onClick={() => void saveAllowlist()}
+              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+            >
+              Save allow-list
+            </button>
+          </div>
         </div>
       )}
 
