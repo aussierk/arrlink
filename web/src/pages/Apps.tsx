@@ -16,6 +16,9 @@ export default function Apps() {
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<string | null>(null)
+  const [rowMsg, setRowMsg] = useState<Record<number, string>>({})
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +56,43 @@ export default function Apps() {
     } catch (e) {
       setErr(String(e))
     }
+  }
+
+  async function testForm(e: React.MouseEvent) {
+    e.preventDefault()
+    setTesting(true)
+    setErr(null)
+    setTestResult(null)
+    try {
+      const r = await api.testApp(form)
+      setTestResult(`Connected — ${r.name} ${r.version}`)
+    } catch (ex) {
+      setTestResult(`Failed: ${ex}`)
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  async function testRow(id: number) {
+    setRowMsg((m) => ({ ...m, [id]: 'Testing…' }))
+    try {
+      const r = await api.testAppId(id)
+      setRowMsg((m) => ({ ...m, [id]: `ok · ${r.version}` }))
+    } catch (ex) {
+      setRowMsg((m) => ({ ...m, [id]: `fail: ${ex}` }))
+    }
+    await load()
+  }
+
+  async function importRow(id: number) {
+    setRowMsg((m) => ({ ...m, [id]: 'Importing tags…' }))
+    try {
+      const r = await api.importTags(id)
+      setRowMsg((m) => ({ ...m, [id]: `imported ${r.imported} tags` }))
+    } catch (ex) {
+      setRowMsg((m) => ({ ...m, [id]: `fail: ${ex}` }))
+    }
+    await load()
   }
 
   return (
@@ -135,7 +175,7 @@ export default function Apps() {
             }
           />
         </label>
-        <div className="col-span-6 flex items-center gap-4">
+        <div className="col-span-6 flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-zinc-300">
             <input
               type="checkbox"
@@ -144,13 +184,29 @@ export default function Apps() {
             />
             enabled
           </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="ml-auto rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-          >
-            {busy ? 'Adding…' : 'Add app'}
-          </button>
+          {testResult && (
+            <span
+              className={`text-xs ${testResult.startsWith('Connected') ? 'text-emerald-400' : 'text-red-400'}`}>
+              {testResult}
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={testForm}
+              disabled={testing || !form.url || !form.api_key}
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900 disabled:opacity-50"
+            >
+              {testing ? 'Testing…' : 'Test'}
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {busy ? 'Adding…' : 'Add app'}
+            </button>
+          </div>
         </div>
       </form>
 
@@ -164,13 +220,14 @@ export default function Apps() {
               <th className="px-3 py-2">API key</th>
               <th className="px-3 py-2">Poll</th>
               <th className="px-3 py-2">Last poll</th>
+              <th className="px-3 py-2">Actions</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {apps.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
                   No apps yet.
                 </td>
               </tr>
@@ -195,6 +252,25 @@ export default function Apps() {
                   ) : (
                     fmtTime(a.last_poll_at)
                   )}
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => testRow(a.id)}
+                      className="rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                    >
+                      test
+                    </button>
+                    <button
+                      onClick={() => importRow(a.id)}
+                      className="rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
+                    >
+                      import tags
+                    </button>
+                    {rowMsg[a.id] && (
+                      <span className="text-xs text-zinc-500">{rowMsg[a.id]}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-2 text-right">
                   <button

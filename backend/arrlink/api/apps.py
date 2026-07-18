@@ -1,12 +1,15 @@
 """Apps CRUD: storage, connection tests, and tag import."""
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from ..arr.base import AdapterError
+from ..arr.factory import get_adapter
 from ..deps import get_db
 from ..state import State
 from .auth import CurrentUser
@@ -110,6 +113,45 @@ def delete_app(
     if cur.rowcount == 0:
         raise HTTPException(404, "app not found")
     db.log_event("info", f"app deleted: {app_id}")
+
+
+@router.post("/test")
+def test_app(body: AppIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
+    """Pre-save connection test (used by the add-app dialog)."""
+    try:
+        adapter = get_adapter(body.type, body.url, body.api_key)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    try:
+        info = asyncio.run(adapter.ping())
+    except AdapterError as e:
+        raise HTTPException(502, e.detail) from e
+    return {"ok": True, "name": info.name, "version": info.version}
+
+
+@router.post("/{app_id}/test")
+def test_app_id(
+    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
+    """Re-test an existing app (used by the apps table)."""
+    row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
+    if not row:
+        raise HTTPException(404, "app not found")
+    try:
+        adapter = get_adapter(row["type"], row["url"], row["api_key"])
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    try:
+        info = asyncio.run(adapter.ping())
+    except AdapterError as e:
+        db.execute("UPDATE apps SET last_error=? WHERE id=?", (e.detail, app_id))
+        db.commit()
+        db.log_event("warn", f"connection test failed for {row['name']}: {e.detail}", app_id)
+        raise HTTPException(502, e.detail) from e
+    db.execute("UPDATE apps SET last_error=NULL WHERE id=?", (app_id,))
+    db.commit()
+    db.log_event("info", f"connection test ok for {row['name']} ({info.version})", app_id)
+    return {"ok": True, "name": info.name, "version": info.version}
 
 
 @router.post("/{app_id}/rescan")

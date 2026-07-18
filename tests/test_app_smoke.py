@@ -197,7 +197,7 @@ def test_tags_manual_import(client: TestClient):
         .get("id")
     )
     r = client.post(
-        f"/api/apps/{app_id}/tags/import",
+        f"/api/apps/{app_id}/tags/import-manual",
         json={"labels": ["kids", "## - alice", "PG-13"], "counts": {"kids": 4}},
     )
     assert r.status_code == 201

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type AppItem, type RuleInput, type RuleItem } from '../lib/api'
+import {
+  api,
+  type AppItem,
+  type RuleInput,
+  type RuleItem,
+  type TagItem,
+} from '../lib/api'
 
 const empty: RuleInput = {
   name: '',
@@ -20,6 +26,7 @@ export default function Rules() {
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [tags, setTags] = useState<TagItem[]>([])
 
   const load = useCallback(async () => {
     try {
@@ -34,6 +41,17 @@ export default function Rules() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (form.app_scope === null) {
+      setTags([])
+      return
+    }
+    api
+      .listTags(form.app_scope)
+      .then(setTags)
+      .catch(() => setTags([]))
+  }, [form.app_scope])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -141,10 +159,22 @@ export default function Rules() {
           <input
             className={inputCls}
             required
+            list={
+              form.match_type === 'regex'
+                ? undefined
+                : form.app_scope !== null
+                  ? 'rule-tags-dl'
+                  : undefined
+            }
             value={form.match_value}
             onChange={(e) => setForm({ ...form, match_value: e.target.value })}
             placeholder="## - alice  /  ^##\s*-\s*(?P<user>.+)$"
           />
+          <datalist id="rule-tags-dl">
+            {tags.map((t) => (
+              <option key={t.id} value={t.label} />
+            ))}
+          </datalist>
         </label>
         <label className="col-span-2 text-sm">
           <span className="mb-1 block text-zinc-400">Dir template</span>

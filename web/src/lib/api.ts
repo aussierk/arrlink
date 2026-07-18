@@ -71,6 +71,21 @@ export type AppItem = {
   item_count: number
 }
 
+export type AppTestResult = {
+  ok: boolean
+  name?: string
+  version?: string
+}
+
+export type TagItem = {
+  id: number
+  app_id: number
+  label: string
+  count: number
+  rule_count: number
+  imported_at: number
+}
+
 export type AppInput = {
   name: string
   type: 'radarr' | 'sonarr'
@@ -126,6 +141,18 @@ export const api = {
   createApp: (b: AppInput) =>
     req<AppItem>('/api/apps', { method: 'POST', body: JSON.stringify(b) }),
   deleteApp: (id: number) => req<void>(`/api/apps/${id}`, { method: 'DELETE' }),
+  testApp: (b: AppInput) =>
+    req<AppTestResult>('/api/apps/test', {
+      method: 'POST',
+      body: JSON.stringify(b),
+    }),
+  testAppId: (id: number) =>
+    req<AppTestResult>(`/api/apps/${id}/test`, { method: 'POST' }),
+  importTags: (id: number) =>
+    req<{ imported: number }>(`/api/apps/${id}/tags/import`, {
+      method: 'POST',
+    }),
+  listTags: (appId: number) => req<TagItem[]>(`/api/apps/${appId}/tags`),
   listRules: () => req<RuleItem[]>('/api/rules'),
   createRule: (b: RuleInput) =>
     req<RuleItem>('/api/rules', { method: 'POST', body: JSON.stringify(b) }),

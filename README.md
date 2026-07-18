@@ -5,8 +5,8 @@ apps, import their tags, map tags to destination path/filename templates,
 and ArrLink continuously hardlinks matching media into organized folders —
 reacting to new imports and tag changes.
 
-> M1 done: OIDC auth (auto-login, PKCE, silent refresh). See `PLAN.md`
-> for the full design and remaining milestones (M2 Radarr adapter → M7).
+> M2 done: Radarr connection + live tag import. See `PLAN.md` for the full
+> design and remaining milestones (M3 rule matching/preview → M7).
 
 ## Features (through M1)
 
@@ -26,11 +26,20 @@ reacting to new imports and tag changes.
   - `none` / `password` fallback modes
   - All data endpoints 401 without a session; `/api/health` stays open for
     the container healthcheck
+- **Apps (M2)**
+  - Radarr adapter: **Test connection** (pre-save + per-app), **live tag
+    import** from `GET /v3/tag`, item fetching from `GET /v3/movie`
+    (normalization for M4's diff engine), per-app `last_error` surfaced in UI
+  - Sonarr is a valid type but returns 422 until M5
+  - Tags page with usage counts + "used by N rules" (true matcher match,
+    disabled rules excluded)
 - Vite + React + TypeScript + Tailwind SPA (dark theme)
   - Auth gate (auto-login redirect, error surfaces, header user + sign out)
   - Dashboard (health, auth, connected apps)
-  - Apps (Radarr/Sonarr CRUD, API keys masked in responses)
-  - Rules (matcher + dir/filename template CRUD, validation)
+  - Apps (Radarr/Sonarr CRUD, API keys masked, Test + Import tags actions)
+  - Tags (per-app vocabulary, import, rule usage)
+  - Rules (matcher + dir/filename template CRUD, validation, tag
+    autocomplete from imported tags)
   - Logs (event history)
   - Settings (runtime JSON key/value store + OIDC allow-list editor)
 - FastAPI JSON API + SSE placeholder
@@ -42,6 +51,7 @@ reacting to new imports and tag changes.
 ```
 backend/arrlink/     FastAPI app
   api/               auth, apps, tags, rules, logs, settings, health
+  arr/               base.py (contract), radarr.py, factory.py (M5: sonarr)
   auth/              oidc.py (discovery/PKCE/refresh), sessions.py (sweep)
   state.py           SQLite (WAL) + migrations
   config.py          env settings (pydantic-settings)
@@ -97,8 +107,8 @@ docker compose up -d
 |---|---|---|
 | M0 | scaffold, Docker, SPA shell, API/state foundation | ✅ done |
 | M1 | OIDC auth (PKCE, confidential client, silent refresh, allow-lists) | ✅ done |
-| M2 | Radarr adapter: ping, tag import | next |
-| M3 | rule matching, templates, live preview | |
+| M2 | Radarr adapter: ping, tag import | ✅ done |
+| M3 | rule matching, templates, live preview | next |
 | M4 | poller, diff engine, hardlinker (Radarr) | |
 | M5 | Sonarr adapter (series + episode tags) | |
 | M6 | unlink lifecycle, repair, presets, fs fallback | |

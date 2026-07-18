@@ -7,10 +7,12 @@ import Dashboard from './pages/Dashboard'
 import Logs from './pages/Logs'
 import Rules from './pages/Rules'
 import Settings from './pages/Settings'
+import Tags from './pages/Tags'
 
 const nav = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/apps', label: 'Apps', end: false },
+  { to: '/tags', label: 'Tags', end: false },
   { to: '/rules', label: 'Rules', end: false },
   { to: '/logs', label: 'Logs', end: false },
   { to: '/settings', label: 'Settings', end: false },
@@ -76,6 +78,7 @@ function Shell() {
         <Routes>
           <Route index element={<Dashboard />} />
           <Route path="apps" element={<Apps />} />
+          <Route path="tags" element={<Tags />} />
           <Route path="rules" element={<Rules />} />
           <Route path="logs" element={<Logs />} />
           <Route path="settings" element={<Settings />} />
