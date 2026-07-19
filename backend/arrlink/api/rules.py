@@ -1,12 +1,17 @@
 """Rules CRUD: storage, validation, matching, templates, and preview."""
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
+from ..arr.base import AdapterError
+from ..arr.factory import get_adapter
+from ..core.planner import plan_links
+from ..core.template import DEFAULT_ROOTS
 from ..deps import get_db
 from ..state import State
 from .auth import CurrentUser
@@ -152,11 +157,54 @@ def delete_rule(
 
 @router.post("/preview")
 def preview(
-    body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)
+    body: RuleIn,
+    _user: CurrentUser,
+    app_id: int = Query(...),
+    db: State = Depends(get_db),
 ) -> dict:
-    """Stub — live dry-run preview over the item snapshot arrives in M3."""
+    """Dry-run the rule against the app's current items (no links created)."""
+    row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
+    if not row:
+        raise HTTPException(404, "app not found")
+    try:
+        adapter = get_adapter(row["type"], row["url"], row["api_key"])
+        items = asyncio.run(adapter.fetch_items())
+    except (ValueError, AdapterError) as e:
+        detail = getattr(e, "detail", None) or str(e)
+        raise HTTPException(502, detail) from e
+
+    rule = {
+        "id": 0,
+        "name": body.name or "(preview)",
+        "match_type": body.match_type,
+        "match_value": body.match_value,
+        "dir_template": body.dir_template,
+        "filename_template": body.filename_template,
+        "enabled": True,
+        "priority": body.priority,
+        "app_scope": body.app_scope,
+    }
+    roots = db.get_setting("allowed_roots") or list(DEFAULT_ROOTS)
+    planned, errors = plan_links([rule], items, row["name"], app_id, roots)
+
     return {
-        "status": "stub",
-        "note": "live preview arrives in M3",
-        "rule": body.model_dump(),
+        "app_id": app_id,
+        "app_name": row["name"],
+        "total": len(planned),
+        "sample": [
+            {
+                "item_title": p.item_title,
+                "src_path": p.src_path,
+                "dst_path": p.dst_path,
+            }
+            for p in planned[:50]
+        ],
+        "errors": [
+            {
+                "item_title": e.item_title,
+                "src_path": e.src_path,
+                "error": e.error,
+            }
+            for e in errors[:50]
+        ],
     }

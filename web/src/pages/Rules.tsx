@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import PreviewPanel from '../components/PreviewPanel'
 import {
   api,
   type AppItem,
@@ -27,6 +28,10 @@ export default function Rules() {
   const [ok, setOk] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [tags, setTags] = useState<TagItem[]>([])
+  const [previewFor, setPreviewFor] = useState<RuleItem | null>(null)
+
+  const previewAppId = (r: { app_scope: number | null } | RuleItem) =>
+    r.app_scope ?? apps[0]?.id ?? null
 
   const load = useCallback(async () => {
     try {
@@ -87,8 +92,9 @@ export default function Rules() {
       <div>
         <h2 className="text-xl font-semibold">Rules</h2>
         <p className="text-sm text-zinc-500">
-          Tag matchers → destination templates. Matching + dry-run preview
-          arrive in M3; presets in M6.
+          Tag matchers → destination templates. Preview shows exactly which
+          files would be hardlinked (nothing is created until M4's poller
+          runs). Presets land in M6.
         </p>
       </div>
 
@@ -202,6 +208,12 @@ export default function Rules() {
             placeholder="{$stem} (empty = keep source name)"
           />
         </label>
+        <div className="col-span-4 rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Live preview
+          </h4>
+          <PreviewPanel rule={form} appId={previewAppId(form)} />
+        </div>
         <div className="col-span-4 flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-sm text-zinc-300">
             <input
@@ -254,13 +266,14 @@ export default function Rules() {
               <th className="px-3 py-2">Dir template</th>
               <th className="px-3 py-2">Filename</th>
               <th className="px-3 py-2">Flags</th>
+              <th className="px-3 py-2">Preview</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {rules.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
                   No rules yet.
                 </td>
               </tr>
@@ -290,6 +303,16 @@ export default function Rules() {
                   p{r.priority}
                   {r.unlink_on_mismatch ? ' · unlink' : ''}
                 </td>
+                <td className="px-3 py-2">
+                  <button
+                    onClick={() =>
+                      setPreviewFor(previewFor?.id === r.id ? null : r)
+                    }
+                    className="rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
+                  >
+                    {previewFor?.id === r.id ? 'hide' : 'preview'}
+                  </button>
+                </td>
                 <td className="px-3 py-2 text-right">
                   <button
                     onClick={() => remove(r.id)}
@@ -300,6 +323,29 @@ export default function Rules() {
                 </td>
               </tr>
             ))}
+            {previewFor && (
+              <tr className="bg-zinc-900/40">
+                <td colSpan={8} className="px-3 py-3">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Preview — {previewFor.name}
+                  </h4>
+                  <PreviewPanel
+                    rule={{
+                      name: previewFor.name,
+                      app_scope: previewFor.app_scope,
+                      match_type: previewFor.match_type,
+                      match_value: previewFor.match_value,
+                      dir_template: previewFor.dir_template,
+                      filename_template: previewFor.filename_template,
+                      enabled: previewFor.enabled,
+                      unlink_on_mismatch: previewFor.unlink_on_mismatch,
+                      priority: previewFor.priority,
+                    }}
+                    appId={previewAppId(previewFor)}
+                  />
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

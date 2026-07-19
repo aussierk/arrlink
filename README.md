@@ -5,8 +5,8 @@ apps, import their tags, map tags to destination path/filename templates,
 and ArrLink continuously hardlinks matching media into organized folders —
 reacting to new imports and tag changes.
 
-> M2 done: Radarr connection + live tag import. See `PLAN.md` for the full
-> design and remaining milestones (M3 rule matching/preview → M7).
+> M3 done: rule matching, template engine, live preview. See `PLAN.md` for
+> the full design and remaining milestones (M4 poller/hardlinker → M7).
 
 ## Features (through M1)
 
@@ -39,9 +39,19 @@ reacting to new imports and tag changes.
   - Apps (Radarr/Sonarr CRUD, API keys masked, Test + Import tags actions)
   - Tags (per-app vocabulary, import, rule usage)
   - Rules (matcher + dir/filename template CRUD, validation, tag
-    autocomplete from imported tags)
+    autocomplete from imported tags, **live preview** — see below)
   - Logs (event history)
   - Settings (runtime JSON key/value store + OIDC allow-list editor)
+- **Rules engine (M3)**
+  - Matching: exact / list / regex (named + positional capture groups)
+  - Templates: dir + optional filename with placeholders `{$tag}` `{$app}`
+    `{$title}` `{$year}` `{$1..9}` `{$<group>}` `{$basename}` `{$stem}` `{$ext}`
+    — sanitized (illegal chars, `..`, 100-char cap), jailed to an allowed
+    root (default `/linked`, overridable via Settings `allowed_roots`), and
+    the source file extension is never dropped
+  - **Live preview** (`POST /api/rules/preview?app_id=`): dry-runs the rule
+    over the app's current items and shows exactly which files would land
+    where — nothing is created until the M4 poller runs
 - FastAPI JSON API + SSE placeholder
 - SQLite (WAL) with versioned forward-only migrations (v1: core, v2: OIDC);
   thread-local connections
@@ -52,6 +62,7 @@ reacting to new imports and tag changes.
 backend/arrlink/     FastAPI app
   api/               auth, apps, tags, rules, logs, settings, health
   arr/               base.py (contract), radarr.py, factory.py (M5: sonarr)
+  core/              matching.py, template.py, planner.py (preview+M4 share)
   auth/              oidc.py (discovery/PKCE/refresh), sessions.py (sweep)
   state.py           SQLite (WAL) + migrations
   config.py          env settings (pydantic-settings)
@@ -108,8 +119,8 @@ docker compose up -d
 | M0 | scaffold, Docker, SPA shell, API/state foundation | ✅ done |
 | M1 | OIDC auth (PKCE, confidential client, silent refresh, allow-lists) | ✅ done |
 | M2 | Radarr adapter: ping, tag import | ✅ done |
-| M3 | rule matching, templates, live preview | next |
-| M4 | poller, diff engine, hardlinker (Radarr) | |
+| M3 | rule matching, templates, live preview | ✅ done |
+| M4 | poller, diff engine, hardlinker (Radarr) | next |
 | M5 | Sonarr adapter (series + episode tags) | |
 | M6 | unlink lifecycle, repair, presets, fs fallback | |
 | M7 | docs, image publish, homelab test matrix | |

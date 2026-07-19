@@ -153,7 +153,19 @@ export const api = {
       method: 'POST',
     }),
   listTags: (appId: number) => req<TagItem[]>(`/api/apps/${appId}/tags`),
+
   listRules: () => req<RuleItem[]>('/api/rules'),
+  previewRule: (b: RuleInput, appId: number) =>
+    req<{
+      app_id: number
+      app_name: string
+      total: number
+      sample: { item_title: string; src_path: string; dst_path: string }[]
+      errors: { item_title: string; src_path: string; error: string }[]
+    }>(`/api/rules/preview?app_id=${appId}`, {
+      method: 'POST',
+      body: JSON.stringify(b),
+    }),
   createRule: (b: RuleInput) =>
     req<RuleItem>('/api/rules', { method: 'POST', body: JSON.stringify(b) }),
   deleteRule: (id: number) => req<void>(`/api/rules/${id}`, { method: 'DELETE' }),

@@ -168,7 +168,7 @@ def test_rules_crud_and_validation(client: TestClient):
     assert client.get("/api/rules").json() == []
 
 
-def test_preview_stub(client: TestClient):
+def test_preview_requires_app(client: TestClient):
     r = client.post(
         "/api/rules/preview",
         json={
@@ -178,8 +178,8 @@ def test_preview_stub(client: TestClient):
             "dir_template": "/linked/kids",
         },
     )
-    assert r.status_code == 200
-    assert r.json()["status"] == "stub"
+    # app_id query param is required (live preview lands in M3)
+    assert r.status_code == 422
 
 
 def test_tags_manual_import(client: TestClient):
