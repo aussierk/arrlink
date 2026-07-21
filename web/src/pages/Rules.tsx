@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import PreviewPanel from '../components/PreviewPanel'
 import {
   api,
@@ -94,7 +95,8 @@ export default function Rules() {
         <p className="text-sm text-zinc-500">
           Tag matchers → destination templates. The live preview shows exactly
           which files would be hardlinked; the poller keeps them in sync.
-          Presets land in M6.
+          Start from a <Link to="/presets" className="text-indigo-400 underline">preset</Link>
+          to get common conventions in one click.
         </p>
       </div>
 

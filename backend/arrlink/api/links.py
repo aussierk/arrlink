@@ -5,7 +5,7 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ..core.fsutil import create_link, ensure_dir, inode_of
+from ..core.fsutil import create_link, ensure_dir, inode_of, resolve_fs_fallback
 from ..deps import get_db
 from ..state import State
 from .auth import CurrentUser
@@ -66,7 +66,7 @@ def repair(
     """Re-create active links whose dst disappeared but whose source survives."""
     fixed = 0
     failed = 0
-    fallback = str(request.app.state.settings.fs_fallback)
+    fallback = resolve_fs_fallback(db, request.app.state.settings.fs_fallback)
     # 'missing' too: repair re-creates links that were removed (by the UI or
     # by the poller) whose source file has since (re)appeared.
     rows = db.query("SELECT * FROM links WHERE status IN ('active','stale','missing')")

@@ -9,6 +9,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 log = logging.getLogger(__name__)
 
 
+# Cross-filesystem fallback modes for the hardlinker (fsutil.create_link).
+FS_FALLBACK_MODES = ("skip", "copy", "symlink")
+
+
+def normalize_fs_fallback(value, default: str = "skip") -> str:
+    """Coerce a raw fs-fallback value (env or Setting) to a valid mode."""
+    v = (value or "").strip().lower()
+    return v if v in FS_FALLBACK_MODES else default
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -19,7 +29,10 @@ class Settings(BaseSettings):
     # CONFIG_DIR=/config.
     config_dir: Path = Path("config")
     log_level: str = "info"
-    fs_fallback: str = "skip"  # skip | copy | symlink (cross-device links)
+    # Default for the cross-filesystem fallback (skip | copy | symlink). A
+    # runtime value can be set via the `fs_fallback` Setting (Settings page);
+    # it takes precedence over this env value and is normalized on use.
+    fs_fallback: str = "skip"
 
     # Auth (M1 wires up the full OIDC flow)
     auth_mode: str = "none"  # none | password | oidc

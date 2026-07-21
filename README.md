@@ -5,12 +5,12 @@ apps, import their tags, map tags to destination path/filename templates,
 and ArrLink continuously hardlinks matching media into organized folders —
 reacting to new imports and tag changes.
 
-> M5 done: Radarr + Sonarr both connect, poll, and hardlink. New imports and
-> tag changes are hardlinked automatically; both apps' tag *ids* are
-> translated to labels. See `PLAN.md` for the full design and remaining
-> milestones (M6 → M7).
+> M6 done: Radarr + Sonarr connect, poll, and hardlink, with presets, a
+> Settings page (unlink / fs-fallback / allowed roots), and the full
+> unlink/rename/replace lifecycle. See `PLAN.md` for the design and remaining
+> milestone (M7).
 
-## Features (through M1)
+## Features
 
 - Multi-stage Docker image (Node 22 → Python 3.12-slim), `PUID`/`PGID`
   (starts as root to chown volumes, drops to `PUID`/`PGID` via gosu),
@@ -45,8 +45,10 @@ reacting to new imports and tag changes.
   - Tags (per-app vocabulary, import, rule usage)
   - Rules (matcher + dir/filename template CRUD, validation, tag
     autocomplete from imported tags, **live preview** — see below)
+  - Presets (one-click rules for common conventions, per app type)
   - Logs (event history)
-  - Settings (runtime JSON key/value store + OIDC allow-list editor)
+  - Settings (**Linking** section: global unlink-on-mismatch, cross-filesystem
+    fallback, allowed roots; OIDC allow-list editor; raw JSON key/value store)
 - **Poller + hardlinker (M4)**
   - per-app async poller (30 s ±20 % jitter, exponential backoff on errors,
     manual **rescan** button)
@@ -74,7 +76,21 @@ reacting to new imports and tag changes.
   - **Live preview** (`POST /api/rules/preview?app_id=`): dry-runs the rule
     over the app's current items and shows exactly which files would land
     where — nothing is created until the M4 poller runs
-- FastAPI JSON API + SSE placeholder
+- **Presets + runtime settings (M6)**
+  - **Presets**: one-click, editable rules for common conventions — user tags
+    (`## - $user` → `users/{$user}`), certification (`{$tag}` directly under
+    the base folder), kids, 4K/HDR, requested. Matchers differ per app type
+    (movie vs TV ratings/kids tags); the base folder defaults to
+    `/linked/movies` (Radarr) / `/linked/tv` (Sonarr) but is a parameter, and
+    is jail-validated against the allowed roots. `GET /api/presets?app_type=`
+    + `POST /api/presets/apply`
+  - **Runtime fs fallback**: the cross-filesystem fallback (`skip`/`copy`/
+    `symlink`) is a runtime **Setting** (Settings page) that takes precedence
+    over the `FS_FALLBACK` env default, applied by both the poller and repair
+  - **Settings page**: a **Linking** section edits global unlink-on-mismatch,
+    the fs fallback mode, and the allowed roots directly (no raw JSON), backed
+    by `GET /api/settings/effective` which returns the resolved runtime values
+- FastAPI JSON API + SSE live log stream
 - SQLite (WAL) with versioned forward-only migrations (v1: core, v2: OIDC);
   thread-local connections
 
@@ -82,9 +98,9 @@ reacting to new imports and tag changes.
 
 ```
 backend/arrlink/     FastAPI app
-  api/               auth, apps, tags, rules, logs, settings, health
+  api/               auth, apps, tags, rules, presets, logs, settings, health
   arr/               base.py (contract), radarr.py, sonarr.py, factory.py
-  core/              matching, template, planner, poller, linker, fsutil
+  core/              matching, template, planner, presets, poller, linker, fsutil
   auth/              oidc.py (discovery/PKCE/refresh), sessions.py (sweep)
   state.py           SQLite (WAL) + migrations
   config.py          env settings (pydantic-settings)
@@ -146,5 +162,5 @@ docker compose up -d
 | M3 | rule matching, templates, live preview | ✅ done |
 | M4 | poller, diff engine, hardlinker (Radarr) | ✅ done |
 | M5 | Sonarr adapter (series + episodefile join, tag-id → label) | ✅ done |
-| M6 | unlink lifecycle, repair, presets, fs fallback | next |
-| M7 | docs, image publish, homelab test matrix | |
+| M6 | presets, runtime fs fallback, Settings page, lifecycle polish | ✅ done |
+| M7 | docs, image publish, homelab test matrix | next |

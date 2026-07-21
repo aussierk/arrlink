@@ -13,8 +13,17 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import apps, auth, health, logs, rules, settings as settings_api, tags
-from .api import links as links_api
+from .api import (
+    apps,
+    auth,
+    health,
+    links as links_api,
+    logs,
+    presets as presets_api,
+    rules,
+    settings as settings_api,
+    tags,
+)
 from .auth import sessions as sess_mod
 from .auth.oidc import OidcClient
 from .config import get_settings, setup_logging
@@ -111,6 +120,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(rules.router)
     app.include_router(logs.router)
     app.include_router(settings_api.router)
+    app.include_router(presets_api.router)
 
     dist = find_dist(Path(__file__).resolve())
     if dist:

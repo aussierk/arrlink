@@ -145,6 +145,30 @@ export type LogEntry = {
   message: string
 }
 
+export type PresetItem = {
+  key: string
+  name: string
+  description: string
+  match_type: 'exact' | 'list' | 'regex'
+  match_value: string
+  subpath: string
+  default_base_folder: string
+  dir_template: string
+}
+
+export type PresetList = {
+  app_type: string
+  base_folder: string
+  presets: PresetItem[]
+}
+
+export type EffectiveSettings = {
+  global_unlink_on_mismatch: boolean
+  fs_fallback: string
+  fs_fallback_modes: string[]
+  allowed_roots: string[]
+}
+
 export const api = {
   health: () => req<Health>('/api/health'),
   me: () => req<Me>('/api/auth/me'),
@@ -187,6 +211,7 @@ export const api = {
   listLogs: (level?: string) =>
     req<LogEntry[]>(`/api/logs${level ? `?level=${encodeURIComponent(level)}` : ''}`),
   getSettings: () => req<Record<string, unknown>>('/api/settings'),
+  getEffectiveSettings: () => req<EffectiveSettings>('/api/settings/effective'),
   setSetting: (key: string, value: unknown) =>
     req<Record<string, unknown>>(`/api/settings/${key}`, {
       method: 'PUT',
@@ -194,6 +219,24 @@ export const api = {
     }),
   deleteSetting: (key: string) =>
     req<void>(`/api/settings/${key}`, { method: 'DELETE' }),
+
+  listPresets: (appType: string, baseFolder?: string) =>
+    req<PresetList>(
+      `/api/presets?app_type=${encodeURIComponent(appType)}${
+        baseFolder ? `&base_folder=${encodeURIComponent(baseFolder)}` : ''
+      }`,
+    ),
+  applyPreset: (b: {
+    preset_key: string
+    app_type: string
+    app_scope?: number | null
+    base_folder?: string | null
+    name?: string | null
+  }) =>
+    req<{ preset_key: string; rule: RuleItem; message: string }>(
+      '/api/presets/apply',
+      { method: 'POST', body: JSON.stringify(b) },
+    ),
   listLinks: (f?: { app_id?: number; status?: string }) => {
     const p = new URLSearchParams()
     if (f?.app_id) p.set('app_id', String(f.app_id))

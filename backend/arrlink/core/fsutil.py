@@ -83,6 +83,19 @@ def create_link(src: str, dst: str, fallback: str = "skip") -> LinkResult:
         return LinkResult(False, dst, f"{e.__class__.__name__}: {e}")
 
 
+def resolve_fs_fallback(db, env_default: str = "skip") -> str:
+    """The effective cross-filesystem fallback mode.
+
+    A runtime value set via the ``fs_fallback`` Setting (Settings page) takes
+    precedence over the process/env default; both are normalized to a valid
+    mode (skip | copy | symlink).
+    """
+    from ..config import normalize_fs_fallback
+
+    value = db.get_setting("fs_fallback") if db is not None else None
+    return normalize_fs_fallback(value, env_default)
+
+
 def remove_link(dst: str) -> LinkResult:
     """Remove a link we created. Refuses symlinks; removes the dir entry only
     (the file data survives via its other links / the source)."""

@@ -11,10 +11,23 @@ export default function Settings() {
   const [groupsText, setGroupsText] = useState('')
   const [emailsText, setEmailsText] = useState('')
 
+  // Linking settings (bound to the resolved effective values)
+  const [unlink, setUnlink] = useState(true)
+  const [fsFallback, setFsFallback] = useState('skip')
+  const [fsModes, setFsModes] = useState<string[]>(['skip', 'copy', 'symlink'])
+  const [rootsText, setRootsText] = useState('/linked')
+
   const load = useCallback(async () => {
     try {
-      const s = await api.getSettings()
+      const [s, eff] = await Promise.all([
+        api.getSettings(),
+        api.getEffectiveSettings(),
+      ])
       setAll(s)
+      setUnlink(eff.global_unlink_on_mismatch)
+      setFsFallback(eff.fs_fallback)
+      setFsModes(eff.fs_fallback_modes)
+      setRootsText(eff.allowed_roots.join(', '))
       setGroupsText(
         ((s['oidc_allowed_groups'] as string[] | undefined) ?? []).join(', '),
       )
@@ -46,6 +59,26 @@ export default function Settings() {
     }
   }
 
+  async function saveLinking() {
+    setErr(null)
+    setOk(null)
+    const roots = rootsText
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    try {
+      await api.setSetting('global_unlink_on_mismatch', unlink)
+      await api.setSetting('fs_fallback', fsFallback)
+      await api.setSetting('allowed_roots', roots)
+      setOk(
+        'Linking settings saved — they take effect on the next poll.',
+      )
+      await load()
+    } catch (e) {
+      setErr(String(e))
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setErr(null)
@@ -62,6 +95,7 @@ export default function Settings() {
       setOk(`Saved "${key.trim()}"`)
       setKey('')
       setValue('{}')
+      await load()
     } catch (e) {
       setErr(String(e))
     }
@@ -98,6 +132,65 @@ export default function Settings() {
           {ok}
         </div>
       )}
+
+      <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">Linking</h3>
+        <p className="text-xs text-zinc-500">
+          Applied by the poller and the repair action. Changes take effect on
+          the next poll — no restart needed.
+        </p>
+        <label className="flex items-center gap-2 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={unlink}
+            onChange={(e) => setUnlink(e.target.checked)}
+          />
+          Unlink on mismatch (remove links when a rule no longer matches)
+        </label>
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="text-sm">
+            <span className="mb-1 block text-zinc-400">
+              Cross-filesystem fallback
+            </span>
+            <select
+              className={inputCls}
+              value={fsFallback}
+              onChange={(e) => setFsFallback(e.target.value)}
+            >
+              {fsModes.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex-1 text-sm">
+            <span className="mb-1 block text-zinc-400">
+              Allowed roots <span className="text-zinc-600">(comma-separated)</span>
+            </span>
+            <input
+              className={inputCls}
+              value={rootsText}
+              onChange={(e) => setRootsText(e.target.value)}
+              placeholder="/linked, /mnt/pool/linked"
+            />
+          </label>
+        </div>
+        <p className="text-xs text-zinc-600">
+          <span className="font-mono">skip</span> = never link across
+          filesystems (default) · <span className="font-mono">copy</span> =
+          copy the file · <span className="font-mono">symlink</span> = symlink.
+          Destinations are always jailed to the allowed roots.
+        </p>
+        <div className="flex justify-end">
+          <button
+            onClick={() => void saveLinking()}
+            className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+          >
+            Save linking settings
+          </button>
+        </div>
+      </div>
 
       {me?.auth_mode === 'oidc' && (
         <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
@@ -199,7 +292,7 @@ export default function Settings() {
                 </td>
                 <td className="px-3 py-2 text-right">
                   <button
-                    onClick={() => remove(k)}
+                    onClick={() => void remove(k)}
                     className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
                   >
                     delete

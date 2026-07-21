@@ -10,7 +10,7 @@ import time
 
 from ..arr.base import AdapterError, BaseAdapter
 from ..state import State
-from .fsutil import remove_link
+from .fsutil import remove_link, resolve_fs_fallback
 from .linker import reconcile
 from .planner import plan_links
 from .template import DEFAULT_ROOTS
@@ -265,7 +265,7 @@ class Poller:
             plan,
             live_srcs,
             unlink_on_mismatch=bool(unlink_default),
-            fallback=str(settings.fs_fallback),
+            fallback=resolve_fs_fallback(self.db, settings.fs_fallback),
         )
         if result.created or result.removed or result.moved:
             self.db.log_event(
