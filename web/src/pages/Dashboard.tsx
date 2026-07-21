@@ -40,8 +40,7 @@ export default function Dashboard() {
       <div>
         <h2 className="text-xl font-semibold">Dashboard</h2>
         <p className="text-sm text-zinc-500">
-          M0 scaffold — connection checks, tag import, and hardlinking land in
-          later milestones.
+          Live status for your connected apps and the links ArrLink maintains.
         </p>
       </div>
 

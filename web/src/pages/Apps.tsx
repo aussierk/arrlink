@@ -111,7 +111,8 @@ export default function Apps() {
       <div>
         <h2 className="text-xl font-semibold">Apps</h2>
         <p className="text-sm text-zinc-500">
-          Connect Radarr / Sonarr. Connection tests + tag import arrive in M2.
+          Connect Radarr and Sonarr — test the connection, import tags, and
+          rescan to reconcile links.
         </p>
       </div>
 

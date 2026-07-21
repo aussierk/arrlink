@@ -5,9 +5,10 @@ apps, import their tags, map tags to destination path/filename templates,
 and ArrLink continuously hardlinks matching media into organized folders —
 reacting to new imports and tag changes.
 
-> M4 done: poller, diff, and hardlinker — new imports and tag changes are
-> hardlinked automatically. See `PLAN.md` for the full design and remaining
-> milestones (M5 Sonarr → M7).
+> M5 done: Radarr + Sonarr both connect, poll, and hardlink. New imports and
+> tag changes are hardlinked automatically; both apps' tag *ids* are
+> translated to labels. See `PLAN.md` for the full design and remaining
+> milestones (M6 → M7).
 
 ## Features (through M1)
 
@@ -30,8 +31,11 @@ reacting to new imports and tag changes.
 - **Apps (M2)**
   - Radarr adapter: **Test connection** (pre-save + per-app), **live tag
     import** from `GET /v3/tag`, item fetching from `GET /v3/movie`
-    (normalization for M4's diff engine), per-app `last_error` surfaced in UI
-  - Sonarr is a valid type but returns 422 until M5
+    (normalization for the diff engine), per-app `last_error` surfaced in UI
+  - **Sonarr adapter (M5)**: `GET /v3/series` + per-series
+    `GET /v3/episodefile` joined by `seriesId`; series-level tags; files
+    stat'ed for inodes. Both adapters translate the apps' tag **ids** (the
+    wire format) to **labels** via `GET /v3/tag` so rules match real tags
   - Tags page with usage counts + "used by N rules" (true matcher match,
     disabled rules excluded)
 - Vite + React + TypeScript + Tailwind SPA (dark theme)
@@ -79,7 +83,7 @@ reacting to new imports and tag changes.
 ```
 backend/arrlink/     FastAPI app
   api/               auth, apps, tags, rules, logs, settings, health
-  arr/               base.py (contract), radarr.py, factory.py (M5: sonarr)
+  arr/               base.py (contract), radarr.py, sonarr.py, factory.py
   core/              matching, template, planner, poller, linker, fsutil
   auth/              oidc.py (discovery/PKCE/refresh), sessions.py (sweep)
   state.py           SQLite (WAL) + migrations
@@ -141,6 +145,6 @@ docker compose up -d
 | M2 | Radarr adapter: ping, tag import | ✅ done |
 | M3 | rule matching, templates, live preview | ✅ done |
 | M4 | poller, diff engine, hardlinker (Radarr) | ✅ done |
-| M5 | Sonarr adapter (series + episode tags) | next |
-| M6 | unlink lifecycle, repair, presets, fs fallback | |
+| M5 | Sonarr adapter (series + episodefile join, tag-id → label) | ✅ done |
+| M6 | unlink lifecycle, repair, presets, fs fallback | next |
 | M7 | docs, image publish, homelab test matrix | |

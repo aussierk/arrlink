@@ -15,6 +15,31 @@ class AdapterError(Exception):
         self.status = status
 
 
+def translate_tag_labels(tags: list["Tag"], raw) -> list[str]:
+    """Translate a list of tag *ids* (as *arr item payloads carry them) into tag *labels* using the app's tag vocabulary."""
+    if not raw:
+        return []
+    by_id: dict[int, str] = {t.id: t.label for t in tags if t.id is not None}
+    out: list[str] = []
+    for t in raw:
+        if isinstance(t, str):
+            s = t.strip()
+            if s.isdigit():
+                label = by_id.get(int(s))
+                if label is not None:
+                    out.append(label)
+            elif s:
+                out.append(s)
+            continue
+        try:
+            label = by_id.get(int(t))
+        except (TypeError, ValueError):
+            continue
+        if label is not None:
+            out.append(label)
+    return out
+
+
 @dataclasses.dataclass
 class AppInfo:
     name: str
@@ -23,8 +48,16 @@ class AppInfo:
 
 @dataclasses.dataclass
 class Tag:
+    """One tag from the app's vocabulary.
+
+    `id` is the app's internal tag id (present in Radarr/Sonarr's
+    `/v3/tag` responses). Item payloads reference tags by this id (a list of
+    ints), so adapters must translate ids -> labels before exposing items.
+    """
+
     label: str
     count: int = 0
+    id: int | None = None
 
 
 @dataclasses.dataclass

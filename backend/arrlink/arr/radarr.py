@@ -3,7 +3,15 @@ from __future__ import annotations
 
 import os
 
-from .base import AdapterError, AppInfo, BaseAdapter, Item, MediaFile, Tag
+from .base import (
+    AdapterError,
+    AppInfo,
+    BaseAdapter,
+    Item,
+    MediaFile,
+    Tag,
+    translate_tag_labels,
+)
 
 
 class RadarrAdapter(BaseAdapter):
@@ -30,10 +38,15 @@ class RadarrAdapter(BaseAdapter):
                 count = int(row.get("count") or 0)
             except (TypeError, ValueError):
                 count = 0
-            tags.append(Tag(label=label, count=count))
+            try:
+                tid = int(row.get("id"))
+            except (TypeError, ValueError):
+                tid = None
+            tags.append(Tag(label=label, count=count, id=tid))
         return tags
 
     async def fetch_items(self) -> list[Item]:
+        vocabulary = await self.fetch_tags()
         data = await self._get_json("/api/v3/movie")
         if not isinstance(data, list):
             raise AdapterError("unexpected movie payload")
@@ -45,7 +58,7 @@ class RadarrAdapter(BaseAdapter):
             path = movie_file.get("path") if isinstance(movie_file, dict) else None
             if not path:
                 continue  # not on disk yet
-            tags = [str(t) for t in (row.get("tags") or [])]
+            labels = translate_tag_labels(vocabulary, row.get("tags"))
             try:
                 year = row.get("year")
                 year = int(year) if year else None
@@ -71,7 +84,7 @@ class RadarrAdapter(BaseAdapter):
                     id=int(row["id"]),
                     title=str(row.get("title") or ""),
                     year=year,
-                    tags=tags,
+                    tags=labels,
                     path=item_dir,
                     files=[
                         MediaFile(

@@ -31,6 +31,16 @@ class Media:
         self.media_dir = media_dir
         self.linked_dir = linked_dir
         self.movies: list[dict] = []
+        # label -> id registry (like the real app's tag table). The wire
+        # protocol carries *ids*; the adapter translates via /v3/tag.
+        self._tag_ids: dict[str, int] = {}
+        self._next_tag_id = 1
+
+    def tag_id(self, label: str) -> int:
+        if label not in self._tag_ids:
+            self._tag_ids[label] = self._next_tag_id
+            self._next_tag_id += 1
+        return self._tag_ids[label]
 
     def add(self, path, title, year, tags):
         full = os.path.join(self.media_dir, path)
@@ -39,11 +49,15 @@ class Media:
             f.write(f"{title} data".encode())
         self.movies.append(
             {"id": len(self.movies) + 1, "title": title, "year": year,
-             "tags": tags, "movieFile": {"path": full, "size": os.path.getsize(full)}}
+             "tags": [self.tag_id(t) for t in tags],
+             "movieFile": {"path": full, "size": os.path.getsize(full)}}
         )
 
     def movies_payload(self):
         return [m for m in self.movies]
+
+    def set_tags(self, index: int, labels: list[str]):
+        self.movies[index]["tags"] = [self.tag_id(t) for t in labels]
 
 
 def build_radarr(origin: str, media: Media):
@@ -61,10 +75,14 @@ def build_radarr(origin: str, media: Media):
             return JSONResponse({}, status_code=401)
         counts: dict[str, int] = {}
         for m in media.movies:
-            for t in m["tags"]:
-                counts[t] = counts.get(t, 0) + 1
-        return [{"id": i + 1, "label": k, "count": c}
-                for i, (k, c) in enumerate(counts.items())]
+            for tid in m["tags"]:
+                for label, i in media._tag_ids.items():
+                    if i == tid:
+                        counts[label] = counts.get(label, 0) + 1
+        return [
+            {"id": tid, "label": label, "count": counts.get(label, 0)}
+            for label, tid in media._tag_ids.items()
+        ]
 
     @app.get("/api/v3/movie")
     def movie(request: Request):
@@ -206,13 +224,13 @@ def test_tag_added_and_removed(client, radarr_media):
     assert os.path.exists(dst)
 
     # add a tag to Inception -> it now matches
-    media.movies[0]["tags"].append("kids")
+    media.set_tags(0, ["4k", "kids"])
     _poll(client, app_id)
     dst2 = f"{media.linked_dir}/kids/Inception.2010.2160p.mkv"
     assert os.path.exists(dst2)
 
     # remove the kids tag from Inception -> link removed (unlink_on_mismatch)
-    media.movies[0]["tags"].remove("kids")
+    media.set_tags(0, ["4k"])
     _poll(client, app_id)
     assert not os.path.exists(dst2)
     # the kids-movie link is untouched
@@ -401,7 +419,7 @@ def test_unlink_off_keeps_link(client, radarr_media):
               "dir_template": f"{media.linked_dir}/kids", "enabled": True,
               "unlink_on_mismatch": False, "priority": 100},
     )
-    media.movies[1]["tags"].remove("kids")
+    media.set_tags(1, [])  # drop the kids tag
     _poll(client, app_id)
     # link is kept (marked stale), not removed
     assert os.path.exists(dst)

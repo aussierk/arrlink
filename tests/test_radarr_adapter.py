@@ -32,12 +32,14 @@ def build_radarr(origin: str) -> tuple[FastAPI, dict]:
             {"id": 2, "label": "## - alice", "count": 1},
             {"id": 3, "label": "4k", "count": 1},
         ],
+        # NOTE: like the real API, movie `tags` are *tag ids* (ints), not
+        # labels — the adapter must translate them via /v3/tag.
         "movies": [
             {
                 "id": 1,
                 "title": "Inception",
                 "year": 2010,
-                "tags": ["4k", "## - alice"],
+                "tags": [3, 2],  # 4k, ## - alice
                 "movieFile": {
                     "path": "/media/movies/Inception.2010.2160p.mkv",
                     "size": 12345,
@@ -47,14 +49,14 @@ def build_radarr(origin: str) -> tuple[FastAPI, dict]:
                 "id": 2,
                 "title": "Pending Movie",
                 "year": 2020,
-                "tags": ["kids"],
+                "tags": [1],  # kids
                 "movieFile": None,  # not on disk → excluded
             },
             {
                 "id": 3,
                 "title": "Kids Movie",
                 "year": 2019,
-                "tags": ["kids"],
+                "tags": [1],  # kids
                 "movieFile": {
                     "path": "/media/movies/Kids Movie/Kids Movie.2019.mkv",
                     "size": 999,
@@ -200,19 +202,15 @@ def test_pre_save_unreachable(client):
     assert "unreachable" in r.json()["detail"]
 
 
-def test_pre_save_sonarr_not_supported_yet(client, radarr):
-    # Sonarr is a valid app type (M5) but has no adapter in M2 → 422
-    r = client.post(
-        "/api/apps/test",
-        json={
-            "name": "S",
-            "type": "sonarr",
-            "url": radarr.url,
-            "api_key": API_KEY,
-        },
-    )
-    assert r.status_code == 422
-    assert "unsupported app type" in r.json()["detail"]
+def test_factory_registers_both_adapters():
+    # both Radarr and Sonarr adapters are wired into the factory.
+    from arrlink.arr.factory import get_adapter
+
+    assert get_adapter("radarr", "http://x", "k").app_type == "radarr"
+    assert get_adapter("sonarr", "http://x", "k").app_type == "sonarr"
+
+    with pytest.raises(ValueError, match="unsupported app type"):
+        get_adapter("lidarr", "http://x", "k")
 
 
 def test_existing_app_test_ok_and_failure(client, radarr):

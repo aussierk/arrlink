@@ -68,7 +68,7 @@ export default function Rules() {
         ...form,
         filename_template: form.filename_template || null,
       })
-      setOk(`Added rule "${r.name}" — live preview lands in M3`)
+      setOk(`Added rule "${r.name}"`)
       setForm(empty)
       await load()
     } catch (e) {
@@ -92,9 +92,9 @@ export default function Rules() {
       <div>
         <h2 className="text-xl font-semibold">Rules</h2>
         <p className="text-sm text-zinc-500">
-          Tag matchers → destination templates. Preview shows exactly which
-          files would be hardlinked (nothing is created until M4's poller
-          runs). Presets land in M6.
+          Tag matchers → destination templates. The live preview shows exactly
+          which files would be hardlinked; the poller keeps them in sync.
+          Presets land in M6.
         </p>
       </div>
 

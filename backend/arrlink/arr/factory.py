@@ -1,11 +1,13 @@
-"""Adapter factory (M2: Radarr; M5: Sonarr)."""
+"""Adapter factory (Radarr + Sonarr)."""
 from __future__ import annotations
 
 from .base import BaseAdapter
 from .radarr import RadarrAdapter
+from .sonarr import SonarrAdapter
 
 _ADAPTERS: dict[str, type[BaseAdapter]] = {
     RadarrAdapter.app_type: RadarrAdapter,
+    SonarrAdapter.app_type: SonarrAdapter,
 }
 
 
