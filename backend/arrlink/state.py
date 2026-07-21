@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def _migration_2(conn: sqlite3.Connection) -> None:
@@ -33,6 +33,20 @@ def _migration_2(conn: sqlite3.Connection) -> None:
         );
         """
     )
+
+
+def _migration_3(conn: sqlite3.Connection) -> None:
+    """M4: track file inodes/strikes for the poller's diff + link grace."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(app_files)")}
+    if "missing_strikes" not in cols:
+        conn.execute(
+            "ALTER TABLE app_files ADD COLUMN missing_strikes INTEGER NOT NULL DEFAULT 0"
+        )
+    lcols = {r["name"] for r in conn.execute("PRAGMA table_info(links)")}
+    if "missing_strikes" not in lcols:
+        conn.execute(
+            "ALTER TABLE links ADD COLUMN missing_strikes INTEGER NOT NULL DEFAULT 0"
+        )
 
 
 _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
@@ -146,6 +160,7 @@ _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
         """,
     ),
     (2, _migration_2),
+    (3, _migration_3),
 ]
 
 

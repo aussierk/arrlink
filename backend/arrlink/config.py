@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # CONFIG_DIR=/config.
     config_dir: Path = Path("config")
     log_level: str = "info"
+    fs_fallback: str = "skip"  # skip | copy | symlink (cross-device links)
 
     # Auth (M1 wires up the full OIDC flow)
     auth_mode: str = "none"  # none | password | oidc

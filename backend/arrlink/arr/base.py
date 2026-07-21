@@ -34,6 +34,7 @@ class MediaFile:
     size: int | None = None
     mtime: float | None = None
     inode: int | None = None
+    id: int | None = None  # app_files.id once stored (used by the linker)
 
 
 @dataclasses.dataclass

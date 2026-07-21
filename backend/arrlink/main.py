@@ -14,9 +14,11 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .api import apps, auth, health, logs, rules, settings as settings_api, tags
+from .api import links as links_api
 from .auth import sessions as sess_mod
 from .auth.oidc import OidcClient
 from .config import get_settings, setup_logging
+from .core.poller import Poller
 from .state import State
 
 log = logging.getLogger(__name__)
@@ -74,9 +76,13 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         task: asyncio.Task | None = None
         if settings.auth_mode == "oidc":
             task = asyncio.create_task(_auth_sweep(db, settings))
+        poller = Poller(db, settings)
+        app.state.poller = poller
+        await poller.start()
         try:
             yield
         finally:
+            await poller.stop()
             if task:
                 task.cancel()
 
@@ -100,6 +106,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(apps.router)
+    app.include_router(links_api.router)
     app.include_router(tags.router)
     app.include_router(rules.router)
     app.include_router(logs.router)

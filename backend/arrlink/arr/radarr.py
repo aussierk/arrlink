@@ -57,6 +57,15 @@ class RadarrAdapter(BaseAdapter):
             except (TypeError, ValueError):
                 size = None
             item_dir = os.path.dirname(path)
+            # stat the file so the poller can track inodes (Radarr's API
+            # doesn't expose them); the container sees the same paths.
+            try:
+                st = os.stat(path)
+                fsize = st.st_size
+                fmtime = st.st_mtime
+                finode = st.st_ino
+            except OSError:
+                fsize, fmtime, finode = size, None, None
             items.append(
                 Item(
                     id=int(row["id"]),
@@ -68,7 +77,9 @@ class RadarrAdapter(BaseAdapter):
                         MediaFile(
                             rel_path=os.path.relpath(path, item_dir or "/"),
                             abs_path=str(path),
-                            size=size,
+                            size=fsize,
+                            mtime=fmtime,
+                            inode=finode,
                         )
                     ],
                 )
