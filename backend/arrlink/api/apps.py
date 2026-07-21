@@ -5,7 +5,7 @@ import asyncio
 import sqlite3
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from ..arr.base import AdapterError
@@ -47,6 +47,17 @@ def _app_out(row: sqlite3.Row) -> dict:
 @router.get("")
 def list_apps(_user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
     return [_app_out(r) for r in db.query("SELECT * FROM apps ORDER BY id")]
+
+
+@router.get("/summary")
+def summary(_user: CurrentUser, db: State = Depends(get_db)) -> dict:
+    """Aggregate link counts for the dashboard (must precede /{app_id})."""
+    active = db.query_one("SELECT COUNT(*) c FROM links WHERE status='active'")
+    stale = db.query_one("SELECT COUNT(*) c FROM links WHERE status='stale'")
+    return {
+        "active_links": active["c"] if active else 0,
+        "stale_links": stale["c"] if stale else 0,
+    }
 
 
 @router.get("/{app_id}")
@@ -155,11 +166,19 @@ def test_app_id(
 
 
 @router.post("/{app_id}/rescan")
-def rescan(
-    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
+async def rescan(
+    request: Request, app_id: int, _user: CurrentUser, db: State = Depends(get_db)
 ) -> dict:
-    """Stub — manual rescan is implemented with the poller in M4."""
+    """Manual rescan: poll + reconcile this app now."""
     row = db.query_one("SELECT name FROM apps WHERE id=?", (app_id,))
     if not row:
         raise HTTPException(404, "app not found")
-    return {"status": "stub", "note": "rescan arrives in M4"}
+    poller = getattr(request.app.state, "poller", None)
+    if poller is None:
+        raise HTTPException(503, "poller not running")
+    result = await poller.rescan(app_id)
+    if not result["ok"]:
+        row2 = db.query_one("SELECT last_error FROM apps WHERE id=?", (app_id,))
+        err = row2["last_error"] if row2 else None
+        raise HTTPException(502, err or "poll failed")
+    return result

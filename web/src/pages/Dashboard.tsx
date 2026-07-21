@@ -1,18 +1,31 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, fmtTime, type AppItem, type Health, type Me } from '../lib/api'
+import {
+  api,
+  fmtTime,
+  type AppItem,
+  type Health,
+  type Me,
+} from '../lib/api'
 
 export default function Dashboard() {
   const [health, setHealth] = useState<Health | null>(null)
   const [me, setMe] = useState<Me | null>(null)
   const [apps, setApps] = useState<AppItem[]>([])
+  const [linksCount, setLinksCount] = useState<{ active_links: number; stale_links: number } | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const [h, m, a] = await Promise.all([api.health(), api.me(), api.listApps()])
+      const [h, m, a, s] = await Promise.all([
+        api.health(),
+        api.me(),
+        api.listApps(),
+        api.summary(),
+      ])
       setHealth(h)
       setMe(m)
       setApps(a)
+      setLinksCount(s)
     } catch (e) {
       setErr(String(e))
     }
@@ -77,6 +90,14 @@ export default function Dashboard() {
           <p className="text-2xl font-semibold">{apps.length}</p>
           <p className="text-sm text-zinc-500">
             {apps.length === 1 ? 'app connected' : 'apps connected'}
+          </p>
+        </Card>
+        <Card title="Links">
+          <p className="text-2xl font-semibold">
+            {linksCount?.active_links ?? 0}
+          </p>
+          <p className="text-sm text-zinc-500">
+            hardlinked{linksCount?.stale_links ? ` · ${linksCount.stale_links} stale` : ''}
           </p>
         </Card>
       </div>

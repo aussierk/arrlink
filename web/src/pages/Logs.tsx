@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, fmtTime, type LogEntry } from '../lib/api'
 
 export default function Logs() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [level, setLevel] = useState('')
   const [err, setErr] = useState<string | null>(null)
+  const [live, setLive] = useState(true)
+  const esRef = useRef<EventSource | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -13,6 +15,24 @@ export default function Logs() {
       setErr(String(e))
     }
   }, [level])
+
+  // Live SSE feed
+  useEffect(() => {
+    if (!live) return
+    const es = new EventSource('/api/logs/stream')
+    esRef.current = es
+    es.onmessage = (ev) => {
+      try {
+        const e = JSON.parse(ev.data) as LogEntry
+        setLogs((prev) =>
+          prev.some((x) => x.id === e.id) ? prev : [e, ...prev].slice(0, 500),
+        )
+      } catch {
+        /* ignore malformed frames */
+      }
+    }
+    return () => es.close()
+  }, [live])
 
   useEffect(() => {
     void load()
@@ -43,6 +63,14 @@ export default function Logs() {
         >
           refresh
         </button>
+        <label className="flex items-center gap-2 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={live}
+            onChange={(e) => setLive(e.target.checked)}
+          />
+          live
+        </label>
       </div>
 
       {err && (

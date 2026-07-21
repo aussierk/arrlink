@@ -1,7 +1,8 @@
-"""Event log endpoints (M3 adds the SSE live stream)."""
+"""Event log endpoints + SSE live stream."""
 from __future__ import annotations
 
-import time
+import asyncio
+import json
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -38,12 +39,37 @@ def list_logs(
 
 
 @router.get("/logs/stream")
-def logs_stream(_user: CurrentUser) -> StreamingResponse:
-    """Placeholder SSE endpoint — the real live feed lands with M3."""
+async def logs_stream(
+    _user: CurrentUser,
+    db: State = Depends(get_db),
+    limit: int | None = Query(default=None, ge=0),
+) -> StreamingResponse:
+    """Live SSE feed: initial 50 events, then new ones as they happen.
 
-    def generate():
+    `limit` makes it a bounded snapshot stream (yields up to `limit` events
+    then closes) — useful for tests. Omitted = infinite live stream.
+    """
+
+    async def generate():
+        total = 0
+        rows = db.query("SELECT * FROM events ORDER BY id DESC LIMIT 50")
+        last_id = 0
+        for r in reversed(rows):
+            last_id = r["id"]
+            yield f"id: {r['id']}\ndata: {json.dumps(dict(r))}\n\n"
+            total += 1
+            if limit is not None and total >= limit:
+                return
+        if limit is not None:
+            return
         while True:
-            time.sleep(15)
-            yield ": keep-alive\n\n"
+            await asyncio.sleep(3)
+            new = db.query("SELECT * FROM events WHERE id>? ORDER BY id", (last_id,))
+            if new:
+                for r in new:
+                    last_id = r["id"]
+                    yield f"id: {r['id']}\ndata: {json.dumps(dict(r))}\n\n"
+            else:
+                yield ": keep-alive\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

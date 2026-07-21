@@ -4,6 +4,7 @@ import AuthGate from './components/AuthGate'
 import { api, type Me } from './lib/api'
 import Apps from './pages/Apps'
 import Dashboard from './pages/Dashboard'
+import Links from './pages/Links'
 import Logs from './pages/Logs'
 import Rules from './pages/Rules'
 import Settings from './pages/Settings'
@@ -14,6 +15,7 @@ const nav = [
   { to: '/apps', label: 'Apps', end: false },
   { to: '/tags', label: 'Tags', end: false },
   { to: '/rules', label: 'Rules', end: false },
+  { to: '/links', label: 'Links', end: false },
   { to: '/logs', label: 'Logs', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ]
@@ -80,6 +82,7 @@ function Shell() {
           <Route path="apps" element={<Apps />} />
           <Route path="tags" element={<Tags />} />
           <Route path="rules" element={<Rules />} />
+          <Route path="links" element={<Links />} />
           <Route path="logs" element={<Logs />} />
           <Route path="settings" element={<Settings />} />
         </Routes>

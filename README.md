@@ -5,8 +5,9 @@ apps, import their tags, map tags to destination path/filename templates,
 and ArrLink continuously hardlinks matching media into organized folders —
 reacting to new imports and tag changes.
 
-> M3 done: rule matching, template engine, live preview. See `PLAN.md` for
-> the full design and remaining milestones (M4 poller/hardlinker → M7).
+> M4 done: poller, diff, and hardlinker — new imports and tag changes are
+> hardlinked automatically. See `PLAN.md` for the full design and remaining
+> milestones (M5 Sonarr → M7).
 
 ## Features (through M1)
 
@@ -42,6 +43,23 @@ reacting to new imports and tag changes.
     autocomplete from imported tags, **live preview** — see below)
   - Logs (event history)
   - Settings (runtime JSON key/value store + OIDC allow-list editor)
+- **Poller + hardlinker (M4)**
+  - per-app async poller (30 s ±20 % jitter, exponential backoff on errors,
+    manual **rescan** button)
+  - diff engine: new items/files, tag changes, **renames** (inode-tracked →
+    link re-created under the new name), **quality upgrades** (inode swap →
+    re-linked), deletions with a **3-miss grace** so re-imports don't lose
+    links
+  - hardlinks via `os.link` with **inode-verified idempotency** (safe across
+    restarts); a foreign file at the destination is never clobbered
+    (skipped + logged)
+  - **unlink-on-mismatch** (default on, per-rule toggle + global override)
+  - cross-filesystem fallback: `skip` (default) / `copy` / `symlink`
+    (`FS_FALLBACK`)
+  - Links page (browse/filter/remove/**repair**), live SSE log stream, link
+    counts on the dashboard
+  - safety: source files are never touched; only entries ArrLink created are
+    removed, and only after inode verification
 - **Rules engine (M3)**
   - Matching: exact / list / regex (named + positional capture groups)
   - Templates: dir + optional filename with placeholders `{$tag}` `{$app}`
@@ -62,7 +80,7 @@ reacting to new imports and tag changes.
 backend/arrlink/     FastAPI app
   api/               auth, apps, tags, rules, logs, settings, health
   arr/               base.py (contract), radarr.py, factory.py (M5: sonarr)
-  core/              matching.py, template.py, planner.py (preview+M4 share)
+  core/              matching, template, planner, poller, linker, fsutil
   auth/              oidc.py (discovery/PKCE/refresh), sessions.py (sweep)
   state.py           SQLite (WAL) + migrations
   config.py          env settings (pydantic-settings)
@@ -81,6 +99,8 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest tests/ -q
 CONFIG_DIR=./config .venv/bin/python -m uvicorn arrlink.main:app --app-dir backend --port 8270 --reload
+# the poller starts automatically; rescan an app from the UI or:
+#   curl -X POST http://localhost:8270/api/apps/1/rescan
 
 # frontend (proxies /api to :8270)
 cd web && npm install
@@ -120,7 +140,7 @@ docker compose up -d
 | M1 | OIDC auth (PKCE, confidential client, silent refresh, allow-lists) | ✅ done |
 | M2 | Radarr adapter: ping, tag import | ✅ done |
 | M3 | rule matching, templates, live preview | ✅ done |
-| M4 | poller, diff engine, hardlinker (Radarr) | next |
-| M5 | Sonarr adapter (series + episode tags) | |
+| M4 | poller, diff engine, hardlinker (Radarr) | ✅ done |
+| M5 | Sonarr adapter (series + episode tags) | next |
 | M6 | unlink lifecycle, repair, presets, fs fallback | |
 | M7 | docs, image publish, homelab test matrix | |

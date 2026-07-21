@@ -121,6 +121,21 @@ export type RuleInput = {
   priority: number
 }
 
+export type LinkItem = {
+  id: number
+  rule_id: number | null
+  rule_name: string | null
+  app_id: number | null
+  app_name: string | null
+  app_type: string | null
+  item_id: number | null
+  src_path: string
+  dst_path: string
+  inode: number | null
+  status: string
+  created_at: number
+}
+
 export type LogEntry = {
   id: number
   ts: number
@@ -179,6 +194,23 @@ export const api = {
     }),
   deleteSetting: (key: string) =>
     req<void>(`/api/settings/${key}`, { method: 'DELETE' }),
+  listLinks: (f?: { app_id?: number; status?: string }) => {
+    const p = new URLSearchParams()
+    if (f?.app_id) p.set('app_id', String(f.app_id))
+    if (f?.status) p.set('status', f.status)
+    const q = p.toString()
+    return req<LinkItem[]>(`/api/links${q ? `?${q}` : ''}`)
+  },
+  deleteLink: (id: number) =>
+    req<void>(`/api/links/${id}`, { method: 'DELETE' }),
+  repairLinks: () =>
+    req<{ fixed: number; failed: number }>('/api/links/repair', {
+      method: 'POST',
+    }),
+  rescanApp: (id: number) =>
+    req<{ ok: boolean }>(`/api/apps/${id}/rescan`, { method: 'POST' }),
+  summary: () =>
+    req<{ active_links: number; stale_links: number }>('/api/apps/summary'),
 }
 
 export function fmtTime(ts: number | null): string {

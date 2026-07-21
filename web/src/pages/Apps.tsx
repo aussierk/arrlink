@@ -95,6 +95,17 @@ export default function Apps() {
     await load()
   }
 
+  async function rescanRow(id: number) {
+    setRowMsg((m) => ({ ...m, [id]: 'Scanning…' }))
+    try {
+      const r = await api.rescanApp(id)
+      setRowMsg((m) => ({ ...m, [id]: r.ok ? 'scanned' : 'scan failed' }))
+    } catch (ex) {
+      setRowMsg((m) => ({ ...m, [id]: `scan failed: ${ex}` }))
+    }
+    await load()
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -266,6 +277,12 @@ export default function Apps() {
                       className="rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
                     >
                       import tags
+                    </button>
+                    <button
+                      onClick={() => rescanRow(a.id)}
+                      className="rounded px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40"
+                    >
+                      rescan
                     </button>
                     {rowMsg[a.id] && (
                       <span className="text-xs text-zinc-500">{rowMsg[a.id]}</span>
