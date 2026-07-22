@@ -77,23 +77,17 @@ def import_tags(
         db.log_event("warn", f"tag import failed for {row['name']}: {detail}", app_id)
         raise HTTPException(502, detail) from e
 
-    ts = now()
-    for tag in tags:
-        db.execute(
-            "INSERT INTO tags (app_id, label, count, imported_at) VALUES (?,?,?,?) "
-            "ON CONFLICT (app_id, label) DO UPDATE SET "
-            "count=excluded.count, imported_at=excluded.imported_at",
-            (app_id, tag.label, tag.count, ts),
-        )
-    db.commit()
+    # full replace: fetch_tags is the app's complete vocabulary, so stale tags
+    # (removed in the app since the last sync) are cleared, not left behind
+    count = db.sync_app_tags(app_id, tags)
     db.execute("UPDATE apps SET last_error=NULL WHERE id=?", (app_id,))
     db.commit()
     db.log_event(
         "info",
-        f"imported {len(tags)} tag(s) from {row['name']}",
+        f"imported {count} tag(s) from {row['name']}",
         app_id,
     )
-    return {"imported": len(tags)}
+    return {"imported": count}
 
 
 @router.post("/apps/{app_id}/tags/import-manual", status_code=201)
@@ -120,3 +114,93 @@ def import_tags_manual(
     db.commit()
     db.log_event("info", f"imported {len(body.labels)} tag(s) for app {app_id}", app_id)
     return {"imported": len(body.labels)}
+
+
+# ---------------------------------------------------------------------------
+# Tag repository: a shared tag list that can be pushed to one or more apps.
+# The repository is ArrLink's own (independent of the apps) — it is the
+# canonical tag vocabulary the user curates, then pushes down to the *arr
+# apps (which create the tag there). Per-app tags are still viewable/imported.
+# ---------------------------------------------------------------------------
+
+
+class TagIn(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+
+
+class TagPushIn(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    app_ids: list[int] = Field(min_length=1, max_length=50)
+
+
+@router.get("/tags")
+def list_repository(_user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
+    return [dict(r) for r in db.query("SELECT * FROM tag_repository ORDER BY label")]
+
+
+@router.put("/tags")
+def upsert_repository(
+    body: TagIn, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
+    label = body.label.strip()
+    if not label:
+        raise HTTPException(422, "label must not be empty")
+    db.execute(
+        "INSERT INTO tag_repository (label) VALUES (?) "
+        "ON CONFLICT(label) DO NOTHING",
+        (label,),
+    )
+    db.commit()
+    row = db.query_one("SELECT * FROM tag_repository WHERE label=?", (label,))
+    return dict(row)
+
+
+@router.delete("/tags/{label}", status_code=204)
+def delete_repository(
+    label: str, _user: CurrentUser, db: State = Depends(get_db)
+) -> None:
+    cur = db.execute("DELETE FROM tag_repository WHERE label=?", (label,))
+    db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(404, "tag not in repository")
+
+
+@router.post("/tags/push")
+def push_tags(
+    body: TagPushIn, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
+    """Create a tag in one or more apps, then re-import so it shows up."""
+    label = body.label.strip()
+    results: list[dict] = []
+    ok = failed = 0
+    for app_id in dict.fromkeys(body.app_ids):  # dedupe, order preserved
+        row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
+        if row is None:
+            results.append({"app_id": app_id, "ok": False, "detail": "app not found"})
+            failed += 1
+            continue
+        try:
+            adapter = get_adapter(row["type"], row["url"], row["api_key"])
+            asyncio.run(adapter.create_tag(label))
+        except (ValueError, AdapterError) as e:
+            detail = getattr(e, "detail", None) or str(e)
+            results.append({"app_id": app_id, "ok": False, "detail": detail})
+            failed += 1
+            continue
+        # re-import so the new tag appears in the app's tag list
+        try:
+            tags = asyncio.run(adapter.fetch_tags())
+            db.sync_app_tags(app_id, tags)
+            db.execute("UPDATE apps SET last_error=NULL WHERE id=?", (app_id,))
+            db.commit()
+            results.append({"app_id": app_id, "ok": True, "detail": None})
+            ok += 1
+        except Exception as e:  # noqa: BLE001 - tag was created; import failed
+            results.append({"app_id": app_id, "ok": True,
+                            "detail": f"created, but re-import failed: {e}"})
+            ok += 1
+    db.log_event(
+        "info",
+        f"pushed tag '{label}' to {ok} app(s) ({failed} failed)",
+    )
+    return {"label": label, "ok": ok, "failed": failed, "results": results}

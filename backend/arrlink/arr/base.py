@@ -106,6 +106,13 @@ class BaseAdapter(abc.ABC):
     async def fetch_items(self) -> list[Item]:
         """All items that have at least one file on disk."""
 
+    async def create_tag(self, label: str) -> None:
+        """Create a tag in the app (idempotent). Default: unsupported.
+
+        Used by the tag repository's *push to app*. Radarr/Sonarr override.
+        """
+        raise AdapterError(f"create_tag not supported for {self.app_type}")
+
     # -- shared helpers ------------------------------------------------------
 
     async def _get_json(self, path: str) -> Any:

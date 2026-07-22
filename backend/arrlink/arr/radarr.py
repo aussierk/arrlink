@@ -45,6 +45,27 @@ class RadarrAdapter(BaseAdapter):
             tags.append(Tag(label=label, count=count, id=tid))
         return tags
 
+    async def create_tag(self, label: str) -> None:
+        import httpx
+
+        label = (label or "").strip()
+        if not label:
+            raise AdapterError("tag label is empty")
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(
+                    f"{self.url}/api/v3/tag",
+                    json={"label": label},
+                    headers={"X-Api-Key": self.api_key},
+                )
+        except Exception as e:  # noqa: BLE001
+            raise AdapterError(f"unreachable: {e}") from e
+        if r.status_code == 401 or r.status_code == 403:
+            raise AdapterError("bad API key (401)", status=401)
+        if r.status_code not in (200, 201):
+            raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'",
+                              status=r.status_code)
+
     async def fetch_items(self) -> list[Item]:
         vocabulary = await self.fetch_tags()
         data = await self._get_json("/api/v3/movie")

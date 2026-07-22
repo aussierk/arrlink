@@ -23,9 +23,11 @@ class AppIn(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     type: AppType
     url: str = Field(min_length=4, max_length=200)
-    api_key: str = Field(min_length=1, max_length=200)
+    # Blank on update = keep the existing key (the UI sends the masked key
+    # which is not a real key). Required to be non-empty on create.
+    api_key: str = Field(default="", max_length=200)
     enabled: bool = True
-    poll_interval_s: int = Field(default=30, ge=10, le=600)
+    poll_interval_s: int = Field(default=300, ge=10, le=3600)
 
     @field_validator("url")
     @classmethod
@@ -52,11 +54,14 @@ def list_apps(_user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
 @router.get("/summary")
 def summary(_user: CurrentUser, db: State = Depends(get_db)) -> dict:
     """Aggregate link counts for the dashboard (must precede /{app_id})."""
+    from ..core.template import audit_rule_roots
+
     active = db.query_one("SELECT COUNT(*) c FROM links WHERE status='active'")
     stale = db.query_one("SELECT COUNT(*) c FROM links WHERE status='stale'")
     return {
         "active_links": active["c"] if active else 0,
         "stale_links": stale["c"] if stale else 0,
+        "orphaned_rules": audit_rule_roots(db),
     }
 
 
@@ -74,6 +79,8 @@ def get_app(
 def create_app(
     body: AppIn, _user: CurrentUser, db: State = Depends(get_db)
 ) -> dict:
+    if not body.api_key.strip():
+        raise HTTPException(422, "api_key is required to create an app")
     cur = db.execute(
         "INSERT INTO apps (name, type, url, api_key, enabled, poll_interval_s) "
         "VALUES (?,?,?,?,?,?)",
@@ -96,8 +103,31 @@ def create_app(
 def update_app(
     app_id: int, body: AppIn, _user: CurrentUser, db: State = Depends(get_db)
 ) -> dict:
-    if not db.query_one("SELECT id FROM apps WHERE id=?", (app_id,)):
+    row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
+    if not row:
         raise HTTPException(404, "app not found")
+    # Changing the app type (radarr <-> sonarr) would make the poller treat
+    # this as a brand-new app on the next rescan: every existing item stops
+    # matching, and after the deletion grace period all of its hardlinks are
+    # unlinked from disk. The UI keeps the type fixed on edit; enforce the
+    # same here. Allow it only when nothing is linked yet (a harmless config
+    # fix, e.g. an app that was added with the wrong type and has no links).
+    if body.type != row["type"]:
+        linked = db.query_one(
+            "SELECT COUNT(*) c FROM links WHERE app_id=? "
+            "AND status IN ('active','stale')",
+            (app_id,),
+        )
+        if linked and linked["c"] > 0:
+            raise HTTPException(
+                422,
+                f"cannot change app type from {row['type']} to {body.type}: "
+                "this app has linked files, and switching type would unlink "
+                "them. Delete the app (removes its links) and add it again "
+                f"as {body.type}.",
+            )
+    # blank api_key = keep the existing one (the UI can't recover the real key)
+    api_key = body.api_key.strip() or row["api_key"]
     db.execute(
         "UPDATE apps SET name=?, type=?, url=?, api_key=?, enabled=?, "
         "poll_interval_s=? WHERE id=?",
@@ -105,13 +135,14 @@ def update_app(
             body.name,
             body.type,
             body.url,
-            body.api_key,
+            api_key,
             int(body.enabled),
             body.poll_interval_s,
             app_id,
         ),
     )
     db.commit()
+    db.log_event("info", f"app updated: {body.name}", app_id)
     return _app_out(db.query_one("SELECT * FROM apps WHERE id=?", (app_id,)))
 
 
