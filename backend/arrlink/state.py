@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 
 def _migration_2(conn: sqlite3.Connection) -> None:
@@ -32,6 +32,48 @@ def _migration_2(conn: sqlite3.Connection) -> None:
             created_at REAL NOT NULL
         );
         """
+    )
+
+
+def _migration_4(conn: sqlite3.Connection) -> None:
+    """M7-prep: tag repository — a user-curated tag list to push to apps."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS tag_repository (
+            id INTEGER PRIMARY KEY,
+            label TEXT NOT NULL UNIQUE
+        );
+        """
+    )
+
+
+def _migration_5(conn: sqlite3.Connection) -> None:
+    """M7-prep: silent fix for the /linked -> /media default-root change."""
+    row = conn.execute(
+        "SELECT value_json FROM settings WHERE key='allowed_roots'"
+    ).fetchone()
+    if row is not None:
+        return  # user-managed roots: never touch their rules
+    from .core.template import DEFAULT_ROOTS
+
+    conn.executemany(
+        "UPDATE rules SET dir_template=? WHERE id=?",
+        [
+            (r["dir_template"].replace("/linked", list(DEFAULT_ROOTS)[0], 1), r["id"])
+            for r in conn.execute("SELECT id, dir_template FROM rules")
+            if r["dir_template"].startswith("/linked")
+        ],
+    )
+    conn.executemany(
+        "UPDATE rules SET filename_template=? WHERE id=?",
+        [
+            (
+                r["filename_template"].replace("/linked", list(DEFAULT_ROOTS)[0], 1),
+                r["id"],
+            )
+            for r in conn.execute("SELECT id, filename_template FROM rules")
+            if r["filename_template"] and r["filename_template"].startswith("/linked")
+        ],
     )
 
 
@@ -161,6 +203,8 @@ _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
     ),
     (2, _migration_2),
     (3, _migration_3),
+    (4, _migration_4),
+    (5, _migration_5),
 ]
 
 
@@ -244,6 +288,21 @@ class State:
         )
         self.conn.commit()
         log.log(getattr(logging, level.upper(), logging.INFO), "%s", message)
+
+    # -- tag vocabulary ----------------------------------------------------
+
+    def sync_app_tags(self, app_id: int, tags: list) -> int:
+        """Replace an app's stored tag vocabulary with the given full set."""
+        ts = time.time()
+        self.execute("DELETE FROM tags WHERE app_id=?", (app_id,))
+        for tag in tags:
+            self.execute(
+                "INSERT INTO tags (app_id, label, count, imported_at) VALUES "
+                "(?,?,?,?)",
+                (app_id, tag.label, tag.count, ts),
+            )
+        self.commit()
+        return len(tags)
 
     # -- settings (runtime JSON key/value) ----------------------------------
 

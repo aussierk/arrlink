@@ -4,8 +4,13 @@ from __future__ import annotations
 import dataclasses
 import os
 import re
+from typing import Any
 
-DEFAULT_ROOTS = ["/linked"]
+# Default allowed root for destination paths. The container is expected to
+# see the *arr apps' media at /media (mounted read-only, mirroring the apps)
+# and to write its links under /media/linked — on the same pool, so hardlinks
+# work. Override with the `allowed_roots` Setting if you mount elsewhere.
+DEFAULT_ROOTS = ["/media"]
 
 # Characters that are unsafe in a path segment (Windows + POSIX + control).
 _ILLEGAL = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -121,6 +126,32 @@ def check_jail(dir_path: str, roots: list[str]) -> None:
     raise TemplateError(
         f"destination {dir_path!r} is outside the allowed root(s) {roots}"
     )
+
+
+def static_prefix(template: str) -> str:
+    """Best-effort static prefix of a dir template (placeholders blanked).
+
+    A jail-check on this prefix is conservative: if the fixed part already
+    escapes the allowed roots, no placeholder value can ever fix it.
+    """
+    return os.path.normpath(_PLACEHOLDER.sub("x", template or ""))
+
+
+def audit_rule_roots(db: Any, roots: list[str] | None = None) -> list[str]:
+    """Names of enabled rules whose dir template escapes the allowed roots.
+
+    Used at startup and by the dashboard to surface legacy rules (e.g.
+    ``/linked/...``) after a root-default change. ``roots=None`` resolves the
+    effective roots (Setting override, else :data:`DEFAULT_ROOTS`).
+    """
+    rs = roots or db.get_setting("allowed_roots") or list(DEFAULT_ROOTS)
+    bad: list[str] = []
+    for rule in db.query("SELECT name, dir_template FROM rules WHERE enabled=1"):
+        try:
+            check_jail(static_prefix(rule["dir_template"]), rs)
+        except TemplateError:
+            bad.append(rule["name"])
+    return bad
 
 
 def build_context(

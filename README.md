@@ -40,18 +40,21 @@ reacting to new imports and tag changes.
     disabled rules excluded)
 - Vite + React + TypeScript + Tailwind SPA (dark theme)
   - Auth gate (auto-login redirect, error surfaces, header user + sign out)
-  - Dashboard (health, auth, connected apps)
-  - Apps (Radarr/Sonarr CRUD, API keys masked, Test + Import tags actions)
-  - Tags (per-app vocabulary, import, rule usage)
-  - Rules (matcher + dir/filename template CRUD, validation, tag
-    autocomplete from imported tags, **live preview** — see below)
-  - Presets (one-click rules for common conventions, per app type)
-  - Logs (event history)
-  - Settings (**Linking** section: global unlink-on-mismatch, cross-filesystem
-    fallback, allowed roots; OIDC allow-list editor; raw JSON key/value store)
+  - Dashboard (health, auth, connected apps, and the **Links** panel —
+    browse/filter/remove/**repair**)
+  - Apps (create **and edit** Radarr/Sonarr connections — name, URL, API key,
+    poll interval, enabled; Test + Import tags + rescan)
+  - Tags (**tag repository** — a curated shared tag list that can be pushed to
+    the apps; plus per-app vocabulary import with usage counts)
+  - Rules (create/edit rules in a modal with **preset quick-start**, live
+    preview, tag autocomplete)
+  - Logs (event history, live SSE feed)
+  - Settings (structured, no raw JSON: **Linking** — unlink-on-mismatch,
+    cross-filesystem fallback, allowed roots; **Access control** — OIDC
+    allow-lists)
 - **Poller + hardlinker (M4)**
-  - per-app async poller (30 s ±20 % jitter, exponential backoff on errors,
-    manual **rescan** button)
+  - per-app async poller (default **300 s** per app, ±20 % jitter,
+    exponential backoff on errors, manual **rescan** button)
   - diff engine: new items/files, tag changes, **renames** (inode-tracked →
     link re-created under the new name), **quality upgrades** (inode swap →
     re-linked), deletions with a **3-miss grace** so re-imports don't lose
@@ -61,9 +64,9 @@ reacting to new imports and tag changes.
     (skipped + logged)
   - **unlink-on-mismatch** (default on, per-rule toggle + global override)
   - cross-filesystem fallback: `skip` (default) / `copy` / `symlink`
-    (`FS_FALLBACK`)
-  - Links page (browse/filter/remove/**repair**), live SSE log stream, link
-    counts on the dashboard
+    (`FS_FALLBACK` env, or the `fs_fallback` Setting which takes precedence)
+  - Links panel on the Dashboard (browse/filter/remove/**repair**), live SSE
+    log stream, link counts
   - safety: source files are never touched; only entries ArrLink created are
     removed, and only after inode verification
 - **Rules engine (M3)**
@@ -71,28 +74,34 @@ reacting to new imports and tag changes.
   - Templates: dir + optional filename with placeholders `{$tag}` `{$app}`
     `{$title}` `{$year}` `{$1..9}` `{$<group>}` `{$basename}` `{$stem}` `{$ext}`
     — sanitized (illegal chars, `..`, 100-char cap), jailed to an allowed
-    root (default `/linked`, overridable via Settings `allowed_roots`), and
+    root (default `/media`, overridable via Settings `allowed_roots`), and
     the source file extension is never dropped
   - **Live preview** (`POST /api/rules/preview?app_id=`): dry-runs the rule
     over the app's current items and shows exactly which files would land
     where — nothing is created until the M4 poller runs
 - **Presets + runtime settings (M6)**
   - **Presets**: one-click, editable rules for common conventions — user tags
-    (`## - $user` → `users/{$user}`), certification (`{$tag}` directly under
-    the base folder), kids, 4K/HDR, requested. Matchers differ per app type
-    (movie vs TV ratings/kids tags); the base folder defaults to
-    `/linked/movies` (Radarr) / `/linked/tv` (Sonarr) but is a parameter, and
-    is jail-validated against the allowed roots. `GET /api/presets?app_type=`
-    + `POST /api/presets/apply`
+    (`## - $user` → `{$user}` directly under the base folder),
+    certification (`{$tag}` directly under the base folder), kids, 4K/HDR,
+    requested. Matchers differ per app type (movie vs TV ratings/kids tags);
+    the base folder defaults to `/media/movies` (Radarr) / `/media/tv`
+    (Sonarr) but is a parameter, and is jail-validated against the allowed
+    roots. Presets are a **quick-start inside the rule modal** (no separate
+    page). `GET /api/presets?app_type=` + `POST /api/presets/apply`
   - **Runtime fs fallback**: the cross-filesystem fallback (`skip`/`copy`/
     `symlink`) is a runtime **Setting** (Settings page) that takes precedence
     over the `FS_FALLBACK` env default, applied by both the poller and repair
-  - **Settings page**: a **Linking** section edits global unlink-on-mismatch,
-    the fs fallback mode, and the allowed roots directly (no raw JSON), backed
-    by `GET /api/settings/effective` which returns the resolved runtime values
+  - **Settings page**: fully structured (no raw JSON) — a **Linking** section
+    edits global unlink-on-mismatch, the fs fallback mode, and the allowed
+    roots, plus an **Access control** section for OIDC allow-lists. Backed by
+    `GET /api/settings/effective` (the resolved runtime values).
 - FastAPI JSON API + SSE live log stream
-- SQLite (WAL) with versioned forward-only migrations (v1: core, v2: OIDC);
-  thread-local connections
+- SQLite (WAL) with versioned forward-only migrations (v1 core, v2 OIDC,
+  v4 tag repository); thread-local connections
+- **Path mirroring**: the container must see the *arr apps' media at the same
+  absolute paths (mount them read-only). The link root defaults to `/media`
+  (mount a writable pool at `/media`, on the same pool as the sources so
+  hardlinks work).
 
 ## Layout
 
@@ -135,6 +144,18 @@ docker compose build
 docker compose up -d
 # UI: http://<host>:8270
 ```
+
+### Paths (important)
+
+- **Media must be visible at the same absolute paths the *arr apps use** —
+  mount them read-only (e.g. `/mnt/tank/media:/mnt/tank/media:ro`). ArrLink
+  `stat`s the source files and hardlinks them, so the paths must line up.
+- **Link root defaults to `/media`** (the allowed root). Mount a writable
+  pool at `/media` on the **same filesystem** as the sources so hardlinks
+  work (otherwise the cross-filesystem fallback kicks in). Presets link under
+  `/media/movies` and `/media/tv` by default.
+- If you prefer a different root, set the `allowed_roots` Setting (Settings
+  → Linking) and use matching base folders in your rules.
 
 ### OIDC setup (M1)
 

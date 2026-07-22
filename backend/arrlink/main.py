@@ -28,6 +28,7 @@ from .auth import sessions as sess_mod
 from .auth.oidc import OidcClient
 from .config import get_settings, setup_logging
 from .core.poller import Poller
+from .core.template import audit_rule_roots
 from .state import State
 
 log = logging.getLogger(__name__)
@@ -87,6 +88,16 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             task = asyncio.create_task(_auth_sweep(db, settings))
         poller = Poller(db, settings)
         app.state.poller = poller
+        # Legacy-root audit: enabled rules whose dir template escapes the
+        # allowed roots (e.g. /linked/... after a root-default change) would
+        # otherwise fail silently per-item. Warn loudly at startup.
+        bad_rules = audit_rule_roots(db)
+        if bad_rules:
+            db.log_event(
+                "warn",
+                f"rule(s) outside the allowed roots, will not link until fixed: "
+                f"{', '.join(bad_rules)} (set allowed_roots or edit the rules)",
+            )
         await poller.start()
         try:
             yield

@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import dataclasses
 
-# app_type -> default base folder (movies vs tv)
+# app_type -> default base folder (movies vs tv). Under the default media
+# root (/media) so links live on the same pool as the sources.
 BASE_BY_TYPE = {
-    "radarr": "/linked/movies",
-    "sonarr": "/linked/tv",
+    "radarr": "/media/movies",
+    "sonarr": "/media/tv",
 }
-DEFAULT_BASE = "/linked"
+DEFAULT_BASE = "/media"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -31,7 +32,7 @@ PRESETS: list[Preset] = [
             "radarr": ("regex", r"^##\s*-\s*(?P<user>.+)$"),
             "sonarr": ("regex", r"^##\s*-\s*(?P<user>.+)$"),
         },
-        subpath="/users/{$user}",
+        subpath="/{$user}",
     ),
     Preset(
         key="certification",

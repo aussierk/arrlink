@@ -19,8 +19,10 @@ services:
       # OIDC_CLIENT_SECRET: <client-secret>
     volumes:
       - ./arrlink/config:/config
-      # M2+: mount media read-only at the SAME paths Radarr/Sonarr see them,
-      # plus a writable /linked root on the same pool as the media.
-      # - /mnt/tank/media:/media:ro
-      # - /mnt/tank/linked:/linked
+      # Writable link root on the SAME pool as the media (default allowed root
+      # is /media). Presets link under /media/movies and /media/tv by default.
+      # - /mnt/tank/arrlink-links:/media
+      # Read-only media, at the SAME absolute paths Radarr/Sonarr see them
+      # (required so ArrLink can stat/link the source files).
+      # - /mnt/tank/media:/mnt/tank/media:ro
     restart: unless-stopped

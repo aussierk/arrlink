@@ -116,15 +116,9 @@ class Poller:
     # -------------------------------------------------------------- storage
 
     def _store_tags(self, app_id: int, tags) -> None:
-        ts = time.time()
-        for tag in tags:
-            self.db.execute(
-                "INSERT INTO tags (app_id, label, count, imported_at) VALUES (?,?,?,?) "
-                "ON CONFLICT (app_id, label) DO UPDATE SET "
-                "count=excluded.count, imported_at=excluded.imported_at",
-                (app_id, tag.label, tag.count, ts),
-            )
-        self.db.commit()
+        # full replace: the poller's fetch_tags is the app's complete
+        # vocabulary, so tags the app no longer reports are cleared
+        self.db.sync_app_tags(app_id, tags)
 
     def _store_items(self, app_id: int, items) -> None:
         now = time.time()
