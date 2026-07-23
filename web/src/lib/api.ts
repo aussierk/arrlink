@@ -95,6 +95,8 @@ export type AppInput = {
   poll_interval_s: number
 }
 
+export const DEFAULT_POLL_INTERVAL_S = 300
+
 export type RuleItem = {
   id: number
   name: string
@@ -179,6 +181,8 @@ export const api = {
   listApps: () => req<AppItem[]>('/api/apps'),
   createApp: (b: AppInput) =>
     req<AppItem>('/api/apps', { method: 'POST', body: JSON.stringify(b) }),
+  updateApp: (id: number, b: AppInput) =>
+    req<AppItem>(`/api/apps/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   deleteApp: (id: number) => req<void>(`/api/apps/${id}`, { method: 'DELETE' }),
   testApp: (b: AppInput) =>
     req<AppTestResult>('/api/apps/test', {
@@ -192,6 +196,22 @@ export const api = {
       method: 'POST',
     }),
   listTags: (appId: number) => req<TagItem[]>(`/api/apps/${appId}/tags`),
+
+  // Tag repository: a user-curated shared tag list that can be pushed to apps
+  listTagRepository: () =>
+    req<{ id: number; label: string }[]>('/api/tags'),
+  addTagToRepository: (label: string) =>
+    req<{ id: number; label: string }>('/api/tags', {
+      method: 'PUT',
+      body: JSON.stringify({ label }),
+    }),
+  deleteTagFromRepository: (label: string) =>
+    req<void>(`/api/tags/${encodeURIComponent(label)}`, { method: 'DELETE' }),
+  pushTag: (label: string, appIds: number[]) =>
+    req<{ label: string; ok: number; failed: number; results: { app_id: number; ok: boolean; detail: string | null }[] }>(
+      '/api/tags/push',
+      { method: 'POST', body: JSON.stringify({ label, app_ids: appIds }) },
+    ),
 
   listRules: () => req<RuleItem[]>('/api/rules'),
   previewRule: (b: RuleInput, appId: number) =>
@@ -207,6 +227,8 @@ export const api = {
     }),
   createRule: (b: RuleInput) =>
     req<RuleItem>('/api/rules', { method: 'POST', body: JSON.stringify(b) }),
+  updateRule: (id: number, b: RuleInput) =>
+    req<RuleItem>(`/api/rules/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   deleteRule: (id: number) => req<void>(`/api/rules/${id}`, { method: 'DELETE' }),
   listLogs: (level?: string) =>
     req<LogEntry[]>(`/api/logs${level ? `?level=${encodeURIComponent(level)}` : ''}`),
@@ -237,9 +259,10 @@ export const api = {
       '/api/presets/apply',
       { method: 'POST', body: JSON.stringify(b) },
     ),
-  listLinks: (f?: { app_id?: number; status?: string }) => {
+  listLinks: (f?: { app_id?: number; rule_id?: number; status?: string }) => {
     const p = new URLSearchParams()
     if (f?.app_id) p.set('app_id', String(f.app_id))
+    if (f?.rule_id) p.set('rule_id', String(f.rule_id))
     if (f?.status) p.set('status', f.status)
     const q = p.toString()
     return req<LinkItem[]>(`/api/links${q ? `?${q}` : ''}`)
@@ -253,7 +276,11 @@ export const api = {
   rescanApp: (id: number) =>
     req<{ ok: boolean }>(`/api/apps/${id}/rescan`, { method: 'POST' }),
   summary: () =>
-    req<{ active_links: number; stale_links: number }>('/api/apps/summary'),
+    req<{
+      active_links: number
+      stale_links: number
+      orphaned_rules: string[]
+    }>('/api/apps/summary'),
 }
 
 export function fmtTime(ts: number | null): string {

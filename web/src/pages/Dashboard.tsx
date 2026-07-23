@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import LinksPanel from '../components/LinksPanel'
 import {
   api,
   fmtTime,
@@ -11,7 +12,11 @@ export default function Dashboard() {
   const [health, setHealth] = useState<Health | null>(null)
   const [me, setMe] = useState<Me | null>(null)
   const [apps, setApps] = useState<AppItem[]>([])
-  const [linksCount, setLinksCount] = useState<{ active_links: number; stale_links: number } | null>(null)
+  const [linksCount, setLinksCount] = useState<{
+    active_links: number
+    stale_links: number
+    orphaned_rules: string[]
+  } | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -50,7 +55,21 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
+      {linksCount && linksCount.orphaned_rules.length > 0 && (
+        <div className="rounded-md border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-300">
+          <p className="font-medium">
+            {linksCount.orphaned_rules.length} rule(s) point outside the allowed
+            roots and won't link anything:
+          </p>
+          <p className="mt-1 text-amber-200/80">{linksCount.orphaned_rules.join(', ')}</p>
+          <p className="mt-1 text-amber-200/60">
+            Edit the rules, or set <code className="rounded bg-black/30 px-1">allowed_roots</code> to
+            include their destination in Settings.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-4 gap-4">
         <Card title="Status">
           {health ? (
             <div className="space-y-1 text-sm">
@@ -128,6 +147,10 @@ export default function Dashboard() {
             ))}
           </ul>
         )}
+      </Card>
+
+      <Card title="Links">
+        <LinksPanel />
       </Card>
     </div>
   )

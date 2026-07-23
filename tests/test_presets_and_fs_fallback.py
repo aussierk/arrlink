@@ -133,15 +133,15 @@ def test_list_presets_radarr(client):
     r = client.get("/api/presets?app_type=radarr")
     assert r.status_code == 200
     body = r.json()
-    assert body["base_folder"] == "/linked/movies"
+    assert body["base_folder"] == "/media/movies"
     by_key = {p["key"]: p for p in body["presets"]}
     assert set(by_key) == {"user", "certification", "kids", "4k", "requested"}
-    assert by_key["user"]["dir_template"] == "/linked/movies/users/{$user}"
-    assert by_key["certification"]["dir_template"] == "/linked/movies/{$tag}"
+    assert by_key["user"]["dir_template"] == "/media/movies/{$user}"
+    assert by_key["certification"]["dir_template"] == "/media/movies/{$tag}"
     assert by_key["certification"]["match_type"] == "regex"
     assert by_key["certification"]["match_value"] == "^(G|PG|PG-13|R|NC-17)$"
     assert by_key["kids"]["match_type"] == "list"
-    assert by_key["kids"]["dir_template"] == "/linked/movies/kids"
+    assert by_key["kids"]["dir_template"] == "/media/movies/kids"
     assert by_key["requested"]["match_type"] == "exact"
     assert by_key["requested"]["match_value"] == "request"
 
@@ -152,16 +152,16 @@ def test_list_presets_sonarr(client):
     # TV conventions differ from movies
     assert by_key["certification"]["match_value"] == \
         "^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$"
-    assert by_key["certification"]["dir_template"] == "/linked/tv/{$tag}"
+    assert by_key["certification"]["dir_template"] == "/media/tv/{$tag}"
     assert by_key["kids"]["match_value"] == "kids,family,TV-Y,TV-Y7,TV-G,TV-PG"
-    assert by_key["user"]["dir_template"] == "/linked/tv/users/{$user}"
+    assert by_key["user"]["dir_template"] == "/media/tv/{$user}"
 
 
 def test_list_presets_custom_base(client):
-    r = client.get("/api/presets?app_type=radarr&base_folder=/linked/basemovies")
+    r = client.get("/api/presets?app_type=radarr&base_folder=/media/basemovies")
     by_key = {p["key"]: p for p in r.json()["presets"]}
-    assert by_key["user"]["dir_template"] == "/linked/basemovies/users/{$user}"
-    assert by_key["certification"]["dir_template"] == "/linked/basemovies/{$tag}"
+    assert by_key["user"]["dir_template"] == "/media/basemovies/{$user}"
+    assert by_key["certification"]["dir_template"] == "/media/basemovies/{$tag}"
 
 
 def test_list_presets_bad_type(client):
@@ -185,7 +185,7 @@ def test_apply_preset_creates_rule(client, radarr_media):
     assert rule["name"] == "preset:user"
     assert rule["match_type"] == "regex"
     assert rule["match_value"] == r"^##\s*-\s*(?P<user>.+)$"
-    assert rule["dir_template"] == f"{radarr_media['linked']}/users/" + "{$user}"
+    assert rule["dir_template"] == f"{radarr_media['linked']}/" + "{$user}"
     assert rule["enabled"] is True
     # it's a real, listable rule
     rules = client.get("/api/rules").json()
@@ -317,3 +317,183 @@ def test_global_unlink_setting_roundtrip(client):
     assert client.get("/api/settings/effective").json()["global_unlink_on_mismatch"] is True
     client.put("/api/settings/global_unlink_on_mismatch", json={"value": False})
     assert client.get("/api/settings/effective").json()["global_unlink_on_mismatch"] is False
+
+
+# ---------------------------------------------------------------------------
+# tag repository: curate a shared tag list, push it to apps
+# ---------------------------------------------------------------------------
+
+
+def build_radarr_with_tags(origin: str, tag_store: list[dict]) -> FastAPI:
+    """Fake Radarr that also supports creating tags (POST /v3/tag)."""
+    app = FastAPI()
+
+    def _ok(request: Request) -> bool:
+        return request.headers.get("x-api-key") == API_KEY
+
+    @app.get("/api/v3/system/status")
+    def status(request: Request):
+        if not _ok(request):
+            return JSONResponse({}, status_code=401)
+        return {"version": VERSION}
+
+    @app.get("/api/v3/tag")
+    def tag(request: Request):
+        if not _ok(request):
+            return JSONResponse({}, status_code=401)
+        return tag_store
+
+    @app.post("/api/v3/tag")
+    async def create_tag(request: Request):
+        if not _ok(request):
+            return JSONResponse({}, status_code=401)
+        data = await request.json()
+        label = (data.get("label") or "").strip()
+        if not label:
+            return JSONResponse({"error": "label required"}, status_code=400)
+        if not any(t["label"] == label for t in tag_store):
+            tag_store.append({"id": len(tag_store) + 1, "label": label, "count": 0})
+        return {"id": 0, "label": label, "count": 0}
+
+    @app.get("/api/v3/movie")
+    def movie(request: Request):
+        if not _ok(request):
+            return JSONResponse({}, status_code=401)
+        return []
+
+    return app
+
+
+@pytest.fixture()
+def tag_app(tmp_path_factory, monkeypatch):
+    tag_store: list[dict] = [{"id": 1, "label": "kids", "count": 2}]
+    port = _free_port()
+    origin = f"http://127.0.0.1:{port}"
+    config = uvicorn.Config(build_radarr_with_tags(origin, tag_store),
+                            host="127.0.0.1", port=port, log_level="error")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(200):
+        try:
+            if httpx.get(f"{origin}/api/v3/system/status",
+                         headers={"X-Api-Key": API_KEY}, timeout=1).status_code == 200:
+                break
+        except Exception:  # noqa: BLE001
+            time.sleep(0.05)
+    else:
+        raise RuntimeError("fake radarr did not start")
+    yield origin, tag_store
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture()
+def tag_client(tag_app, tmp_path, monkeypatch):
+    origin, tag_store = tag_app
+    monkeypatch.setenv("AUTH_MODE", "none")
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        c.app.state.db.set_setting("allowed_roots", ["/media"])
+        yield c, origin, tag_store
+
+
+def test_repository_add_list_delete(tag_client):
+    c, _, _ = tag_client
+    assert c.get("/api/tags").json() == []
+    assert c.put("/api/tags", json={"label": "4k"}).status_code == 200
+    assert c.put("/api/tags", json={"label": "4k"}).status_code == 200  # idempotent
+    labels = {t["label"] for t in c.get("/api/tags").json()}
+    assert labels == {"4k"}
+    assert c.delete("/api/tags/4k").status_code == 204
+    assert c.get("/api/tags").json() == []
+    assert c.delete("/api/tags/4k").status_code == 404
+
+
+def test_push_tag_creates_in_app_and_reimports(tag_client):
+    c, origin, tag_store = tag_client
+    # add a real app
+    r = c.post("/api/apps", json={"name": "R", "type": "radarr", "url": origin,
+                                  "api_key": API_KEY})
+    app_id = r.json()["id"]
+    # the app's current tags: only 'kids'
+    c.put("/api/tags", json={"label": "uhd"})  # add to repository
+
+    # push 'uhd' to the app
+    r = c.post("/api/tags/push", json={"label": "uhd", "app_ids": [app_id]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] == 1 and body["failed"] == 0
+
+    # the tag now exists in the fake app
+    assert any(t["label"] == "uhd" for t in tag_store)
+    # and it was re-imported into the app's tag list
+    tags = {t["label"] for t in c.get(f"/api/apps/{app_id}/tags").json()}
+    assert "uhd" in tags
+
+
+def test_push_tag_bad_app(tag_client):
+    c, _, _ = tag_client
+    c.put("/api/tags", json={"label": "x"})
+    r = c.post("/api/tags/push", json={"label": "x", "app_ids": [999]})
+    assert r.status_code == 200
+    assert r.json()["ok"] == 0 and r.json()["failed"] == 1
+
+
+def test_push_tag_unknown_label_still_works(tag_client):
+    # pushing a tag not in the repository is still allowed (it's a label)
+    c, origin, _ = tag_client
+    r = c.post("/api/apps", json={"name": "R", "type": "radarr", "url": origin,
+                                  "api_key": API_KEY})
+    app_id = r.json()["id"]
+    r = c.post("/api/tags/push", json={"label": "dolby", "app_ids": [app_id]})
+    assert r.status_code == 200
+    assert r.json()["ok"] == 1
+
+
+# ---------------------------------------------------------------------------
+# apps: editable (not just deletable)
+# ---------------------------------------------------------------------------
+
+
+def test_app_editable(client, radarr_media):
+    origin = radarr_media["origin"]
+    # start with the fake's real key so a connection test works
+    r = client.post("/api/apps", json={"name": "R", "type": "radarr",
+                                       "url": origin, "api_key": API_KEY})
+    app_id = r.json()["id"]
+    assert r.json()["poll_interval_s"] == 300  # default poll interval
+
+    # edit name + poll interval, blank api_key -> keeps the existing key
+    r = client.patch(
+        f"/api/apps/{app_id}",
+        json={"name": "R2", "type": "radarr", "url": origin, "api_key": "",
+              "enabled": True, "poll_interval_s": 120},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "R2"
+    assert body["poll_interval_s"] == 120
+    # masked key should still reflect the preserved (original) key, not empty
+    assert body["api_key_masked"] == "••••" + API_KEY[-4:]
+
+    # a connection test with the preserved key still works
+    r = client.post(f"/api/apps/{app_id}/test")
+    assert r.status_code == 200, r.text
+    assert r.json()["version"] == VERSION
+
+    # a new api_key replaces the old one
+    r = client.patch(
+        f"/api/apps/{app_id}",
+        json={"name": "R2", "type": "radarr", "url": origin,
+              "api_key": "new-key-xyz", "enabled": True, "poll_interval_s": 120},
+    )
+    assert r.status_code == 200
+    assert r.json()["api_key_masked"].endswith("xyz")
+
+    # create requires a non-empty key
+    r = client.post("/api/apps", json={"name": "X", "type": "radarr",
+                                       "url": origin, "api_key": ""})
+    assert r.status_code == 422
+    assert "api_key" in r.json()["detail"]

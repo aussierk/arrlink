@@ -342,6 +342,9 @@ def client(radarr, tmp_path, monkeypatch):
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     app = create_app(db_path=tmp_path / "arrlink.db")
     with TestClient(app) as c:
+        # these tests use /linked templates, so allow that root explicitly
+        # (the default allowed root is /media)
+        c.app.state.db.set_setting("allowed_roots", ["/linked"])
         yield c
 
 

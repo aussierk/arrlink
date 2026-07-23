@@ -1,23 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, fmtTime, type AppInput, type AppItem } from '../lib/api'
+import AppModal from '../components/AppModal'
+import { api, fmtTime, type AppItem } from '../lib/api'
 
-const empty: AppInput = {
-  name: '',
-  type: 'radarr',
-  url: '',
-  api_key: '',
-  enabled: true,
-  poll_interval_s: 30,
-}
-
+/**
+ * Apps (M6+): create and edit Radarr/Sonarr connections. Each row can be
+ * edited (name, URL, API key, poll interval, enabled), tested, have its tags
+ * imported, rescanned, or deleted.
+ */
 export default function Apps() {
   const [apps, setApps] = useState<AppItem[]>([])
-  const [form, setForm] = useState<AppInput>(empty)
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<AppItem | null>(null)
   const [rowMsg, setRowMsg] = useState<Record<number, string>>({})
 
   const load = useCallback(async () => {
@@ -32,44 +27,25 @@ export default function Apps() {
     void load()
   }, [load])
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    setErr(null)
-    setOk(null)
-    setBusy(true)
+  function openNew() {
+    setEditing(null)
+    setModalOpen(true)
+  }
+
+  function openEdit(a: AppItem) {
+    setEditing(a)
+    setModalOpen(true)
+  }
+
+  async function remove(a: AppItem) {
+    if (!confirm(`Delete app "${a.name}"? Its links will be left in place.`))
+      return
     try {
-      const a = await api.createApp(form)
-      setOk(`Added "${a.name}"`)
-      setForm(empty)
+      await api.deleteApp(a.id)
+      setOk(`Deleted app "${a.name}".`)
       await load()
     } catch (e) {
       setErr(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function remove(id: number) {
-    try {
-      await api.deleteApp(id)
-      await load()
-    } catch (e) {
-      setErr(String(e))
-    }
-  }
-
-  async function testForm(e: React.MouseEvent) {
-    e.preventDefault()
-    setTesting(true)
-    setErr(null)
-    setTestResult(null)
-    try {
-      const r = await api.testApp(form)
-      setTestResult(`Connected — ${r.name} ${r.version}`)
-    } catch (ex) {
-      setTestResult(`Failed: ${ex}`)
-    } finally {
-      setTesting(false)
     }
   }
 
@@ -108,12 +84,20 @@ export default function Apps() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Apps</h2>
-        <p className="text-sm text-zinc-500">
-          Connect Radarr and Sonarr — test the connection, import tags, and
-          rescan to reconcile links.
-        </p>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">Apps</h2>
+          <p className="text-sm text-zinc-500">
+            Connect Radarr and Sonarr — test the connection, import tags, and
+            rescan to reconcile links.
+          </p>
+        </div>
+        <button
+          onClick={openNew}
+          className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+        >
+          + Add app
+        </button>
       </div>
 
       {err && (
@@ -126,101 +110,6 @@ export default function Apps() {
           {ok}
         </div>
       )}
-
-      <form
-        onSubmit={submit}
-        className="grid grid-cols-6 gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4"
-      >
-        <label className="col-span-2 text-sm">
-          <span className="mb-1 block text-zinc-400">Name</span>
-          <input
-            className={inputCls}
-            required
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="My Radarr"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-zinc-400">Type</span>
-          <select
-            className={inputCls}
-            value={form.type}
-            onChange={(e) =>
-              setForm({ ...form, type: e.target.value as AppInput['type'] })
-            }
-          >
-            <option value="radarr">radarr</option>
-            <option value="sonarr">sonarr</option>
-          </select>
-        </label>
-        <label className="col-span-2 text-sm">
-          <span className="mb-1 block text-zinc-400">URL</span>
-          <input
-            className={inputCls}
-            required
-            value={form.url}
-            onChange={(e) => setForm({ ...form, url: e.target.value })}
-            placeholder="http://host:7878"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-zinc-400">API key</span>
-          <input
-            className={inputCls}
-            required
-            type="password"
-            value={form.api_key}
-            onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-          />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-zinc-400">Poll (s)</span>
-          <input
-            className={inputCls}
-            type="number"
-            min={10}
-            max={600}
-            value={form.poll_interval_s}
-            onChange={(e) =>
-              setForm({ ...form, poll_interval_s: Number(e.target.value) })
-            }
-          />
-        </label>
-        <div className="col-span-6 flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-            />
-            enabled
-          </label>
-          {testResult && (
-            <span
-              className={`text-xs ${testResult.startsWith('Connected') ? 'text-emerald-400' : 'text-red-400'}`}>
-              {testResult}
-            </span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={testForm}
-              disabled={testing || !form.url || !form.api_key}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900 disabled:opacity-50"
-            >
-              {testing ? 'Testing…' : 'Test'}
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-            >
-              {busy ? 'Adding…' : 'Add app'}
-            </button>
-          </div>
-        </div>
-      </form>
 
       <div className="overflow-hidden rounded-lg border border-zinc-800">
         <table className="w-full text-sm">
@@ -240,7 +129,7 @@ export default function Apps() {
             {apps.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
-                  No apps yet.
+                  No apps yet — click <span className="text-indigo-400">Add app</span>.
                 </td>
               </tr>
             )}
@@ -291,21 +180,34 @@ export default function Apps() {
                   </div>
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <button
-                    onClick={() => remove(a.id)}
-                    className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
-                  >
-                    delete
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => openEdit(a)}
+                      className="rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                    >
+                      edit
+                    </button>
+                    <button
+                      onClick={() => void remove(a)}
+                      className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
+                    >
+                      delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {modalOpen && (
+        <AppModal
+          initial={editing}
+          onClose={() => setModalOpen(false)}
+          onSaved={() => void load()}
+        />
+      )}
     </div>
   )
 }
-
-const inputCls =
-  'w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500'

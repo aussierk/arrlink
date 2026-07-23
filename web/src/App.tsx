@@ -4,20 +4,17 @@ import AuthGate from './components/AuthGate'
 import { api, type Me } from './lib/api'
 import Apps from './pages/Apps'
 import Dashboard from './pages/Dashboard'
-import Links from './pages/Links'
 import Logs from './pages/Logs'
-import Presets from './pages/Presets'
 import Rules from './pages/Rules'
 import Settings from './pages/Settings'
 import Tags from './pages/Tags'
 
+// Links live on the Dashboard (not a standalone tab).
 const nav = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/apps', label: 'Apps', end: false },
   { to: '/tags', label: 'Tags', end: false },
-  { to: '/presets', label: 'Presets', end: false },
   { to: '/rules', label: 'Rules', end: false },
-  { to: '/links', label: 'Links', end: false },
   { to: '/logs', label: 'Logs', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ]
@@ -83,9 +80,7 @@ function Shell() {
           <Route index element={<Dashboard />} />
           <Route path="apps" element={<Apps />} />
           <Route path="tags" element={<Tags />} />
-          <Route path="presets" element={<Presets />} />
           <Route path="rules" element={<Rules />} />
-          <Route path="links" element={<Links />} />
           <Route path="logs" element={<Logs />} />
           <Route path="settings" element={<Settings />} />
         </Routes>
