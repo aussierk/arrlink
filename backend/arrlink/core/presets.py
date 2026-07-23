@@ -65,14 +65,50 @@ PRESETS: list[Preset] = [
         subpath="/4k",
     ),
     Preset(
-        key="requested",
-        name="Requested",
-        description="Requested items into a requests folder.",
+        key="1080p",
+        name="1080p / FHD",
+        description="Full-HD content into a 1080p folder.",
         matchers={
-            "radarr": ("exact", "request"),
-            "sonarr": ("exact", "request"),
+            "radarr": ("list", "1080p,fhd,1080,high"),
+            "sonarr": ("list", "1080p,fhd,1080,high"),
         },
-        subpath="/requests",
+        subpath="/1080p",
+    ),
+    Preset(
+        key="genre",
+        name="Genre",
+        description="One subfolder per genre. Pick the genres you want.",
+        matchers={
+            "radarr": (
+                "list",
+                "action,adventure,animation,comedy,crime,drama,"
+                "documentary,family,horror,mystery,romance,sci-fi,thriller,western",
+            ),
+            "sonarr": (
+                "list",
+                "action,adventure,animation,comedy,crime,drama,"
+                "documentary,family,horror,mystery,romance,sci-fi,thriller,western",
+            ),
+        },
+        subpath="/{$tag}",
+    ),
+    Preset(
+        key="language",
+        name="Language",
+        description="One subfolder per language. Pick the languages you want.",
+        matchers={
+            "radarr": (
+                "list",
+                "english,spanish,french,german,japanese,korean,italian,"
+                "chinese,hindi,portuguese,dutch,russian",
+            ),
+            "sonarr": (
+                "list",
+                "english,spanish,french,german,japanese,korean,italian,"
+                "chinese,hindi,portuguese,dutch,russian",
+            ),
+        },
+        subpath="/{$tag}",
     ),
 ]
 

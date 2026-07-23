@@ -18,7 +18,7 @@ from ..deps import get_db
 from ..state import State
 from ..auth.oidc import OidcClient, OidcError, b64url_encode, decode_jwt_payload
 from ..auth import sessions as sess
-from ..config import Settings
+from ..config import Settings, effective_auth
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -31,19 +31,19 @@ PASSWORD_COOKIE = "arrlink_pw"
 # --------------------------------------------------------------------------
 
 
-def _client(settings: Settings) -> OidcClient:
-    if not (settings.oidc_issuer and settings.oidc_client_id):
+def _client(auth: dict) -> OidcClient:
+    if not (auth["oidc_issuer"] and auth["oidc_client_id"]):
         raise HTTPException(503, "OIDC not configured (issuer/client_id missing)")
     return OidcClient(
-        settings.oidc_issuer,
-        settings.oidc_client_id,
-        settings.oidc_client_secret or "",
+        auth["oidc_issuer"],
+        auth["oidc_client_id"],
+        auth["oidc_client_secret"] or "",
     )
 
 
-def _redirect_uri(request: Request, settings: Settings) -> str:
-    if settings.oidc_redirect_uri:
-        return settings.oidc_redirect_uri
+def _redirect_uri(request: Request, auth: dict) -> str:
+    if auth["oidc_redirect_uri"]:
+        return auth["oidc_redirect_uri"]
     base = str(request.base_url).rstrip("/")
     return f"{base}/api/auth/oidc/callback"
 
@@ -113,14 +113,15 @@ def get_current_user(
     db: Annotated[State, Depends(get_db)],
 ) -> dict[str, Any]:
     settings: Settings = request.app.state.settings
-    mode = settings.auth_mode
+    auth = effective_auth(db, settings)
+    mode = auth["auth_mode"]
 
     if mode == "none":
         return {"email": None, "name": "local", "authenticated": True}
 
     if mode == "password":
         cookie = request.cookies.get(PASSWORD_COOKIE, "")
-        expected = settings.ui_password or ""
+        expected = auth["ui_password"] or ""
         if not expected or not hmac.compare_digest(cookie, expected):
             raise HTTPException(401, "unauthenticated")
         return {"email": "local", "name": "local", "authenticated": True}
@@ -154,20 +155,24 @@ def me(
 ) -> dict[str, Any]:
     """Never 401s — the SPA uses this to decide whether to redirect to login."""
     settings: Settings = request.app.state.settings
-    if settings.auth_mode == "oidc":
+    auth = effective_auth(db, settings)
+    mode = auth["auth_mode"]
+    if mode == "oidc":
         token = request.cookies.get(SESSION_COOKIE, "")
         s = sess.get_session(db, token) if token else None
         if s and s["expires_at"] >= time.time():
             return {
                 "authenticated": True,
                 "auth_mode": "oidc",
+                "auto_login": bool(auth["auto_login"]),
                 "email": s["email"],
                 "name": s.get("name"),
             }
-        return {"authenticated": False, "auth_mode": "oidc"}
-    if settings.auth_mode == "password":
+        return {"authenticated": False, "auth_mode": "oidc",
+                "auto_login": bool(auth["auto_login"])}
+    if mode == "password":
         cookie = request.cookies.get(PASSWORD_COOKIE, "")
-        expected = settings.ui_password or ""
+        expected = auth["ui_password"] or ""
         ok = bool(expected) and hmac.compare_digest(cookie, expected)
         return {"authenticated": ok, "auth_mode": "password"}
     return {"authenticated": False, "auth_mode": "none"}
@@ -186,9 +191,10 @@ def login_password(
     # Password arrives in the JSON body (never the query string), so it cannot
     # leak into access logs or browser history.
     settings: Settings = request.app.state.settings
-    if settings.auth_mode != "password":
+    auth = effective_auth(db, settings)
+    if auth["auth_mode"] != "password":
         raise HTTPException(400, "auth mode is not password")
-    expected = settings.ui_password or ""
+    expected = auth["ui_password"] or ""
     if not expected or not hmac.compare_digest(body.password, expected):
         raise HTTPException(401, "wrong password")
     response = RedirectResponse("/", status_code=302)
@@ -198,7 +204,7 @@ def login_password(
         httponly=True,
         samesite="lax",
         secure=_secure(request),
-        max_age=settings.session_ttl_h * 3600,
+        max_age=auth["session_ttl_h"] * 3600,
     )
     return response
 
@@ -210,7 +216,8 @@ def login(
     next: str = Query(default="/"),
 ) -> RedirectResponse:
     settings: Settings = request.app.state.settings
-    if settings.auth_mode != "oidc":
+    auth = effective_auth(db, settings)
+    if auth["auth_mode"] != "oidc":
         raise HTTPException(400, "auth mode is not oidc")
 
     state = secrets.token_urlsafe(16)
@@ -225,12 +232,12 @@ def login(
     )
     db.commit()
 
-    client = _client(settings)
+    client = _client(auth)
     d = client.discovery()
     params = {
         "response_type": "code",
         "client_id": client.client_id,
-        "redirect_uri": _redirect_uri(request, settings),
+        "redirect_uri": _redirect_uri(request, auth),
         # offline_access: ask the provider for a refresh token so silent
         # session refresh works with real providers.
         "scope": "openid profile email offline_access",
@@ -254,6 +261,7 @@ def oidc_callback(
     error: str | None = Query(default=None),
 ) -> RedirectResponse:
     settings: Settings = request.app.state.settings
+    auth = effective_auth(db, settings)
 
     if error or not code or not state:
         db.log_event("warn", f"OIDC callback error: {error or 'missing code/state'}")
@@ -267,9 +275,9 @@ def oidc_callback(
     db.execute("DELETE FROM oidc_logins WHERE state=?", (state,))
     db.commit()
 
-    client = _client(settings)
+    client = _client(auth)
     try:
-        tok = client.exchange_code(code, row["verifier"], _redirect_uri(request, settings))
+        tok = client.exchange_code(code, row["verifier"], _redirect_uri(request, auth))
     except OidcError as e:
         db.log_event("warn", f"OIDC code exchange failed: {e.detail}")
         raise HTTPException(502, f"OIDC exchange failed: {e.detail}") from e
@@ -318,7 +326,7 @@ def oidc_callback(
 
     refresh_token = tok.get("refresh_token")
     token, _created, expires = sess.create_session(
-        db, email, info.get("name"), list(groups), refresh_token, settings.session_ttl_h
+        db, email, info.get("name"), list(groups), refresh_token, auth["session_ttl_h"]
     )
     db.log_event("info", f"OIDC login: {email}")
 

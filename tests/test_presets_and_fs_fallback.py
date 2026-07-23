@@ -135,15 +135,22 @@ def test_list_presets_radarr(client):
     body = r.json()
     assert body["base_folder"] == "/media/movies"
     by_key = {p["key"]: p for p in body["presets"]}
-    assert set(by_key) == {"user", "certification", "kids", "4k", "requested"}
+    assert set(by_key) == {"user", "certification", "kids", "4k", "1080p",
+                           "genre", "language"}
     assert by_key["user"]["dir_template"] == "/media/movies/{$user}"
     assert by_key["certification"]["dir_template"] == "/media/movies/{$tag}"
     assert by_key["certification"]["match_type"] == "regex"
     assert by_key["certification"]["match_value"] == "^(G|PG|PG-13|R|NC-17)$"
     assert by_key["kids"]["match_type"] == "list"
     assert by_key["kids"]["dir_template"] == "/media/movies/kids"
-    assert by_key["requested"]["match_type"] == "exact"
-    assert by_key["requested"]["match_value"] == "request"
+    # the requested preset was replaced by quality/genre/language presets
+    assert by_key["1080p"]["match_type"] == "list"
+    assert by_key["1080p"]["match_value"].split(",")[0] == "1080p"
+    assert by_key["1080p"]["dir_template"] == "/media/movies/1080p"
+    assert by_key["genre"]["match_type"] == "list"
+    assert by_key["genre"]["dir_template"] == "/media/movies/{$tag}"
+    assert by_key["language"]["match_type"] == "list"
+    assert by_key["language"]["dir_template"] == "/media/movies/{$tag}"
 
 
 def test_list_presets_sonarr(client):

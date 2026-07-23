@@ -6,6 +6,55 @@ import {
   type AppItem,
   type RuleItem,
 } from '../lib/api'
+import { REGEX_PICKS } from '../lib/tagOptions'
+
+/** Render a rule's matcher readably: exact as-is, list as count+chips, regex as a
+ * friendly label when it's a known pattern (else a short mono snippet). */
+function matchCell(r: RuleItem) {
+  if (r.match_type === 'list') {
+    const tags = r.match_value.split(',').map((s) => s.trim()).filter(Boolean)
+    const shown = tags.slice(0, 4)
+    const more = tags.length - shown.length
+    return (
+      <span className="flex flex-wrap items-center gap-1">
+        <span className="text-zinc-500">list ·</span>
+        {shown.map((t) => (
+          <span
+            key={t}
+            className="rounded-full border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[11px] text-zinc-300"
+          >
+            {t}
+          </span>
+        ))}
+        {more > 0 && (
+          <span className="text-[11px] text-zinc-500">+{more} more</span>
+        )}
+      </span>
+    )
+  }
+  if (r.match_type === 'regex') {
+    const pick = REGEX_PICKS.find((p) => p.pattern === r.match_value)
+    if (pick) {
+      return (
+        <span>
+          <span className="text-zinc-500">regex ·</span>{' '}
+          <span className="text-zinc-300">{pick.label}</span>
+        </span>
+      )
+    }
+    return (
+      <span className="break-all font-mono text-[11px]">
+        <span className="text-zinc-500">regex ·</span> {r.match_value}
+      </span>
+    )
+  }
+  return (
+    <span>
+      <span className="text-zinc-500">exact ·</span>{' '}
+      <span className="text-zinc-300">{r.match_value}</span>
+    </span>
+  )
+}
 
 /**
  * Rules: the single place to build and edit rules. "Add rule" opens the
@@ -131,9 +180,8 @@ export default function Rules() {
                 <td className="px-3 py-2 text-zinc-400">
                   {r.app_name ?? 'any'}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-zinc-300">
-                  {r.match_type}:{' '}
-                  <span className="break-all">{r.match_value}</span>
+                <td className="px-3 py-2 text-xs">
+                  {matchCell(r)}
                 </td>
                 <td className="px-3 py-2 font-mono text-xs text-zinc-300">
                   {r.dir_template}

@@ -54,8 +54,32 @@ export type Health = {
 export type Me = {
   authenticated: boolean
   auth_mode: string
+  // oidc only: whether the gate auto-redirects to the provider on load
+  auto_login?: boolean
   email?: string | null
   name?: string | null
+}
+
+export type AuthConfig = {
+  auth_mode: 'none' | 'password' | 'oidc'
+  auto_login: boolean
+  ui_password_set: boolean
+  oidc_issuer: string
+  oidc_client_id: string
+  oidc_client_secret_set: boolean
+  oidc_redirect_uri: string
+  auth_modes: string[]
+}
+
+export type AuthConfigInput = {
+  auth_mode: 'none' | 'password' | 'oidc'
+  auto_login?: boolean
+  // blank = keep the current value (the UI can't recover secrets)
+  ui_password?: string
+  oidc_issuer?: string
+  oidc_client_id?: string
+  oidc_client_secret?: string
+  oidc_redirect_uri?: string | null
 }
 
 export type AppItem = {
@@ -234,6 +258,12 @@ export const api = {
     req<LogEntry[]>(`/api/logs${level ? `?level=${encodeURIComponent(level)}` : ''}`),
   getSettings: () => req<Record<string, unknown>>('/api/settings'),
   getEffectiveSettings: () => req<EffectiveSettings>('/api/settings/effective'),
+  getAuthSettings: () => req<AuthConfig>('/api/settings/auth'),
+  updateAuthSettings: (b: AuthConfigInput) =>
+    req<AuthConfig>('/api/settings/auth', {
+      method: 'PUT',
+      body: JSON.stringify(b),
+    }),
   setSetting: (key: string, value: unknown) =>
     req<Record<string, unknown>>(`/api/settings/${key}`, {
       method: 'PUT',

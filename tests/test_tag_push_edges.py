@@ -728,3 +728,73 @@ def test_list_presets_base_folder_trailing_slash(client, tmp_path):
     by_key = {p["key"]: p for p in r.json()["presets"]}
     assert by_key["user"]["dir_template"] == f"{linked}/{{$user}}"
     assert by_key["4k"]["dir_template"] == f"{linked}/4k"
+
+
+# ---------------------------------------------------------------------------
+# 8. auth settings: runtime mode switch, masked secrets, lockout validation
+# ---------------------------------------------------------------------------
+
+
+def test_auth_view_masks_secrets(client):
+    v = client.get("/api/settings/auth").json()
+    assert v["auth_mode"] == "none"
+    assert v["auto_login"] is True
+    assert v["auth_modes"] == ["none", "password", "oidc"]
+    # no secret is ever returned as a value
+    assert "ui_password" not in v and "oidc_client_secret" not in v
+    assert v["ui_password_set"] is False
+    assert v["oidc_client_secret_set"] is False
+
+
+def test_auth_mode_switch_live_and_password_gates(client):
+    # switch to password (env was none) — takes effect immediately
+    r = client.put("/api/settings/auth", json={"auth_mode": "password",
+                                               "ui_password": "s3cret"})
+    assert r.status_code == 200, r.text
+    assert r.json()["ui_password_set"] is True
+    assert client.get("/api/auth/me").json()["auth_mode"] == "password"
+    # data endpoint now 401 until the right password is used
+    assert client.get("/api/apps").status_code == 401
+    assert client.post("/api/auth/password",
+                       json={"password": "nope"}).status_code == 401
+    assert client.post("/api/auth/password",
+                       json={"password": "s3cret"}).status_code == 200
+    assert client.get("/api/apps").status_code == 200
+    # back to none
+    client.put("/api/settings/auth", json={"auth_mode": "none"})
+    assert client.get("/api/auth/me").json()["auth_mode"] == "none"
+    assert client.get("/api/apps").status_code == 200
+
+
+def test_auth_lockout_validation(client):
+    # password mode with no password (env + runtime) -> rejected
+    r = client.put("/api/settings/auth", json={"auth_mode": "password",
+                                               "ui_password": ""})
+    assert r.status_code == 422 and "password is required" in r.json()["detail"]
+    # oidc mode with no issuer/client -> rejected
+    r = client.put("/api/settings/auth", json={"auth_mode": "oidc",
+                                               "oidc_issuer": "",
+                                               "oidc_client_id": ""})
+    assert r.status_code == 422 and "issuer and client ID are required" in \
+        r.json()["detail"]
+    # invalid mode
+    assert client.put("/api/settings/auth", json={"auth_mode": "bogus"}).status_code == 422
+
+
+def test_auth_secrets_hidden_from_settings_dump(client):
+    client.put("/api/settings/auth", json={"auth_mode": "password",
+                                           "ui_password": "topsecret"})
+    # the generic settings dump must not leak the password
+    assert "auth_password" not in client.get("/api/settings").json()
+    client.put("/api/settings/auth", json={"auth_mode": "none"})
+
+
+def test_auth_auto_login_flag(client, monkeypatch):
+    monkeypatch.setenv("AUTH_MODE", "oidc")
+    app = create_app(db_path=client.app.state.db.db_path)
+    # fresh app on the same DB in oidc mode: auto_login defaults on, and a
+    # runtime Setting (written directly, since the endpoint is auth-gated) flips it
+    with TestClient(app) as c:
+        assert c.get("/api/auth/me").json()["auto_login"] is True
+        c.app.state.db.set_setting("oidc_auto_login", False)
+        assert c.get("/api/auth/me").json()["auto_login"] is False

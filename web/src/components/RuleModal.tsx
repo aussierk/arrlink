@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Modal from './Modal'
 import PreviewPanel from './PreviewPanel'
 import {
@@ -9,6 +9,12 @@ import {
   type RuleItem,
   type TagItem,
 } from '../lib/api'
+import {
+  LIST_GROUPS,
+  REGEX_PICKS,
+  joinList,
+  parseList,
+} from '../lib/tagOptions'
 
 const empty: RuleInput = {
   name: '',
@@ -22,10 +28,14 @@ const empty: RuleInput = {
   priority: 100,
 }
 
+const CUSTOM = '__custom__'
+
 /**
- * Create or edit a rule. Includes a "start from preset" quick-start: pick an
- * app type + base folder, choose a preset, and the form is pre-filled for
- * editing. On create, `initial` is null; on edit it is the existing rule.
+ * Create or edit a rule. The match is entered ergonomically instead of as raw
+ * text: a type (exact / list / regex) plus, for each type, dropdowns and a
+ * multi-select of common tag formats. The underlying exact / list / regex
+ * match_value is unchanged — the UI just parses/renders it against the common
+ * formats. Includes a "start from preset" quick-start and a live preview.
  */
 export default function RuleModal({
   initial,
@@ -56,6 +66,7 @@ export default function RuleModal({
   const [tags, setTags] = useState<TagItem[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [customTag, setCustomTag] = useState('')
 
   // preset quick-start
   const [presetType, setPresetType] = useState<'radarr' | 'sonarr'>('radarr')
@@ -92,6 +103,59 @@ export default function RuleModal({
       .catch(() => setTags([]))
   }, [form.app_scope])
 
+  // ---- match helpers -------------------------------------------------------
+  const valueTags = useMemo(
+    () => (form.match_type === 'list' ? parseList(form.match_value) : []),
+    [form.match_type, form.match_value],
+  )
+
+  // exact: dropdown of app tags + common single values; CUSTOM if not in list
+  const exactOptions = useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    const push = (v: string) => {
+      if (v && !seen.has(v)) {
+        seen.add(v)
+        out.push(v)
+      }
+    }
+    tags.forEach((t) => push(t.label))
+    LIST_GROUPS.forEach((g) => g.tags.forEach(push))
+    return out
+  }, [tags])
+  const exactIsCustom =
+    !!form.match_value && !exactOptions.includes(form.match_value)
+
+  // regex: dropdown of common patterns; CUSTOM if the value isn't a known pick
+  const regexPick = REGEX_PICKS.find((p) => p.pattern === form.match_value)
+  const regexIsCustom = !!form.match_value && !regexPick
+  const selectedPickHint = regexPick?.hint
+
+  function setMatchType(t: RuleInput['match_type']) {
+    setForm((f) => ({ ...f, match_type: t, match_value: '' }))
+    setErr(null)
+  }
+  function setExact(v: string) {
+    setForm((f) => ({ ...f, match_value: v }))
+    setErr(null)
+  }
+  function toggleListTag(tag: string) {
+    const cur = parseList(form.match_value)
+    const next = cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]
+    setForm((f) => ({ ...f, match_value: joinList(next) }))
+    setErr(null)
+  }
+  function addCustomTag() {
+    const v = customTag.trim()
+    if (!v) return
+    if (!valueTags.includes(v)) toggleListTag(v)
+    setCustomTag('')
+  }
+  function setRegex(v: string) {
+    setForm((f) => ({ ...f, match_value: v }))
+    setErr(null)
+  }
+
   function switchPresetType(t: 'radarr' | 'sonarr') {
     setPresetType(t)
     setBaseFolder(t === 'radarr' ? '/media/movies' : '/media/tv')
@@ -110,6 +174,10 @@ export default function RuleModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setErr(null)
+    if (!form.match_value.trim()) {
+      setErr('Pick at least one match value.')
+      return
+    }
     setBusy(true)
     try {
       if (editing && initial) {
@@ -131,6 +199,22 @@ export default function RuleModal({
       setBusy(false)
     }
   }
+
+  // checkbox groups for the list multi-select: app tags + common groups, plus
+  // any already-selected tags that aren't in a known group (custom values).
+  const listGroups = useMemo(() => {
+    const known = new Set<string>()
+    LIST_GROUPS.forEach((g) => g.tags.forEach((t) => known.add(t)))
+    const appTags = tags
+      .map((t) => t.label)
+      .filter((t) => !known.has(t))
+    const other = valueTags.filter((t) => !known.has(t) && !appTags.includes(t))
+    const groups: { group: string; tags: string[] }[] = []
+    if (appTags.length) groups.push({ group: 'App tags', tags: appTags })
+    LIST_GROUPS.forEach((g) => groups.push({ group: g.group, tags: g.tags }))
+    if (other.length) groups.push({ group: 'Selected / other', tags: other })
+    return groups
+  }, [tags, valueTags])
 
   return (
     <Modal
@@ -217,45 +301,159 @@ export default function RuleModal({
               ))}
             </select>
           </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">Match type</span>
-            <select
-              className={inputCls}
-              value={form.match_type}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  match_type: e.target.value as RuleInput['match_type'],
-                })
-              }
-            >
-              <option value="exact">exact</option>
-              <option value="list">list</option>
-              <option value="regex">regex</option>
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">Match value</span>
-            <input
-              className={inputCls}
-              required
-              list={
-                form.match_type === 'regex'
-                  ? undefined
-                  : form.app_scope !== null
-                    ? 'rule-tags-dl'
-                    : undefined
-              }
-              value={form.match_value}
-              onChange={(e) => setForm({ ...form, match_value: e.target.value })}
-              placeholder="kids  /  ^##\s*-\s*(?P<user>.+)$"
-            />
-            <datalist id="rule-tags-dl">
-              {tags.map((t) => (
-                <option key={t.id} value={t.label} />
+        </div>
+
+        {/* Match: type + ergonomic value editor */}
+        <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Match
+            </span>
+            <div className="flex rounded-md border border-zinc-700 p-0.5 text-xs">
+              {(['exact', 'list', 'regex'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setMatchType(t)}
+                  className={`rounded px-2.5 py-1 ${
+                    form.match_type === t
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  {t}
+                </button>
               ))}
-            </datalist>
-          </label>
+            </div>
+          </div>
+
+          {form.match_type === 'exact' && (
+            <div className="space-y-2">
+              <select
+                className={inputCls}
+                value={exactIsCustom ? CUSTOM : form.match_value}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setExact(v === CUSTOM ? (form.match_value || '') : v)
+                }}
+              >
+                <option value="">Select a tag…</option>
+                {exactOptions.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+                <option value={CUSTOM}>Custom…</option>
+              </select>
+              {exactIsCustom && (
+                <input
+                  className={inputCls}
+                  value={form.match_value}
+                  onChange={(e) => setExact(e.target.value)}
+                  placeholder="exact tag to match"
+                />
+              )}
+              <p className="text-[11px] text-zinc-500">
+                Matches an item that has this exact tag.
+              </p>
+            </div>
+          )}
+
+          {form.match_type === 'list' && (
+            <div className="space-y-3">
+              {listGroups.map((g) => (
+                <div key={g.group}>
+                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                    {g.group}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {g.tags.map((t) => {
+                      const on = valueTags.includes(t)
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => toggleListTag(t)}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs ${
+                            on
+                              ? 'border-indigo-500 bg-indigo-600/20 text-indigo-200'
+                              : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-500'
+                          }`}
+                        >
+                          {on ? '✓ ' : ''}
+                          {t}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <input
+                  className={inputCls + ' flex-1'}
+                  value={customTag}
+                  onChange={(e) => setCustomTag(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addCustomTag()
+                    }
+                  }}
+                  placeholder="add a custom tag…"
+                />
+                <button
+                  type="button"
+                  onClick={addCustomTag}
+                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                >
+                  Add
+                </button>
+              </div>
+              <p className="text-[11px] text-zinc-500">
+                Matches an item that has any selected tag.{' '}
+                <span className="text-zinc-400">{valueTags.length} selected.</span>
+              </p>
+            </div>
+          )}
+
+          {form.match_type === 'regex' && (
+            <div className="space-y-2">
+              <select
+                className={inputCls}
+                value={regexIsCustom ? CUSTOM : regexPick?.pattern ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setRegex(v === CUSTOM ? (form.match_value || '') : v)
+                }}
+              >
+                <option value="">Select a pattern…</option>
+                {REGEX_PICKS.map((p) => (
+                  <option key={p.pattern} value={p.pattern}>
+                    {p.label}
+                  </option>
+                ))}
+                <option value={CUSTOM}>Custom regex…</option>
+              </select>
+              {selectedPickHint && (
+                <p className="text-[11px] text-zinc-500">{selectedPickHint}</p>
+              )}
+              {regexIsCustom && (
+                <textarea
+                  className={inputCls + ' font-mono'}
+                  rows={2}
+                  value={form.match_value}
+                  onChange={(e) => setRegex(e.target.value)}
+                  placeholder="^##\s*-\s*(?P<user>.+)$"
+                />
+              )}
+              <p className="text-[11px] text-zinc-500">
+                Pick a common pattern (e.g. “## - username”) or write your own.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
           <label className="text-sm">
             <span className="mb-1 block text-zinc-400">Dir template</span>
             <input
@@ -338,7 +536,7 @@ export default function RuleModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800"
             >
               Cancel
             </button>

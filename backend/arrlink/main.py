@@ -26,7 +26,7 @@ from .api import (
 )
 from .auth import sessions as sess_mod
 from .auth.oidc import OidcClient
-from .config import get_settings, setup_logging
+from .config import effective_auth, get_settings, setup_logging
 from .core.poller import Poller
 from .core.template import audit_rule_roots
 from .state import State
@@ -48,22 +48,28 @@ def find_dist(here: Path) -> Path | None:
 
 
 async def _auth_sweep(db: State, settings) -> None:
-    """Background loop: silently refresh OIDC sessions nearing expiry."""
+    """Background loop: silently refresh OIDC sessions nearing expiry.
+
+    The auth mode can be switched at runtime (Settings -> Authentication), so
+    the loop is always running and re-resolves the effective mode each tick —
+    it stays dormant until oidc is active.
+    """
     while True:
         await asyncio.sleep(sess_mod.SWEEP_INTERVAL_S)
-        if settings.auth_mode != "oidc":
+        auth = effective_auth(db, settings)
+        if auth["auth_mode"] != "oidc":
             continue
         try:
 
             def _factory():
                 return OidcClient(
-                    settings.oidc_issuer,
-                    settings.oidc_client_id,
-                    settings.oidc_client_secret or "",
+                    auth["oidc_issuer"],
+                    auth["oidc_client_id"],
+                    auth["oidc_client_secret"] or "",
                 )
 
             stats = await asyncio.to_thread(
-                sess_mod.run_sweep, db, _factory, settings.session_ttl_h
+                sess_mod.run_sweep, db, _factory, auth["session_ttl_h"]
             )
             if stats["failed"]:
                 db.log_event(
@@ -83,9 +89,9 @@ def create_app(db_path: Path | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        task: asyncio.Task | None = None
-        if settings.auth_mode == "oidc":
-            task = asyncio.create_task(_auth_sweep(db, settings))
+        # Always run the sweep: the auth mode can be switched to oidc at
+        # runtime, and it self-dormants when oidc is not active.
+        task = asyncio.create_task(_auth_sweep(db, settings))
         poller = Poller(db, settings)
         app.state.poller = poller
         # Legacy-root audit: enabled rules whose dir template escapes the

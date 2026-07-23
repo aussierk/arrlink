@@ -322,8 +322,20 @@ class State:
         self.execute("DELETE FROM settings WHERE key=?", (key,))
         self.conn.commit()
 
+    # Sensitive Settings must never be returned by GET /api/settings (which
+    # dumps every key). They are read directly where needed and exposed only
+    # through the masked GET /api/settings/auth endpoint.
+    SENSITIVE_SETTING_KEYS = frozenset(
+        {
+            "auth_password",
+            "oidc_client_secret",
+            # (auth_mode / oidc_* non-secret keys are safe to expose)
+        }
+    )
+
     def all_settings(self) -> dict[str, Any]:
         return {
             r["key"]: json.loads(r["value_json"])
             for r in self.query("SELECT key, value_json FROM settings ORDER BY key")
+            if r["key"] not in self.SENSITIVE_SETTING_KEYS
         }

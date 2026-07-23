@@ -283,7 +283,17 @@ def complete_login(client: TestClient, code: str, state: str) -> TestClient:
 def test_me_unauthenticated_without_cookie(client):
     r = client.get("/api/auth/me")
     assert r.status_code == 200
-    assert r.json() == {"authenticated": False, "auth_mode": "oidc"}
+    assert r.json() == {"authenticated": False, "auth_mode": "oidc",
+                        "auto_login": True}
+
+
+def test_me_oidc_autologin_flag(client):
+    # auto_login is a runtime Setting (default on); me() reports it. Written
+    # directly to the DB because the settings endpoint is auth-gated in oidc mode.
+    assert client.get("/api/auth/me").json()["auto_login"] is True
+    client.app.state.db.set_setting("oidc_auto_login", False)
+    assert client.get("/api/auth/me").json()["auto_login"] is False
+    client.app.state.db.delete_setting("oidc_auto_login")
 
 
 def test_protected_endpoints_require_session(client):
