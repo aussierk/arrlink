@@ -138,19 +138,25 @@ def test_list_presets_radarr(client):
     assert set(by_key) == {"user", "certification", "kids", "4k", "1080p",
                            "genre", "language"}
     assert by_key["user"]["dir_template"] == "/media/movies/{$user}"
-    assert by_key["certification"]["dir_template"] == "/media/movies/{$tag}"
+    assert by_key["user"]["category"] == "user"
+    assert by_key["certification"]["dir_template"] == "/media/movies/{$certification}"
+    assert by_key["certification"]["category"] == "certification"
     assert by_key["certification"]["match_type"] == "regex"
     assert by_key["certification"]["match_value"] == "^(G|PG|PG-13|R|NC-17)$"
     assert by_key["kids"]["match_type"] == "list"
+    assert by_key["kids"]["category"] == "custom"
     assert by_key["kids"]["dir_template"] == "/media/movies/kids"
     # the requested preset was replaced by quality/genre/language presets
     assert by_key["1080p"]["match_type"] == "list"
     assert by_key["1080p"]["match_value"].split(",")[0] == "1080p"
     assert by_key["1080p"]["dir_template"] == "/media/movies/1080p"
+    assert by_key["1080p"]["category"] == "quality"
     assert by_key["genre"]["match_type"] == "list"
-    assert by_key["genre"]["dir_template"] == "/media/movies/{$tag}"
+    assert by_key["genre"]["dir_template"] == "/media/movies/{$genre}"
+    assert by_key["genre"]["category"] == "genre"
     assert by_key["language"]["match_type"] == "list"
-    assert by_key["language"]["dir_template"] == "/media/movies/{$tag}"
+    assert by_key["language"]["dir_template"] == "/media/movies/{$language}"
+    assert by_key["language"]["category"] == "language"
 
 
 def test_list_presets_sonarr(client):
@@ -159,7 +165,7 @@ def test_list_presets_sonarr(client):
     # TV conventions differ from movies
     assert by_key["certification"]["match_value"] == \
         "^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$"
-    assert by_key["certification"]["dir_template"] == "/media/tv/{$tag}"
+    assert by_key["certification"]["dir_template"] == "/media/tv/{$certification}"
     assert by_key["kids"]["match_value"] == "kids,family,TV-Y,TV-Y7,TV-G,TV-PG"
     assert by_key["user"]["dir_template"] == "/media/tv/{$user}"
 
@@ -168,7 +174,7 @@ def test_list_presets_custom_base(client):
     r = client.get("/api/presets?app_type=radarr&base_folder=/media/basemovies")
     by_key = {p["key"]: p for p in r.json()["presets"]}
     assert by_key["user"]["dir_template"] == "/media/basemovies/{$user}"
-    assert by_key["certification"]["dir_template"] == "/media/basemovies/{$tag}"
+    assert by_key["certification"]["dir_template"] == "/media/basemovies/{$certification}"
 
 
 def test_list_presets_bad_type(client):
@@ -190,8 +196,9 @@ def test_apply_preset_creates_rule(client, radarr_media):
     assert r.status_code == 201, r.text
     rule = r.json()["rule"]
     assert rule["name"] == "preset:user"
-    assert rule["match_type"] == "regex"
-    assert rule["match_value"] == r"^##\s*-\s*(?P<user>.+)$"
+    assert rule["conditions"][0]["category"] == "user"
+    assert rule["conditions"][0]["match_type"] == "regex"
+    assert rule["conditions"][0]["match_value"] == r"^\d+\s*-\s*(?P<user>.+)$"
     assert rule["dir_template"] == f"{radarr_media['linked']}/" + "{$user}"
     assert rule["enabled"] is True
     # it's a real, listable rule
@@ -290,8 +297,11 @@ def test_fs_fallback_env_default_and_effective(client, radarr_media):
 def test_fs_fallback_setting_overrides_env(client, radarr_media, monkeypatch):
     origin, linked = radarr_media["origin"], radarr_media["linked"]
     app_id = _add_app(client, origin)
-    client.post("/api/rules", json={"name": "4k", "match_type": "exact",
-                                    "match_value": "4k", "dir_template": f"{linked}/4k"})
+    client.post("/api/rules", json={
+        "name": "4k",
+        "conditions": [{"category": "quality", "match_type": "exact", "match_value": "4k", "join": None}],
+        "dir_template": f"{linked}/4k",
+    })
 
     # simulate a cross-filesystem source/destination pair
     import arrlink.core.fsutil as fsutil

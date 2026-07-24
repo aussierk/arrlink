@@ -17,7 +17,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from arrlink.core.matching import match_rule
+from arrlink.core.matching import ConditionMatch, match_rule
 from arrlink.core.planner import plan_links
 from arrlink.core.template import (
     TemplateError,
@@ -26,6 +26,12 @@ from arrlink.core.template import (
     resolve_template,
 )
 from arrlink.main import create_app
+
+
+def _legacy(tag: str, regex_match=None) -> list[ConditionMatch]:
+    """A single matched_conditions list for a legacy (pre-category) condition —
+    the shape build_context/resolve_destination expect."""
+    return [ConditionMatch(category="legacy", tag=tag, regex_match=regex_match)]
 
 # ---------------------------------------------------------------------------
 # matching
@@ -119,16 +125,11 @@ def test_planner_multi_rule_and_file():
 
 
 def test_dir_template_named_group():
-    ctx = build_context("## - alice", None, "Radarr", "Inception", 2010,
-                        "/media/movies/Inception.2010.2160p.mkv")
-    # simulate a regex match's groups via context
-    import dataclasses
+    import re as _re
 
-    ctx = dataclasses.replace(
-        ctx,
-        groups={"user": "alice"},
-        numbered=("alice",),
-    )
+    m = _re.match(r"^##\s*-\s*(?P<user>.+)$", "## - alice")
+    ctx = build_context(_legacy("## - alice", m), "Radarr", "Inception", 2010,
+                        "/media/movies/Inception.2010.2160p.mkv")
     d, f = _resolve("/linked/movies/users/{$user}", None, ctx)
     assert d == "/linked/movies/users/alice"
     assert f == "Inception.2010.2160p.mkv"  # source basename kept
@@ -157,14 +158,14 @@ def _resolve(dir_t, file_t, ctx):
 
 
 def test_placeholders():
-    ctx = build_context("PG-13", None, "Radarr", "Inception", 2010,
+    ctx = build_context(_legacy("PG-13"), "Radarr", "Inception", 2010,
                         "/media/movies/Inception.2010.2160p.mkv")
     d, _ = _resolve("/linked/{$app}/{$tag}/{$title} ({$year})", None, ctx)
     assert d == "/linked/Radarr/PG-13/Inception (2010)"
 
 
 def test_filename_template_stem_ext():
-    ctx = build_context("kids", None, "Radarr", "Inception", 2010,
+    ctx = build_context(_legacy("kids"), "Radarr", "Inception", 2010,
                         "/media/movies/Inception.2010.2160p.mkv")
     d, f = _resolve("/linked/movies/kids", "{$stem}", ctx)
     assert f == "Inception.2010.2160p.mkv"  # ext re-attached
@@ -175,7 +176,7 @@ def test_filename_template_stem_ext():
 
 
 def test_sanitize_illegal_chars():
-    ctx = build_context('a/b\\c:d*e"<>|', None, "Radarr", "T", 2010,
+    ctx = build_context(_legacy('a/b\\c:d*e"<>|'), "Radarr", "T", 2010,
                         "/media/movies/T.mkv")
     d, _ = _resolve("/linked/{$tag}", None, ctx)
     # illegal chars → space, whitespace collapsed
@@ -184,8 +185,7 @@ def test_sanitize_illegal_chars():
 
 
 def test_jail_blocks_escape():
-    ctx = build_context("x", None, "Radarr", "T", 2010, "/media/movies/T.mkv")
-    import dataclasses
+    ctx = build_context(_legacy("x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
 
     from arrlink.core.template import (
         resolve_template,
@@ -204,13 +204,13 @@ def test_jail_blocks_escape():
 
 
 def test_unknown_placeholder_raises():
-    ctx = build_context("x", None, "Radarr", "T", 2010, "/media/movies/T.mkv")
+    ctx = build_context(_legacy("x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
     with pytest.raises(TemplateError, match="unknown placeholder"):
         resolve_template("/linked/{$nope}", ctx)
 
 
 def test_missing_capture_group_raises():
-    ctx = build_context("x", None, "Radarr", "T", 2010, "/media/movies/T.mkv")
+    ctx = build_context(_legacy("x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
     with pytest.raises(TemplateError, match="capture group"):
         resolve_template("/linked/{$1}", ctx)
 
@@ -357,6 +357,10 @@ def _add_app(client: TestClient, url: str, key: str = API_KEY) -> int:
     return r.json()["id"]
 
 
+def _cond(category, match_type, match_value, join=None):
+    return {"category": category, "match_type": match_type, "match_value": match_value, "join": join}
+
+
 def test_preview_exact(client, radarr):
     origin = radarr[0]
     app_id = _add_app(client, origin)
@@ -364,8 +368,7 @@ def test_preview_exact(client, radarr):
         "/api/rules/preview?app_id=1".replace("1", str(app_id)),
         json={
             "name": "kids",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [_cond("custom", "exact", "kids")],
             "dir_template": "/linked/movies/kids",
         },
     )
@@ -387,8 +390,7 @@ def test_preview_regex_user(client, radarr):
         f"/api/rules/preview?app_id={app_id}",
         json={
             "name": "user tags",
-            "match_type": "regex",
-            "match_value": r"^##\s*-\s*(?P<user>.+)$",
+            "conditions": [_cond("user", "regex", r"^##\s*-\s*(?P<user>.+)$")],
             "dir_template": "/linked/movies/users/{$user}",
         },
     )
@@ -405,8 +407,7 @@ def test_preview_filename_template(client, radarr):
         f"/api/rules/preview?app_id={app_id}",
         json={
             "name": "kids",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [_cond("custom", "exact", "kids")],
             "dir_template": "/linked/movies/kids",
             "filename_template": "{$title}",
         },
@@ -423,8 +424,7 @@ def test_preview_no_matches(client, radarr):
         f"/api/rules/preview?app_id={app_id}",
         json={
             "name": "none",
-            "match_type": "exact",
-            "match_value": "does-not-exist",
+            "conditions": [_cond("custom", "exact", "does-not-exist")],
             "dir_template": "/linked/movies",
         },
     )
@@ -439,9 +439,8 @@ def test_preview_jail_error(client, radarr):
         f"/api/rules/preview?app_id={app_id}",
         json={
             "name": "evil",
-            "match_type": "exact",
-            "match_value": "kids",
-            "dir_template": "/etc/evil/{$tag}",
+            "conditions": [_cond("custom", "exact", "kids")],
+            "dir_template": "/etc/evil/{$custom}",
         },
     )
     assert r.status_code == 200, r.text
@@ -456,8 +455,7 @@ def test_preview_unknown_app(client, radarr):
         "/api/rules/preview?app_id=999",
         json={
             "name": "x",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [_cond("custom", "exact", "kids")],
             "dir_template": "/linked/x",
         },
     )
@@ -471,8 +469,7 @@ def test_preview_bad_key(client, radarr):
         f"/api/rules/preview?app_id={app_id}",
         json={
             "name": "x",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [_cond("custom", "exact", "kids")],
             "dir_template": "/linked/x",
         },
     )

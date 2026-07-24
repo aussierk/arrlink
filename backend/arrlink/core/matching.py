@@ -19,33 +19,37 @@ class RuleMatch:
 
 
 def match_rule(match_type: str, match_value: str, item_tags: list[str]) -> RuleMatch | None:
-    """Return a :class:`RuleMatch` if the rule matches any item tag, else None."""
+    """Return a :class:`RuleMatch` for the first item tag that satisfies the
+    matcher, else None. See :func:`match_rule_all` for every satisfying tag."""
+    matches = match_rule_all(match_type, match_value, item_tags)
+    return matches[0] if matches else None
+
+
+def match_rule_all(match_type: str, match_value: str, item_tags: list[str]) -> list[RuleMatch]:
+    """Like :func:`match_rule`, but returns every item tag that satisfies the
+    matcher instead of stopping at the first — used to fan a single condition
+    out into multiple destination links (one per matching tag)."""
     if match_type == "exact":
         target = match_value.strip()
-        for t in item_tags:
-            if t == target:
-                return RuleMatch(tag=t)
-        return None
+        return [RuleMatch(tag=t) for t in item_tags if t == target]
 
     if match_type == "list":
         targets = {s.strip() for s in match_value.split(",") if s.strip()}
-        for t in item_tags:
-            if t in targets:
-                return RuleMatch(tag=t)
-        return None
+        return [RuleMatch(tag=t) for t in item_tags if t in targets]
 
     if match_type == "regex":
         try:
             pattern = re.compile(match_value)
         except re.error:
-            return None
+            return []
+        out = []
         for t in item_tags:
             m = pattern.search(t)
             if m:
-                return RuleMatch(tag=t, regex_match=m)
-        return None
+                out.append(RuleMatch(tag=t, regex_match=m))
+        return out
 
-    return None
+    return []
 
 
 def rule_matches(rule, item_tags: list[str]) -> RuleMatch | None:
@@ -55,3 +59,56 @@ def rule_matches(rule, item_tags: list[str]) -> RuleMatch | None:
         rule["match_value"] if isinstance(rule, dict) else rule.match_value,
         item_tags,
     )
+
+
+@dataclasses.dataclass
+class ConditionMatch:
+    """One condition (identified by its category) that was evaluated and
+    matched while folding a rule's condition chain."""
+
+    category: str
+    tag: str
+    regex_match: "re.Match | None" = None
+
+
+@dataclasses.dataclass
+class ConditionsResult:
+    """Result of folding an ordered AND/OR condition chain over an item's tags."""
+
+    result: bool
+    matched_conditions: list[ConditionMatch]
+    all_matches: dict[str, list[ConditionMatch]] = dataclasses.field(default_factory=dict)
+
+
+def match_conditions(conditions: list[dict], item_tags: list[str]) -> ConditionsResult:
+    """Left-to-right, short-circuiting AND/OR fold over an ordered condition chain."""
+    if not conditions:
+        return ConditionsResult(result=False, matched_conditions=[], all_matches={})
+
+    running = False
+    matched: list[ConditionMatch] = []
+    all_matches: dict[str, list[ConditionMatch]] = {}
+    for i, cond in enumerate(conditions):
+        join = cond.get("join")
+        if i > 0:
+            if join == "AND" and running is False:
+                continue
+            if join == "OR" and running is True:
+                continue
+
+        hits = match_rule_all(cond["match_type"], cond["match_value"], item_tags)
+        hit = bool(hits)
+        if i == 0:
+            running = hit
+        elif join == "AND":
+            running = running and hit
+        else:  # "OR"
+            running = running or hit
+
+        if hit:
+            category = cond["category"]
+            cms = [ConditionMatch(category=category, tag=m.tag, regex_match=m.regex_match) for m in hits]
+            matched.append(cms[0])
+            all_matches[category] = cms
+
+    return ConditionsResult(result=running, matched_conditions=matched, all_matches=all_matches)

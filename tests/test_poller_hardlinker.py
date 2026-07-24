@@ -158,8 +158,9 @@ def _make_rule(client, name, match_value, dir_template, match_type="exact",
         "/api/rules",
         json={
             "name": name,
-            "match_type": match_type,
-            "match_value": match_value,
+            "conditions": [
+                {"category": "custom", "match_type": match_type, "match_value": match_value, "join": None},
+            ],
             "dir_template": dir_template,
             "filename_template": filename,
         },
@@ -415,7 +416,10 @@ def test_unlink_off_keeps_link(client, radarr_media):
     # turn off unlink_on_mismatch on the rule, then drop the tag
     client.patch(
         f"/api/rules/{rid}",
-        json={"name": "kids", "match_type": "exact", "match_value": "kids",
+        json={"name": "kids",
+              "conditions": [
+                  {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+              ],
               "dir_template": f"{media.linked_dir}/kids", "enabled": True,
               "unlink_on_mismatch": False, "priority": 100},
     )

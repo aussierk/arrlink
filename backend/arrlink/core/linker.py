@@ -38,8 +38,8 @@ def reconcile(
 
     res = ReconcileResult()
 
-    planned: dict[tuple[int, int], PlannedLink] = {
-        (p.rule_id, p.file_id): p for p in plan if p.file_id is not None
+    planned: dict[tuple[int, int, str], PlannedLink] = {
+        (p.rule_id, p.file_id, p.match_key): p for p in plan if p.file_id is not None
     }
     seen_dsts: dict[str, tuple[int, int]] = {}
     for p in plan:
@@ -52,7 +52,7 @@ def reconcile(
 
     # --- pass 1: links we already have -----------------------------------
     for row in rows:
-        key = (row["rule_id"], row["file_id"])
+        key = (row["rule_id"], row["file_id"], row["match_key"] or "")
         dst = row["dst_path"]
         src = row["src_path"]
 
@@ -189,14 +189,14 @@ def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
         res.created += 1
         db.execute(
             "INSERT INTO links (rule_id, app_id, item_id, file_id, src_path, "
-            "dst_path, inode, status, created_at, missing_strikes) "
-            "VALUES (?,?,?,?,?,?,?, 'active', ?, 0) "
-            "ON CONFLICT (rule_id, item_id, file_id) DO UPDATE SET "
+            "dst_path, inode, status, created_at, missing_strikes, match_key) "
+            "VALUES (?,?,?,?,?,?,?, 'active', ?, 0, ?) "
+            "ON CONFLICT (rule_id, item_id, file_id, match_key) DO UPDATE SET "
             "dst_path=excluded.dst_path, src_path=excluded.src_path, "
             "inode=excluded.inode, status='active', created_at=excluded.created_at, "
             "missing_strikes=0",
             (p.rule_id, app_id, p.item_id, p.file_id, p.src_path, p.dst_path,
-             inode_of(p.dst_path), now),
+             inode_of(p.dst_path), now, p.match_key),
         )
         db.commit()
     else:

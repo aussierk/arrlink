@@ -100,7 +100,7 @@ class Poller:
 
         self._store_tags(app_id, tags)
         self._store_items(app_id, items)
-        self._reconcile_app(app_id, app["name"], items)
+        self._reconcile_app(app_id, app["name"], app["type"], items)
         self.db.execute(
             "UPDATE apps SET last_error=NULL, last_poll_at=?, item_count=? WHERE id=?",
             (time.time(), len(items), app_id),
@@ -236,12 +236,12 @@ class Poller:
 
     # ------------------------------------------------------------- reconcile
 
-    def _reconcile_app(self, app_id: int, app_name: str, items) -> None:
+    def _reconcile_app(self, app_id: int, app_name: str, app_type: str, items) -> None:
         settings = self.settings
         roots = self.db.get_setting("allowed_roots") or list(DEFAULT_ROOTS)
         rules = self.db.query("SELECT * FROM rules WHERE enabled=1")
         # attach stored file ids (already backfilled by _store_items)
-        plan, errors = plan_links(rules, items, app_name, app_id, roots)
+        plan, errors = plan_links(rules, items, app_name, app_id, roots, app_type=app_type)
 
         live_srcs = {f.abs_path for item in items for f in item.files}
         for e in errors:

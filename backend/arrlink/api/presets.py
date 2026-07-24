@@ -2,6 +2,8 @@
 rule, jail-validated)."""
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -69,11 +71,21 @@ def apply_preset(
 
     match_type, match_value = preset.matchers[body.app_type]
     name = body.name or f"preset:{preset.key}"
+    conditions_json = json.dumps(
+        [
+            {
+                "category": preset.category,
+                "match_type": match_type,
+                "match_value": match_value,
+                "join": None,
+            }
+        ]
+    )
     cur = db.execute(
-        "INSERT INTO rules (name, app_scope, match_type, match_value, dir_template, "
-        "filename_template, enabled, unlink_on_mismatch, priority) "
-        "VALUES (?,?,?,?,?, NULL, 1, 1, 100)",
-        (name, body.app_scope, match_type, match_value, rendered["dir_template"]),
+        "INSERT INTO rules (name, app_scope, match_type, match_value, conditions_json, "
+        "dir_template, filename_template, enabled, unlink_on_mismatch, priority) "
+        "VALUES (?,?,?,?,?,?, NULL, 1, 1, 100)",
+        (name, body.app_scope, match_type, match_value, conditions_json, rendered["dir_template"]),
     )
     db.commit()
     db.log_event(
@@ -93,4 +105,7 @@ def _rule_out(row) -> dict:
     d = dict(row)
     d["enabled"] = bool(d["enabled"])
     d["unlink_on_mismatch"] = bool(d["unlink_on_mismatch"])
+    d["conditions"] = json.loads(d.pop("conditions_json"))
+    d.pop("match_type", None)
+    d.pop("match_value", None)
     return d

@@ -312,9 +312,9 @@ def test_upgrade_v3_to_v5_in_place(tmp_path):
         ],
     )
 
-    # Opening with the current State must apply migrations 4 and 5 and keep data.
+    # Opening with the current State must apply migrations 4, 5, 6, and 7, and keep data.
     s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 5
+    assert s.query_one("SELECT version FROM schema_version")["version"] == 7
 
     # the new table exists and is usable
     assert s.query_one("SELECT name FROM sqlite_master WHERE name='tag_repository'")
@@ -336,9 +336,9 @@ def test_upgrade_v3_to_v5_in_place(tmp_path):
     assert s.query_one("SELECT filename_template FROM rules WHERE id=2")[
         "filename_template"] == "/media/f/{$stem}"
 
-    # reopening is a no-op at version 5
+    # reopening is a no-op at version 7
     s2 = State(db_path)
-    assert s2.query_one("SELECT version FROM schema_version")["version"] == 5
+    assert s2.query_one("SELECT version FROM schema_version")["version"] == 7
     assert s2.query_one("SELECT name FROM apps WHERE id=1")["name"] == "Legacy Radarr"
 
 
@@ -357,7 +357,7 @@ def test_upgrade_rewrites_legacy_linked_rules_only(tmp_path):
         ],
     )
     s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 5
+    assert s.query_one("SELECT version FROM schema_version")["version"] == 7
     by_id = {r["id"]: r["dir_template"] for r in s.query("SELECT id, dir_template FROM rules")}
     assert by_id[1] == "/media/kids"          # rewritten
     assert by_id[2] == "/media/movies/{$tag}"  # untouched
@@ -379,7 +379,7 @@ def test_upgrade_skips_rewrite_when_allowed_roots_customized(tmp_path):
         allowed_roots=["/videos"],
     )
     s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 5
+    assert s.query_one("SELECT version FROM schema_version")["version"] == 7
     by_id = {r["id"]: r["dir_template"] for r in s.query("SELECT id, dir_template FROM rules")}
     assert by_id[1] == "/linked/kids"   # left alone: user manages their roots
     assert by_id[2] == "/videos/tv"
@@ -654,9 +654,11 @@ def test_update_app_type_swap_blocked_when_links_exist(client, files_app):
     linked_dir = str(tmp_path_of(client))
     client.app.state.db.set_setting("allowed_roots", [linked_dir])
     app_id = _add_app(client, files_app["origin"])
-    client.post("/api/rules", json={"name": "4k", "match_type": "exact",
-                                    "match_value": "4k",
-                                    "dir_template": f"{linked_dir}/4k"})
+    client.post("/api/rules", json={
+        "name": "4k",
+        "conditions": [{"category": "quality", "match_type": "exact", "match_value": "4k", "join": None}],
+        "dir_template": f"{linked_dir}/4k",
+    })
     r = client.post(f"/api/apps/{app_id}/rescan")
     assert r.status_code == 200, r.text
     # the rescan created a real hardlink

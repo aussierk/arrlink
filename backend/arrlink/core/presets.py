@@ -17,6 +17,9 @@ class Preset:
     key: str
     name: str
     description: str
+    # which condition category this preset fills (see core/matching.py's
+    # category-keyed captures — each preset maps onto exactly one category)
+    category: str
     # app_type -> (match_type, match_value)
     matchers: dict
     # appended to the base folder; may contain {$...} placeholders
@@ -26,11 +29,12 @@ class Preset:
 PRESETS: list[Preset] = [
     Preset(
         key="user",
-        name="User tags (## - $user)",
-        description="One subfolder per user, from '## - alice' style tags.",
+        name="Users",
+        description="One subfolder per user, from '2 - alice' style tags.",
+        category="user",
         matchers={
-            "radarr": ("regex", r"^##\s*-\s*(?P<user>.+)$"),
-            "sonarr": ("regex", r"^##\s*-\s*(?P<user>.+)$"),
+            "radarr": ("regex", r"^\d+\s*-\s*(?P<user>.+)$"),
+            "sonarr": ("regex", r"^\d+\s*-\s*(?P<user>.+)$"),
         },
         subpath="/{$user}",
     ),
@@ -38,16 +42,18 @@ PRESETS: list[Preset] = [
         key="certification",
         name="Certification",
         description="One subfolder per rating, directly under the base folder.",
+        category="certification",
         matchers={
             "radarr": ("regex", r"^(G|PG|PG-13|R|NC-17)$"),
             "sonarr": ("regex", r"^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$"),
         },
-        subpath="/{$tag}",
+        subpath="/{$certification}",
     ),
     Preset(
         key="kids",
         name="Kids / family",
         description="Everything kids-related into a single kids folder.",
+        category="custom",
         matchers={
             "radarr": ("list", "kids,children,family,G,PG"),
             "sonarr": ("list", "kids,family,TV-Y,TV-Y7,TV-G,TV-PG"),
@@ -58,6 +64,7 @@ PRESETS: list[Preset] = [
         key="4k",
         name="4K / HDR",
         description="High-res / HDR content into a 4k folder.",
+        category="quality",
         matchers={
             "radarr": ("list", "4k,uhd,2160p,hdr,dolby"),
             "sonarr": ("list", "4k,uhd,2160p,hdr,dolby"),
@@ -68,6 +75,7 @@ PRESETS: list[Preset] = [
         key="1080p",
         name="1080p / FHD",
         description="Full-HD content into a 1080p folder.",
+        category="quality",
         matchers={
             "radarr": ("list", "1080p,fhd,1080,high"),
             "sonarr": ("list", "1080p,fhd,1080,high"),
@@ -78,6 +86,7 @@ PRESETS: list[Preset] = [
         key="genre",
         name="Genre",
         description="One subfolder per genre. Pick the genres you want.",
+        category="genre",
         matchers={
             "radarr": (
                 "list",
@@ -90,12 +99,13 @@ PRESETS: list[Preset] = [
                 "documentary,family,horror,mystery,romance,sci-fi,thriller,western",
             ),
         },
-        subpath="/{$tag}",
+        subpath="/{$genre}",
     ),
     Preset(
         key="language",
         name="Language",
         description="One subfolder per language. Pick the languages you want.",
+        category="language",
         matchers={
             "radarr": (
                 "list",
@@ -108,7 +118,7 @@ PRESETS: list[Preset] = [
                 "chinese,hindi,portuguese,dutch,russian",
             ),
         },
-        subpath="/{$tag}",
+        subpath="/{$language}",
     ),
 ]
 
@@ -139,6 +149,7 @@ def list_presets_for_type(app_type: str, base: str | None = None) -> list[dict]:
                 "key": p.key,
                 "name": p.name,
                 "description": p.description,
+                "category": p.category,
                 "match_type": match_type,
                 "match_value": match_value,
                 "subpath": p.subpath,
@@ -159,6 +170,7 @@ def render_preset(key: str, app_type: str, base: str | None = None) -> dict | No
     return {
         "key": p.key,
         "name": p.name,
+        "category": p.category,
         "match_type": match_type,
         "match_value": match_value,
         "subpath": p.subpath,

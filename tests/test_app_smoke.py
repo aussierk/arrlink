@@ -21,7 +21,7 @@ def test_health(client: TestClient):
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert body["schema_version"] == 5
+    assert body["schema_version"] == 7
 
 
 def test_auth_me_stub(client: TestClient):
@@ -112,8 +112,10 @@ def test_rules_crud_and_validation(client: TestClient):
         json={
             "name": "user tags",
             "app_scope": app_id,
-            "match_type": "regex",
-            "match_value": r"^##\s*-\s*(?P<user>.+)$",
+            "conditions": [
+                {"category": "user", "match_type": "regex",
+                 "match_value": r"^##\s*-\s*(?P<user>.+)$", "join": None},
+            ],
             "dir_template": "/linked/movies/users/{$user}",
             "filename_template": "{$stem}",
         },
@@ -128,8 +130,9 @@ def test_rules_crud_and_validation(client: TestClient):
         "/api/rules",
         json={
             "name": "bad",
-            "match_type": "regex",
-            "match_value": "([unclosed",
+            "conditions": [
+                {"category": "custom", "match_type": "regex", "match_value": "([unclosed", "join": None},
+            ],
             "dir_template": "/linked/x",
         },
     )
@@ -140,8 +143,9 @@ def test_rules_crud_and_validation(client: TestClient):
         "/api/rules",
         json={
             "name": "bad",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
             "dir_template": "linked/movies/kids",
         },
     )
@@ -153,8 +157,9 @@ def test_rules_crud_and_validation(client: TestClient):
         json={
             "name": "bad",
             "app_scope": 9999,
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
             "dir_template": "/linked/x",
         },
     )
@@ -173,8 +178,9 @@ def test_preview_requires_app(client: TestClient):
         "/api/rules/preview",
         json={
             "name": "p",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
             "dir_template": "/linked/kids",
         },
     )
@@ -238,8 +244,8 @@ def test_settings_roundtrip(client: TestClient):
 def test_migration_idempotent(tmp_path):
     s1 = State(tmp_path / "x.db")
     s2 = State(tmp_path / "x.db")  # second open must not fail
-    assert s1.query_one("SELECT version FROM schema_version")["version"] == 5
-    assert s2.query_one("SELECT version FROM schema_version")["version"] == 5
+    assert s1.query_one("SELECT version FROM schema_version")["version"] == 7
+    assert s2.query_one("SELECT version FROM schema_version")["version"] == 7
     # the tag repository table exists (migration 4)
     assert s1.query_one("SELECT name FROM sqlite_master WHERE name='tag_repository'")
     # migration 5 runs on every fresh DB and is a no-op without rules

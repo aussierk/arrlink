@@ -3,6 +3,7 @@ testing/offline use)."""
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from ..arr.base import AdapterError
 from ..arr.factory import get_adapter
+from ..core.planner import _rule_applies_to_app
 from ..deps import get_db
 from ..state import State, now
 from .auth import CurrentUser
@@ -22,10 +24,8 @@ class TagImportIn(BaseModel):
     counts: dict[str, int] = {}
 
 
-def _rule_matches_label(rule, label: str) -> bool:
-    """Does this rule's matcher match this exact tag label?"""
-    mt = rule["match_type"]
-    mv = rule["match_value"]
+def _condition_matches_label(mt: str, mv: str, label: str) -> bool:
+    """Does this single condition's matcher match this exact tag label?"""
     if mt == "exact":
         return mv.strip() == label
     if mt == "list":
@@ -38,20 +38,58 @@ def _rule_matches_label(rule, label: str) -> bool:
     return False
 
 
+def _rule_matches_label(rule, label: str) -> bool:
+    """Does any of this rule's conditions match this exact tag label?
+
+    Best-effort UI hint (checks each matcher in isolation, not full AND/OR
+    chain evaluation against a real item's tags) — matches this helper's
+    existing (already approximate) semantics, generalized over conditions.
+    """
+    raw = rule["conditions_json"]
+    conditions = json.loads(raw) if raw else []
+    return any(
+        _condition_matches_label(c["match_type"], c["match_value"], label)
+        for c in conditions
+    )
+
+
 @router.get("/apps/{app_id}/tags")
 def list_tags(
     app_id: int, _user: CurrentUser, db: State = Depends(get_db)
 ) -> list[dict]:
-    if not db.query_one("SELECT id FROM apps WHERE id=?", (app_id,)):
+    app = db.query_one("SELECT type FROM apps WHERE id=?", (app_id,))
+    if not app:
         raise HTTPException(404, "app not found")
     tags = db.query("SELECT * FROM tags WHERE app_id=? ORDER BY label", (app_id,))
-    rules = db.query(
-        "SELECT * FROM rules WHERE enabled=1 AND (app_scope IS NULL OR app_scope=?)",
-        (app_id,),
+    # "In use" = how many of this app's already-imported items actually carry
+    # the tag, computed from ArrLink's own stored data (app_items.tags_json).
+    # The *arr tag list endpoint itself never reports a usage count (its
+    # response is just {id, label}), so the tags.count column populated at
+    # import time is always 0 — this recomputes the real number instead.
+    # If the app has no imported items yet (tags-only import, or the
+    # manual/offline import path used in tests), there's nothing to count
+    # from — fall back to the stored column rather than reporting a false 0.
+    has_items = db.query_one(
+        "SELECT 1 FROM app_items WHERE app_id=? LIMIT 1", (app_id,)
     )
+    usage = (
+        {
+            r["label"]: r["cnt"]
+            for r in db.query(
+                "SELECT je.value AS label, COUNT(*) AS cnt FROM app_items ai, "
+                "json_each(ai.tags_json) je WHERE ai.app_id=? GROUP BY je.value",
+                (app_id,),
+            )
+        }
+        if has_items
+        else None
+    )
+    all_rules = [dict(r) for r in db.query("SELECT * FROM rules WHERE enabled=1")]
+    rules = [r for r in all_rules if _rule_applies_to_app(r, app_id, app["type"])]
     out = []
     for t in tags:
         d = dict(t)
+        d["count"] = usage.get(t["label"], 0) if usage is not None else t["count"]
         d["rule_count"] = sum(1 for r in rules if _rule_matches_label(r, t["label"]))
         out.append(d)
     return out

@@ -201,13 +201,14 @@ def _add_app(client: TestClient, origin: str) -> int:
     return r.json()["id"]
 
 
-def _make_rule(client, name, match_value, dir_template, match_type="exact"):
+def _make_rule(client, name, match_value, dir_template, match_type="exact", category="custom"):
     r = client.post(
         "/api/rules",
         json={
             "name": name,
-            "match_type": match_type,
-            "match_value": match_value,
+            "conditions": [
+                {"category": category, "match_type": match_type, "match_value": match_value, "join": None},
+            ],
             "dir_template": dir_template,
         },
     )
@@ -324,7 +325,7 @@ def test_import_creates_hardlinks(client, sonarr_media):
     app_id = _add_app(client, origin)
     _make_rule(client, "cert", "tv-14", f"{tv.linked_dir}/tv-14")
     _make_rule(client, "user", r"^##\s*-\s*(?P<user>.+)$",
-               f"{tv.linked_dir}/users/" + "{$user}", match_type="regex")
+               f"{tv.linked_dir}/users/" + "{$user}", match_type="regex", category="user")
     _make_rule(client, "kids", "kids", f"{tv.linked_dir}/kids")
 
     _poll(client, app_id)

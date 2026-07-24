@@ -298,8 +298,7 @@ def test_rule_count_reflects_matching_rules(client, radarr):
         "/api/rules",
         json={
             "name": "kids",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [{"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}],
             "dir_template": "/linked/movies/kids",
         },
     )
@@ -309,8 +308,10 @@ def test_rule_count_reflects_matching_rules(client, radarr):
         json={
             "name": "user tags",
             "app_scope": app["id"],
-            "match_type": "regex",
-            "match_value": r"^##\s*-\s*(?P<user>.+)$",
+            "conditions": [
+                {"category": "user", "match_type": "regex",
+                 "match_value": r"^##\s*-\s*(?P<user>.+)$", "join": None},
+            ],
             "dir_template": "/linked/movies/users/{$user}",
         },
     )
@@ -326,8 +327,7 @@ def test_rule_count_reflects_matching_rules(client, radarr):
         f"/api/rules/{rule_id}",
         json={
             "name": "kids",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [{"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}],
             "dir_template": "/linked/movies/kids",
             "enabled": False,
         },

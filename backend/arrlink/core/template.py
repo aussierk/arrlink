@@ -4,7 +4,10 @@ from __future__ import annotations
 import dataclasses
 import os
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .matching import ConditionMatch
 
 # Default allowed root for destination paths. The container is expected to
 # see the *arr apps' media at /media (mounted read-only, mirroring the apps)
@@ -24,10 +27,18 @@ class TemplateError(Exception):
 
 
 @dataclasses.dataclass
+class CategoryCapture:
+    """The resolved value for one category's matched condition."""
+
+    tag: str  # the tag that satisfied the condition
+    value: str  # match.group(1) if the regex captured one, else `tag`
+    groups: dict  # legacy only: full regex_match.groupdict()
+    numbered: tuple  # legacy only: full regex_match.groups()
+
+
+@dataclasses.dataclass
 class TemplateContext:
-    tag: str
-    groups: dict
-    numbered: tuple
+    categories: dict  # category name -> CategoryCapture, for every matched condition
     app_name: str
     item_title: str
     item_year: int | None
@@ -44,14 +55,24 @@ def _clean(value: str) -> str:
 
 
 def _resolve_token(name: str, ctx: TemplateContext) -> str:
+    legacy = ctx.categories.get("legacy")
     if name in ("1", "2", "3", "4", "5", "6", "7", "8", "9"):
+        # Positional groups only ever came from one flat pre-migration regex —
+        # ambiguous (and unavailable) for multi-condition rules.
         i = int(name) - 1
-        if i >= len(ctx.numbered):
+        if legacy is None or i >= len(legacy.numbered):
             raise TemplateError(f"capture group ${name} not present in rule match")
-        val = ctx.numbered[i]
+        val = legacy.numbered[i]
         return _clean(val) if val else ""
     if name == "tag":
-        return _clean(ctx.tag)
+        # Legacy alias for "the matched tag" — only meaningful when there's
+        # exactly one flat (pre-migration) condition; ambiguous otherwise.
+        if legacy is None:
+            raise TemplateError(
+                "{$tag} is only valid for legacy single-condition rules — "
+                "use the specific {$<category>} placeholder instead"
+            )
+        return _clean(legacy.tag)
     if name == "app":
         return _clean(ctx.app_name)
     if name == "title":
@@ -65,9 +86,13 @@ def _resolve_token(name: str, ctx: TemplateContext) -> str:
     if name == "ext":
         # keep the extension verbatim (it carries the real file type)
         return ctx.src_ext or ""
-    # named capture group
-    if name in ctx.groups:
-        val = ctx.groups[name]
+    # category-keyed capture (e.g. {$genre}, {$user}, ...)
+    if name in ctx.categories:
+        return _clean(ctx.categories[name].value)
+    # legacy named capture group (e.g. a hand-written (?P<name>...) on a
+    # pre-migration rule) — kept for backward compatibility.
+    if legacy is not None and name in legacy.groups:
+        val = legacy.groups[name]
         return _clean(val) if val else ""
     raise TemplateError(f"unknown placeholder {{$name}}")
 
@@ -155,8 +180,7 @@ def audit_rule_roots(db: Any, roots: list[str] | None = None) -> list[str]:
 
 
 def build_context(
-    matched_tag: str,
-    regex_match: "re.Match | None",
+    matched_conditions: "list[ConditionMatch]",
     app_name: str,
     item_title: str,
     item_year: int | None,
@@ -164,10 +188,16 @@ def build_context(
 ) -> TemplateContext:
     basename = os.path.basename(src_path)
     stem, ext = os.path.splitext(basename)
+    categories: dict = {}
+    for cm in matched_conditions:
+        groups = cm.regex_match.groupdict() if cm.regex_match else {}
+        numbered = cm.regex_match.groups() if cm.regex_match else ()
+        value = numbered[0] if numbered else cm.tag  # match.group(1), else the tag itself
+        categories[cm.category] = CategoryCapture(
+            tag=cm.tag, value=value, groups=groups, numbered=numbered
+        )
     return TemplateContext(
-        tag=matched_tag,
-        groups=(regex_match.groupdict() if regex_match else {}),
-        numbered=(regex_match.groups() if regex_match else ()),
+        categories=categories,
         app_name=app_name,
         item_title=item_title,
         item_year=item_year,
@@ -180,8 +210,7 @@ def build_context(
 def resolve_destination(
     dir_template: str,
     filename_template: str | None,
-    matched_tag: str,
-    regex_match: "re.Match | None",
+    matched_conditions: "list[ConditionMatch]",
     app_name: str,
     item_title: str,
     item_year: int | None,
@@ -192,9 +221,7 @@ def resolve_destination(
 
     Raises :class:`TemplateError` on any invalid template or jail violation.
     """
-    ctx = build_context(
-        matched_tag, regex_match, app_name, item_title, item_year, src_path
-    )
+    ctx = build_context(matched_conditions, app_name, item_title, item_year, src_path)
     dir_path = sanitize_dir_path(resolve_template(dir_template, ctx))
     check_jail(dir_path, roots)
 
