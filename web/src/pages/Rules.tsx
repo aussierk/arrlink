@@ -1,57 +1,82 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import PreviewPanel from '../components/PreviewPanel'
 import RuleModal from '../components/RuleModal'
 import {
   api,
   type AppItem,
+  type ConditionItem,
   type RuleItem,
 } from '../lib/api'
 import { REGEX_PICKS } from '../lib/tagOptions'
+import i18n from '../i18n'
 
-/** Render a rule's matcher readably: exact as-is, list as count+chips, regex as a
- * friendly label when it's a known pattern (else a short mono snippet). */
-function matchCell(r: RuleItem) {
-  if (r.match_type === 'list') {
-    const tags = r.match_value.split(',').map((s) => s.trim()).filter(Boolean)
-    const shown = tags.slice(0, 4)
+const CATEGORY_LABEL_KEY: Record<string, string> = {
+  user: 'rules.categoryLabel.user',
+  genre: 'rules.categoryLabel.genre',
+  language: 'rules.categoryLabel.language',
+  quality: 'rules.categoryLabel.quality',
+  certification: 'rules.categoryLabel.certification',
+  collection: 'rules.categoryLabel.collection',
+  custom: 'rules.categoryLabel.custom',
+  legacy: 'rules.categoryLabel.legacy',
+}
+
+/** Render one condition readably: exact as-is, list as count+chips, regex as a
+ * friendly label when it's a known pattern (else a short mono snippet).
+ * Not a component (used inline in a table cell builder), so it reads
+ * translations off the i18next singleton instead of the useTranslation hook. */
+function conditionValue(c: ConditionItem) {
+  const t = i18n.t
+  if (c.match_type === 'list') {
+    const tags = c.match_value.split(',').map((s) => s.trim()).filter(Boolean)
+    const shown = tags.slice(0, 3)
     const more = tags.length - shown.length
     return (
       <span className="flex flex-wrap items-center gap-1">
-        <span className="text-zinc-500">list ·</span>
-        {shown.map((t) => (
+        {shown.map((tag) => (
           <span
-            key={t}
+            key={tag}
             className="rounded-full border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[11px] text-zinc-300"
           >
-            {t}
+            {tag}
           </span>
         ))}
         {more > 0 && (
-          <span className="text-[11px] text-zinc-500">+{more} more</span>
+          <span className="text-[11px] text-zinc-500">{t('rules.matchMore', { count: more })}</span>
         )}
       </span>
     )
   }
-  if (r.match_type === 'regex') {
-    const pick = REGEX_PICKS.find((p) => p.pattern === r.match_value)
-    if (pick) {
-      return (
-        <span>
-          <span className="text-zinc-500">regex ·</span>{' '}
-          <span className="text-zinc-300">{pick.label}</span>
-        </span>
-      )
-    }
+  if (c.match_type === 'regex') {
+    const pick = REGEX_PICKS.find((p) => p.pattern === c.match_value)
     return (
-      <span className="break-all font-mono text-[11px]">
-        <span className="text-zinc-500">regex ·</span> {r.match_value}
+      <span className={pick ? '' : 'break-all font-mono text-[11px]'}>
+        {pick ? pick.label : c.match_value}
       </span>
     )
   }
+  return <span>{c.match_value}</span>
+}
+
+/** Render a rule's whole AND/OR condition chain compactly for the table. */
+function matchCell(r: RuleItem) {
+  const t = i18n.t
   return (
-    <span>
-      <span className="text-zinc-500">exact ·</span>{' '}
-      <span className="text-zinc-300">{r.match_value}</span>
+    <span className="flex flex-wrap items-center gap-1 text-xs">
+      {r.conditions.map((c, i) => (
+        <span key={i} className="flex items-center gap-1">
+          {i > 0 && (
+            <span className="rounded bg-zinc-800 px-1 text-[10px] font-semibold text-indigo-300">
+              {c.join === 'AND' ? t('conditions.joinAnd') : t('conditions.joinOr')}
+            </span>
+          )}
+          <span className="text-zinc-500">
+            {CATEGORY_LABEL_KEY[c.category] ? t(CATEGORY_LABEL_KEY[c.category]) : c.category} ·
+          </span>
+          {conditionValue(c)}
+        </span>
+      ))}
     </span>
   )
 }
@@ -62,6 +87,7 @@ function matchCell(r: RuleItem) {
  * be edited, previewed, or deleted.
  */
 export default function Rules() {
+  const { t } = useTranslation()
   const [rules, setRules] = useState<RuleItem[]>([])
   const [apps, setApps] = useState<AppItem[]>([])
   const [err, setErr] = useState<string | null>(null)
@@ -70,9 +96,11 @@ export default function Rules() {
   const [editing, setEditing] = useState<RuleItem | null>(null)
   const [previewFor, setPreviewFor] = useState<RuleItem | null>(null)
 
-  const previewAppId = (r: { app_scope: number | null }) =>
+  const previewAppId = (r: { app_scope: number | null; app_type_scope: string | null }) =>
     r.app_scope ??
-    (apps.find((a) => a.id === r.app_scope)?.id ?? apps[0]?.id ?? null)
+    apps.find((a) => a.type === r.app_type_scope)?.id ??
+    apps[0]?.id ??
+    null
 
   const load = useCallback(async () => {
     try {
@@ -104,12 +132,12 @@ export default function Rules() {
       .catch(() => [] as { id: number }[])
     const msg =
       links.length > 0
-        ? `Delete rule "${r.name}" and its ${links.length} active link(s)?`
-        : `Delete rule "${r.name}"?`
+        ? t('rules.deleteConfirmWithLinks', { name: r.name, count: links.length })
+        : t('rules.deleteConfirm', { name: r.name })
     if (!confirm(msg)) return
     try {
       await api.deleteRule(r.id)
-      setOk(`Deleted rule "${r.name}".`)
+      setOk(t('rules.deletedMsg', { name: r.name }))
       await load()
     } catch (e) {
       setErr(String(e))
@@ -120,18 +148,14 @@ export default function Rules() {
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold">Rules</h2>
-          <p className="text-sm text-zinc-500">
-            Tag matchers → destination templates. Build from a{' '}
-            <span className="text-indigo-400">preset</span> or from scratch; the
-            live preview shows exactly what would be hardlinked.
-          </p>
+          <h2 className="text-xl font-semibold">{t('rules.title')}</h2>
+          <p className="text-sm text-zinc-500">{t('rules.subtitle')}</p>
         </div>
         <button
           onClick={openNew}
-          className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+          className="shrink-0 whitespace-nowrap rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
         >
-          + Add rule
+          {t('rules.addRule')}
         </button>
       </div>
 
@@ -150,13 +174,13 @@ export default function Rules() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">App</th>
-              <th className="px-3 py-2">Match</th>
-              <th className="px-3 py-2">Dir template</th>
-              <th className="px-3 py-2">Filename</th>
-              <th className="px-3 py-2">Flags</th>
-              <th className="px-3 py-2">Preview</th>
+              <th className="px-3 py-2">{t('rules.colName')}</th>
+              <th className="px-3 py-2">{t('rules.colApp')}</th>
+              <th className="px-3 py-2">{t('rules.colMatch')}</th>
+              <th className="px-3 py-2">{t('rules.colDirTemplate')}</th>
+              <th className="px-3 py-2">{t('rules.colFilename')}</th>
+              <th className="px-3 py-2">{t('rules.colFlags')}</th>
+              <th className="px-3 py-2">{t('rules.colPreview')}</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
@@ -164,8 +188,7 @@ export default function Rules() {
             {rules.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
-                  No rules yet — click <span className="text-indigo-400">Add rule</span>{' '}
-                  and start from a preset.
+                  {t('rules.empty')}
                 </td>
               </tr>
             )}
@@ -174,11 +197,16 @@ export default function Rules() {
                 <td className="px-3 py-2 font-medium">
                   {r.name}
                   {!r.enabled && (
-                    <span className="ml-2 text-xs text-zinc-500">(off)</span>
+                    <span className="ml-2 text-xs text-zinc-500">{t('rules.off')}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-zinc-400">
-                  {r.app_name ?? 'any'}
+                  {r.app_name ??
+                    (r.app_type_scope === 'radarr'
+                      ? t('ruleModal.allRadarr')
+                      : r.app_type_scope === 'sonarr'
+                        ? t('ruleModal.allSonarr')
+                        : t('rules.any'))}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {matchCell(r)}
@@ -187,11 +215,11 @@ export default function Rules() {
                   {r.dir_template}
                 </td>
                 <td className="px-3 py-2 font-mono text-xs text-zinc-500">
-                  {r.filename_template ?? '(source)'}
+                  {r.filename_template ?? t('rules.sourceFilename')}
                 </td>
                 <td className="px-3 py-2 text-xs text-zinc-400">
-                  p{r.priority}
-                  {r.unlink_on_mismatch ? ' · unlink' : ''}
+                  {t('rules.priorityLabel', { priority: r.priority })}
+                  {r.unlink_on_mismatch ? t('rules.unlinkSuffix') : ''}
                 </td>
                 <td className="px-3 py-2">
                   <button
@@ -200,7 +228,7 @@ export default function Rules() {
                     }
                     className="rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
                   >
-                    {previewFor?.id === r.id ? 'hide' : 'preview'}
+                    {previewFor?.id === r.id ? t('rules.hide') : t('rules.preview')}
                   </button>
                 </td>
                 <td className="px-3 py-2 text-right">
@@ -209,13 +237,13 @@ export default function Rules() {
                       onClick={() => openEdit(r)}
                       className="rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
                     >
-                      edit
+                      {t('rules.edit')}
                     </button>
                     <button
                       onClick={() => void remove(r)}
                       className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
                     >
-                      delete
+                      {t('rules.delete')}
                     </button>
                   </div>
                 </td>
@@ -225,14 +253,14 @@ export default function Rules() {
               <tr className="bg-zinc-900/40">
                 <td colSpan={8} className="px-3 py-3">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    Preview — {previewFor.name}
+                    {t('rules.previewHeading', { name: previewFor.name })}
                   </h4>
                   <PreviewPanel
                     rule={{
                       name: previewFor.name,
                       app_scope: previewFor.app_scope,
-                      match_type: previewFor.match_type,
-                      match_value: previewFor.match_value,
+                      app_type_scope: previewFor.app_type_scope,
+                      conditions: previewFor.conditions,
                       dir_template: previewFor.dir_template,
                       filename_template: previewFor.filename_template,
                       enabled: previewFor.enabled,
@@ -249,8 +277,7 @@ export default function Rules() {
       </div>
 
       <p className="text-xs text-zinc-600">
-        Presets are a quick-start inside the rule form. Manage the shared tag
-        repository on the Tags page.
+        {t('rules.footer')}
       </p>
 
       {modalOpen && (

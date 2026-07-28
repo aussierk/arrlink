@@ -1,26 +1,64 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
+import { Sparkles, Trash2 } from 'lucide-react'
+import i18n from '../i18n'
 import Modal from './Modal'
 import PreviewPanel from './PreviewPanel'
+import Toggle from './ui/Toggle'
+import TagSelect from './ui/TagSelect'
+import Field from './ui/Field'
 import {
   api,
   type AppItem,
+  type ConditionCategory,
+  type ConditionItem,
   type PresetItem,
   type RuleInput,
   type RuleItem,
   type TagItem,
 } from '../lib/api'
 import {
-  LIST_GROUPS,
+  CUSTOM_TAG_SUGGESTIONS,
+  LANGUAGE_TAGS,
+  QUALITY_PROFILE_TAGS,
   REGEX_PICKS,
+  COLLECTION_TAGS,
+  certificationTagsFor,
+  genreTagsFor,
   joinList,
   parseList,
+  type ServiceType,
 } from '../lib/tagOptions'
+import { inputCls } from '../lib/ui'
 
-const empty: RuleInput = {
+const CUSTOM = '__custom__'
+
+const CATEGORY_ORDER: ConditionCategory[] = [
+  'user', 'genre', 'language', 'quality', 'certification', 'collection', 'custom',
+]
+
+const CATEGORY_LABEL_KEY: Record<string, string> = {
+  user: 'ruleModal.categoryLabel.user',
+  genre: 'ruleModal.categoryLabel.genre',
+  language: 'ruleModal.categoryLabel.language',
+  quality: 'ruleModal.categoryLabel.quality',
+  certification: 'ruleModal.categoryLabel.certification',
+  collection: 'ruleModal.categoryLabel.collection',
+  custom: 'ruleModal.categoryLabel.custom',
+  legacy: 'ruleModal.categoryLabel.legacy',
+}
+
+function categoryLabel(cat: string): string {
+  const key = CATEGORY_LABEL_KEY[cat]
+  return key ? i18n.t(key) : cat
+}
+
+type FormState = Omit<RuleInput, 'conditions'>
+
+const emptyForm: FormState = {
   name: '',
   app_scope: null,
-  match_type: 'exact',
-  match_value: '',
+  app_type_scope: null,
   dir_template: '/media/movies',
   filename_template: null,
   enabled: true,
@@ -28,14 +66,28 @@ const empty: RuleInput = {
   priority: 100,
 }
 
-const CUSTOM = '__custom__'
+// The Service <select> encodes three kinds of scope in one string value:
+// '' (any service), 'type:radarr' / 'type:sonarr' (all instances of that
+// type), or a specific app's id — decoded back into the two real fields.
+function encodeServiceValue(appScope: number | null, appTypeScope: string | null): string {
+  if (appTypeScope) return `type:${appTypeScope}`
+  return appScope === null ? '' : String(appScope)
+}
+
+function selectedFor(c: ConditionItem): string[] {
+  if (c.match_type === 'list') return parseList(c.match_value)
+  return c.match_value ? [c.match_value] : []
+}
 
 /**
- * Create or edit a rule. The match is entered ergonomically instead of as raw
- * text: a type (exact / list / regex) plus, for each type, dropdowns and a
- * multi-select of common tag formats. The underlying exact / list / regex
- * match_value is unchanged — the UI just parses/renders it against the common
- * formats. Includes a "start from preset" quick-start and a live preview.
+ * Create or edit a rule. Conditions are an ordered AND/OR chain: each
+ * condition is tied to exactly one category (Users, Genres, Languages,
+ * Quality Profile, Certification, Collections, Custom tags) with its own
+ * match type (exact/list/regex). Evaluated left-to-right with standard
+ * short-circuit semantics — only conditions that actually matched feed
+ * their category's placeholder (e.g. {$genre}) into the destination
+ * template. A specific Service must be picked first since Genre/
+ * Certification suggestions depend on its type (movie vs TV).
  */
 export default function RuleModal({
   initial,
@@ -46,150 +98,201 @@ export default function RuleModal({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const editing = initial !== null
-  const [form, setForm] = useState<RuleInput>(
+  const [form, setForm] = useState<FormState>(
     initial
       ? {
           name: initial.name,
           app_scope: initial.app_scope,
-          match_type: initial.match_type,
-          match_value: initial.match_value,
+          app_type_scope: initial.app_type_scope,
           dir_template: initial.dir_template,
           filename_template: initial.filename_template,
           enabled: initial.enabled,
           unlink_on_mismatch: initial.unlink_on_mismatch,
           priority: initial.priority,
         }
-      : empty,
+      : emptyForm,
   )
+  const [conditions, setConditions] = useState<ConditionItem[]>(
+    initial ? initial.conditions : [],
+  )
+
   const [apps, setApps] = useState<AppItem[]>([])
   const [tags, setTags] = useState<TagItem[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [customTag, setCustomTag] = useState('')
-
-  // preset quick-start
-  const [presetType, setPresetType] = useState<'radarr' | 'sonarr'>('radarr')
-  const [baseFolder, setBaseFolder] = useState('/media/movies')
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [presets, setPresets] = useState<PresetItem[]>([])
-  const [showPresets, setShowPresets] = useState(!editing)
 
   useEffect(() => {
     api.listApps().then(setApps).catch(() => {})
   }, [])
 
-  const previewAppId =
-    form.app_scope ?? (apps.find((a) => a.type === presetType)?.id ?? apps[0]?.id ?? null)
+  const selectedApp = apps.find((a) => a.id === form.app_scope)
+  // A specific instance pins the type directly; a type-scope ("All Radarr")
+  // pins it just as definitely, just without one specific app.
+  const serviceType: ServiceType =
+    (selectedApp?.type as ServiceType) ?? (form.app_type_scope as ServiceType) ?? 'radarr'
+  // One concrete app to fetch tag suggestions / run Live Preview against:
+  // the specific instance if chosen, else the first app matching the
+  // type-scope, else (unscoped) whatever's first.
+  const representativeAppId =
+    form.app_scope ?? apps.find((a) => a.type === form.app_type_scope)?.id ?? null
+  const previewAppId = representativeAppId ?? apps[0]?.id ?? null
 
-  const loadPresets = useCallback(() => {
+  useEffect(() => {
     api
-      .listPresets(presetType, baseFolder)
+      .listPresets(serviceType)
       .then((r) => setPresets(r.presets))
       .catch(() => setPresets([]))
-  }, [presetType, baseFolder])
+  }, [serviceType])
 
   useEffect(() => {
-    if (showPresets) void loadPresets()
-  }, [showPresets, loadPresets])
-
-  useEffect(() => {
-    if (form.app_scope === null) {
+    if (representativeAppId === null) {
       setTags([])
       return
     }
     api
-      .listTags(form.app_scope)
+      .listTags(representativeAppId)
       .then(setTags)
       .catch(() => setTags([]))
-  }, [form.app_scope])
+  }, [representativeAppId])
 
-  // ---- match helpers -------------------------------------------------------
-  const valueTags = useMemo(
-    () => (form.match_type === 'list' ? parseList(form.match_value) : []),
-    [form.match_type, form.match_value],
+  const knownTags = useMemo(
+    () =>
+      new Set([
+        ...genreTagsFor(serviceType),
+        ...certificationTagsFor(serviceType),
+        ...LANGUAGE_TAGS,
+        ...QUALITY_PROFILE_TAGS,
+      ]),
+    [serviceType],
   )
+  const customOptions = useMemo(() => {
+    const appTags = tags.map((t) => t.label).filter((l) => !knownTags.has(l))
+    const extra = CUSTOM_TAG_SUGGESTIONS.filter((t) => !knownTags.has(t))
+    return Array.from(new Set([...appTags, ...extra]))
+  }, [tags, knownTags])
 
-  // exact: dropdown of app tags + common single values; CUSTOM if not in list
-  const exactOptions = useMemo(() => {
-    const seen = new Set<string>()
-    const out: string[] = []
-    const push = (v: string) => {
-      if (v && !seen.has(v)) {
-        seen.add(v)
-        out.push(v)
-      }
+  // renderConditionValue only ever calls these for the modern (non-legacy)
+  // condition blocks — a legacy-category condition renders via its own
+  // dedicated block above and never reaches here — but ConditionItem's
+  // category is typed to include 'legacy' for round-tripping, so these
+  // accept the wider type to stay assignable from c.category.
+  function optionsFor(category: ConditionCategory | 'legacy'): string[] {
+    switch (category) {
+      case 'genre':
+        return genreTagsFor(serviceType)
+      case 'certification':
+        return certificationTagsFor(serviceType)
+      case 'language':
+        return LANGUAGE_TAGS
+      case 'quality':
+        return QUALITY_PROFILE_TAGS
+      case 'collection':
+        return COLLECTION_TAGS
+      case 'custom':
+        return customOptions
+      case 'user':
+      case 'legacy':
+        return []
     }
-    tags.forEach((t) => push(t.label))
-    LIST_GROUPS.forEach((g) => g.tags.forEach(push))
-    return out
-  }, [tags])
-  const exactIsCustom =
-    !!form.match_value && !exactOptions.includes(form.match_value)
-
-  // regex: dropdown of common patterns; CUSTOM if the value isn't a known pick
-  const regexPick = REGEX_PICKS.find((p) => p.pattern === form.match_value)
-  const regexIsCustom = !!form.match_value && !regexPick
-  const selectedPickHint = regexPick?.hint
-
-  function setMatchType(t: RuleInput['match_type']) {
-    setForm((f) => ({ ...f, match_type: t, match_value: '' }))
-    setErr(null)
-  }
-  function setExact(v: string) {
-    setForm((f) => ({ ...f, match_value: v }))
-    setErr(null)
-  }
-  function toggleListTag(tag: string) {
-    const cur = parseList(form.match_value)
-    const next = cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]
-    setForm((f) => ({ ...f, match_value: joinList(next) }))
-    setErr(null)
-  }
-  function addCustomTag() {
-    const v = customTag.trim()
-    if (!v) return
-    if (!valueTags.includes(v)) toggleListTag(v)
-    setCustomTag('')
-  }
-  function setRegex(v: string) {
-    setForm((f) => ({ ...f, match_value: v }))
-    setErr(null)
   }
 
-  function switchPresetType(t: 'radarr' | 'sonarr') {
-    setPresetType(t)
-    setBaseFolder(t === 'radarr' ? '/media/movies' : '/media/tv')
+  function creatableFor(category: ConditionCategory | 'legacy', matchType: ConditionItem['match_type']) {
+    if (matchType === 'regex') return true
+    return category === 'collection' || category === 'custom' || category === 'user'
+  }
+
+  function updateBlock(i: number, patch: Partial<ConditionItem>) {
+    setConditions((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)))
+  }
+
+  function toggleJoin(i: number) {
+    setConditions((cs) =>
+      cs.map((c, idx) => (idx === i ? { ...c, join: c.join === 'AND' ? 'OR' : 'AND' } : c)),
+    )
+  }
+
+  function applyBlockSelection(i: number, prevSelected: string[], next: string[]) {
+    const c = conditions[i]
+    if (c.match_type !== 'list') {
+      updateBlock(i, { match_value: next[0] ?? '' })
+      return
+    }
+    const removed = prevSelected.filter((t) => !next.includes(t))
+    const added = next.filter((t) => !prevSelected.includes(t))
+    const cur = parseList(c.match_value).filter((t) => !removed.includes(t))
+    added.forEach((t) => {
+      if (!cur.includes(t)) cur.push(t)
+    })
+    updateBlock(i, { match_value: joinList(cur) })
+  }
+
+  function addCondition(join: 'AND' | 'OR' | null) {
+    const used = new Set(conditions.map((c) => c.category))
+    const next = CATEGORY_ORDER.find((cat) => !used.has(cat))
+    if (!next) return
+    const block: ConditionItem = {
+      category: next,
+      match_type: next === 'user' ? 'regex' : 'list',
+      match_value: '',
+      join: conditions.length === 0 ? null : join,
+    }
+    const updated = [...conditions, block]
+    setConditions(updated)
+  }
+
+  function removeCondition(i: number) {
+    if (conditions.length <= 1) return
+    const next = conditions
+      .filter((_, idx) => idx !== i)
+      .map((c, idx) => (idx === 0 ? { ...c, join: null } : c))
+    setConditions(next)
   }
 
   function applyPreset(p: PresetItem) {
-    setForm((f) => ({
-      ...f,
-      match_type: p.match_type,
-      match_value: p.match_value,
-      dir_template: p.dir_template,
-    }))
+    const idx = conditions.findIndex((c) => c.category === p.category)
+    if (idx === -1) {
+      const join: 'AND' | 'OR' | null = conditions.length === 0 ? null : 'OR'
+      const next = [
+        ...conditions,
+        { category: p.category, match_type: p.match_type, match_value: p.match_value, join },
+      ]
+      setConditions(next)
+    } else {
+      const next = conditions.map((c, i) =>
+        i === idx ? { ...c, match_type: p.match_type, match_value: p.match_value } : c,
+      )
+      setConditions(next)
+    }
+    setForm((f) => ({ ...f, dir_template: p.dir_template }))
     setErr(null)
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setErr(null)
-    if (!form.match_value.trim()) {
-      setErr('Pick at least one match value.')
+    if (conditions.length === 0) {
+      setErr(t('ruleModal.addConditionErr'))
+      return
+    }
+    if (conditions.some((c) => !c.match_value.trim())) {
+      setErr(t('ruleModal.conditionValueErr'))
       return
     }
     setBusy(true)
     try {
+      const body: RuleInput = {
+        ...form,
+        filename_template: form.filename_template || null,
+        conditions: conditions.map((c, i) => ({ ...c, join: i === 0 ? null : c.join })),
+      }
       if (editing && initial) {
-        await api.updateRule(initial.id, {
-          ...form,
-          filename_template: form.filename_template || null,
-        })
+        await api.updateRule(initial.id, body)
       } else {
-        await api.createRule({
-          ...form,
-          filename_template: form.filename_template || null,
-        })
+        await api.createRule(body)
       }
       onSaved()
       onClose()
@@ -200,313 +303,352 @@ export default function RuleModal({
     }
   }
 
-  // checkbox groups for the list multi-select: app tags + common groups, plus
-  // any already-selected tags that aren't in a known group (custom values).
-  const listGroups = useMemo(() => {
-    const known = new Set<string>()
-    LIST_GROUPS.forEach((g) => g.tags.forEach((t) => known.add(t)))
-    const appTags = tags
-      .map((t) => t.label)
-      .filter((t) => !known.has(t))
-    const other = valueTags.filter((t) => !known.has(t) && !appTags.includes(t))
-    const groups: { group: string; tags: string[] }[] = []
-    if (appTags.length) groups.push({ group: 'App tags', tags: appTags })
-    LIST_GROUPS.forEach((g) => groups.push({ group: g.group, tags: g.tags }))
-    if (other.length) groups.push({ group: 'Selected / other', tags: other })
-    return groups
-  }, [tags, valueTags])
+  const isLegacyFirst = conditions[0]?.category === 'legacy'
+  const usedCategories = new Set(conditions.map((c) => c.category))
+  const allCategoriesUsed = CATEGORY_ORDER.every((cat) => usedCategories.has(cat))
+  const previewRule: RuleInput = { ...form, conditions }
+
+  function renderConditionValue(i: number) {
+    const c = conditions[i]
+    const selected = selectedFor(c)
+
+    if (c.category === 'user' && c.match_type === 'regex') {
+      const regexPick = REGEX_PICKS.find((p) => p.pattern === c.match_value)
+      const regexIsCustom = !!c.match_value && !regexPick
+      return (
+        <div className="space-y-2">
+          <select
+            className={inputCls}
+            value={regexIsCustom ? CUSTOM : regexPick?.pattern ?? ''}
+            onChange={(e) => {
+              const v = e.target.value
+              updateBlock(i, { match_value: v === CUSTOM ? c.match_value || '' : v })
+            }}
+          >
+            <option value="">{t('ruleModal.selectPattern')}</option>
+            {REGEX_PICKS.map((p) => (
+              <option key={p.pattern} value={p.pattern}>
+                {p.label}
+              </option>
+            ))}
+            <option value={CUSTOM}>{t('ruleModal.customRegex')}</option>
+          </select>
+          {regexPick?.hint && <p className="text-[11px] text-zinc-500">{regexPick.hint}</p>}
+          {regexIsCustom && (
+            <textarea
+              className={inputCls + ' font-mono'}
+              rows={2}
+              value={c.match_value}
+              onChange={(e) => updateBlock(i, { match_value: e.target.value })}
+              placeholder={t('ruleModal.customRegexPlaceholder')}
+            />
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <TagSelect
+        placeholder={
+          c.match_type === 'regex'
+            ? t('ruleModal.pickOrTypePattern')
+            : t('ruleModal.selectCategoryPlaceholder', { category: categoryLabel(c.category).toLowerCase() })
+        }
+        options={optionsFor(c.category)}
+        selected={selected}
+        onChange={(next) => applyBlockSelection(i, selected, next)}
+        multiple={c.match_type === 'list'}
+        creatable={creatableFor(c.category, c.match_type)}
+        searchPlaceholder={c.match_type === 'regex' ? t('ruleModal.searchOrTypePattern') : t('ruleModal.searchOrAdd')}
+      />
+    )
+  }
 
   return (
     <Modal
-      title={editing ? `Edit rule “${initial!.name}”` : 'New rule'}
+      title={editing ? t('ruleModal.editTitle', { name: initial!.name }) : t('ruleModal.newTitle')}
       onClose={onClose}
+      size="xl"
     >
-      {showPresets && (
-        <div className="mb-4 rounded-md border border-indigo-500/30 bg-indigo-950/20 p-3">
-          <div className="mb-2 flex flex-wrap items-center gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wide text-indigo-300">
-              Start from a preset
-            </span>
-            <select
-              className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200"
-              value={presetType}
-              onChange={(e) =>
-                switchPresetType(e.target.value as 'radarr' | 'sonarr')
-              }
-            >
-              <option value="radarr">radarr</option>
-              <option value="sonarr">sonarr</option>
-            </select>
-            <input
-              className="w-48 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200"
-              value={baseFolder}
-              onChange={(e) => setBaseFolder(e.target.value)}
-              placeholder="/media/movies"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {presets.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => applyPreset(p)}
-                title={p.dir_template}
-                className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 hover:border-indigo-500 hover:text-indigo-300"
-              >
-                {p.name}
-              </button>
-            ))}
-            {presets.length === 0 && (
-              <span className="text-xs text-zinc-500">
-                Pick an app type and base folder to see presets.
-              </span>
-            )}
-          </div>
-          <p className="mt-2 text-[11px] text-zinc-500">
-            Applying a preset fills the form below — adjust anything before
-            saving.
-          </p>
-        </div>
-      )}
+      <form onSubmit={submit} className="space-y-4">
+        <Field label={t('ruleModal.name')}>
+          <input
+            className={inputCls}
+            required
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder={t('ruleModal.namePlaceholder')}
+          />
+        </Field>
 
-      <form onSubmit={submit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">Name</span>
-            <input
-              className={inputCls}
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="user tags"
-            />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">App scope</span>
-            <select
-              className={inputCls}
-              value={form.app_scope === null ? '' : String(form.app_scope)}
-              onChange={(e) =>
+        <Field label={t('ruleModal.service')}>
+          <select
+            className={inputCls}
+            value={encodeServiceValue(form.app_scope, form.app_type_scope)}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v === '') {
+                setForm({ ...form, app_scope: null, app_type_scope: null })
+              } else if (v.startsWith('type:')) {
                 setForm({
                   ...form,
-                  app_scope: e.target.value === '' ? null : Number(e.target.value),
+                  app_scope: null,
+                  app_type_scope: v.slice('type:'.length) as 'radarr' | 'sonarr',
                 })
+              } else {
+                setForm({ ...form, app_scope: Number(v), app_type_scope: null })
               }
-            >
-              <option value="">any app</option>
-              {apps.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({a.type})
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+            }}
+          >
+            <option value="">{t('ruleModal.anyService')}</option>
+            {apps.some((a) => a.type === 'radarr') && (
+              <option value="type:radarr">{t('ruleModal.allRadarr')}</option>
+            )}
+            {apps.some((a) => a.type === 'sonarr') && (
+              <option value="type:sonarr">{t('ruleModal.allSonarr')}</option>
+            )}
+            {apps.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.type})
+              </option>
+            ))}
+          </select>
+        </Field>
 
-        {/* Match: type + ergonomic value editor */}
-        <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Match
-            </span>
-            <div className="flex rounded-md border border-zinc-700 p-0.5 text-xs">
-              {(['exact', 'list', 'regex'] as const).map((t) => (
+        {(form.app_scope !== null || form.app_type_scope !== null) && (
+          <div className="rounded-md border border-indigo-500/30 bg-indigo-950/20 p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-300">
+              <Sparkles className="size-3.5" />
+              {t('ruleModal.startFromPreset')}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {presets.map((p) => (
                 <button
-                  key={t}
+                  key={p.key}
                   type="button"
-                  onClick={() => setMatchType(t)}
-                  className={`rounded px-2.5 py-1 ${
-                    form.match_type === t
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
+                  onClick={() => applyPreset(p)}
+                  title={p.dir_template}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 hover:border-indigo-500 hover:text-indigo-300"
                 >
-                  {t}
+                  {p.name}
                 </button>
               ))}
+              {presets.length === 0 && (
+                <span className="text-xs text-zinc-500">{t('ruleModal.noPresets')}</span>
+              )}
             </div>
+            <p className="mt-2 text-[11px] text-zinc-500">
+              {t('ruleModal.presetHint')}
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-3 border-t border-zinc-800 pt-4">
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-200">{t('ruleModal.conditions')}</h3>
+            <p className="text-xs text-zinc-500">
+              <Trans
+                i18nKey="ruleModal.conditionsHintChain"
+                components={[<span className="font-mono text-zinc-400" key="genre" />]}
+              />
+            </p>
           </div>
 
-          {form.match_type === 'exact' && (
-            <div className="space-y-2">
-              <select
-                className={inputCls}
-                value={exactIsCustom ? CUSTOM : form.match_value}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setExact(v === CUSTOM ? (form.match_value || '') : v)
-                }}
-              >
-                <option value="">Select a tag…</option>
-                {exactOptions.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-                <option value={CUSTOM}>Custom…</option>
-              </select>
-              {exactIsCustom && (
-                <input
-                  className={inputCls}
-                  value={form.match_value}
-                  onChange={(e) => setExact(e.target.value)}
-                  placeholder="exact tag to match"
-                />
-              )}
-              <p className="text-[11px] text-zinc-500">
-                Matches an item that has this exact tag.
+          {isLegacyFirst ? (
+            <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
+              <p className="mb-2 text-xs font-semibold text-zinc-400">
+                {t('ruleModal.legacyHeading')}
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={t('ruleModal.matchType')}>
+                  <select
+                    className={inputCls}
+                    value={conditions[0].match_type}
+                    onChange={(e) =>
+                      updateBlock(0, {
+                        match_type: e.target.value as ConditionItem['match_type'],
+                        match_value: '',
+                      })
+                    }
+                  >
+                    <option value="exact">{t('ruleModal.matchTypeExactShort')}</option>
+                    <option value="list">{t('ruleModal.matchTypeListShort')}</option>
+                    <option value="regex">{t('ruleModal.matchTypeRegexShort')}</option>
+                  </select>
+                </Field>
+                <Field label={t('ruleModal.value')}>
+                  <input
+                    className={inputCls}
+                    value={conditions[0].match_value}
+                    onChange={(e) => updateBlock(0, { match_value: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <p className="mt-2 text-[11px] text-zinc-500">
+                {t('ruleModal.legacyHint')}
               </p>
             </div>
-          )}
-
-          {form.match_type === 'list' && (
-            <div className="space-y-3">
-              {listGroups.map((g) => (
-                <div key={g.group}>
-                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                    {g.group}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {g.tags.map((t) => {
-                      const on = valueTags.includes(t)
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => toggleListTag(t)}
-                          className={`rounded-full border px-2.5 py-0.5 text-xs ${
-                            on
-                              ? 'border-indigo-500 bg-indigo-600/20 text-indigo-200'
-                              : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-500'
-                          }`}
-                        >
-                          {on ? '✓ ' : ''}
-                          {t}
-                        </button>
-                      )
-                    })}
+          ) : form.app_scope === null && form.app_type_scope === null ? (
+            <div className="rounded-md border border-dashed border-zinc-700 p-4 text-center text-sm text-zinc-500">
+              {t('ruleModal.selectServiceFirst')}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {conditions.map((c, i) => (
+                <div key={i}>
+                  {i > 0 && (
+                    <div className="flex justify-center py-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleJoin(i)}
+                        className="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-semibold text-indigo-300 hover:bg-zinc-700"
+                      >
+                        {c.join === 'AND' ? t('conditions.joinAnd') : t('conditions.joinOr')}
+                      </button>
+                    </div>
+                  )}
+                  <div className="rounded-md border border-zinc-800 bg-zinc-950/30 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-sm font-medium text-zinc-200">
+                        {t('ruleModal.conditionNumber', { number: i + 1 })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeCondition(i)}
+                        disabled={conditions.length <= 1}
+                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40 disabled:opacity-30"
+                      >
+                        <Trash2 className="size-3.5" />
+                        {t('ruleModal.removeCondition')}
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label={t('ruleModal.category')}>
+                          <select
+                            className={inputCls}
+                            value={c.category}
+                            onChange={(e) => {
+                              const cat = e.target.value as ConditionCategory
+                              updateBlock(i, {
+                                category: cat,
+                                // Users has no literal tag suggestions — regex
+                                // (the "## - username" style pick) is the only
+                                // mode that actually extracts a username, so
+                                // switching to it defaults there. Still
+                                // overridable via the Match Type dropdown.
+                                match_type: cat === 'user' ? 'regex' : c.match_type,
+                                match_value: '',
+                              })
+                            }}
+                          >
+                            {CATEGORY_ORDER.map((cat) => (
+                              <option
+                                key={cat}
+                                value={cat}
+                                disabled={usedCategories.has(cat) && cat !== c.category}
+                              >
+                                {categoryLabel(cat)}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label={t('ruleModal.matchType')}>
+                          <select
+                            className={inputCls}
+                            value={c.match_type}
+                            onChange={(e) =>
+                              updateBlock(i, {
+                                match_type: e.target.value as ConditionItem['match_type'],
+                                match_value: '',
+                              })
+                            }
+                          >
+                            <option value="list">{t('ruleModal.matchTypeListOption')}</option>
+                            <option value="exact">{t('ruleModal.matchTypeExactOption')}</option>
+                            <option value="regex">{t('ruleModal.matchTypeRegex')}</option>
+                          </select>
+                        </Field>
+                      </div>
+                      <Field label={t('ruleModal.value')}>{renderConditionValue(i)}</Field>
+                    </div>
                   </div>
                 </div>
               ))}
-              <div className="flex items-center gap-2">
-                <input
-                  className={inputCls + ' flex-1'}
-                  value={customTag}
-                  onChange={(e) => setCustomTag(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addCustomTag()
-                    }
-                  }}
-                  placeholder="add a custom tag…"
-                />
+
+              {conditions.length === 0 ? (
                 <button
                   type="button"
-                  onClick={addCustomTag}
-                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                  onClick={() => addCondition(null)}
+                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
                 >
-                  Add
+                  {t('ruleModal.addConditionFirst')}
                 </button>
-              </div>
-              <p className="text-[11px] text-zinc-500">
-                Matches an item that has any selected tag.{' '}
-                <span className="text-zinc-400">{valueTags.length} selected.</span>
-              </p>
-            </div>
-          )}
-
-          {form.match_type === 'regex' && (
-            <div className="space-y-2">
-              <select
-                className={inputCls}
-                value={regexIsCustom ? CUSTOM : regexPick?.pattern ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setRegex(v === CUSTOM ? (form.match_value || '') : v)
-                }}
-              >
-                <option value="">Select a pattern…</option>
-                {REGEX_PICKS.map((p) => (
-                  <option key={p.pattern} value={p.pattern}>
-                    {p.label}
-                  </option>
-                ))}
-                <option value={CUSTOM}>Custom regex…</option>
-              </select>
-              {selectedPickHint && (
-                <p className="text-[11px] text-zinc-500">{selectedPickHint}</p>
+              ) : (
+                !allCategoriesUsed && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-xs text-zinc-500">{t('ruleModal.addAnotherCondition')}</span>
+                    <button
+                      type="button"
+                      onClick={() => addCondition('AND')}
+                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                    >
+                      {t('ruleModal.addAnd')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addCondition('OR')}
+                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                    >
+                      {t('ruleModal.addOr')}
+                    </button>
+                  </div>
+                )
               )}
-              {regexIsCustom && (
-                <textarea
-                  className={inputCls + ' font-mono'}
-                  rows={2}
-                  value={form.match_value}
-                  onChange={(e) => setRegex(e.target.value)}
-                  placeholder="^##\s*-\s*(?P<user>.+)$"
-                />
-              )}
-              <p className="text-[11px] text-zinc-500">
-                Pick a common pattern (e.g. “## - username”) or write your own.
-              </p>
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">Dir template</span>
+        <div className="space-y-3 border-t border-zinc-800 pt-4">
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-200">{t('ruleModal.settings')}</h3>
+            <p className="text-xs text-zinc-500">
+              {t('ruleModal.settingsHint')}
+            </p>
+          </div>
+
+          <Field label={t('ruleModal.dirTemplate')}>
             <input
               className={inputCls}
               required
               value={form.dir_template}
               onChange={(e) => setForm({ ...form, dir_template: e.target.value })}
-              placeholder="/media/movies/{$user}"
+              placeholder={t('ruleModal.dirTemplatePlaceholder')}
             />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">
-              Filename template <span className="text-zinc-600">(optional)</span>
-            </span>
+          </Field>
+          <Field label={t('ruleModal.filenameTemplate')}>
             <input
               className={inputCls}
               value={form.filename_template ?? ''}
               onChange={(e) =>
                 setForm({ ...form, filename_template: e.target.value || null })
               }
-              placeholder="{$stem} (empty = keep source name)"
+              placeholder={t('ruleModal.filenameTemplatePlaceholder')}
             />
-          </label>
-        </div>
-
-        <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            Live preview
-          </h4>
-          <PreviewPanel rule={form} appId={previewAppId} />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
-            <input
-              type="checkbox"
+          </Field>
+          <Field label={t('ruleModal.enabled')}>
+            <Toggle
               checked={form.enabled}
-              onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+              onChange={(v) => setForm({ ...form, enabled: v })}
             />
-            enabled
-          </label>
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
-            <input
-              type="checkbox"
+          </Field>
+          <Field label={t('ruleModal.unlinkOnMismatch')}>
+            <Toggle
               checked={form.unlink_on_mismatch}
-              onChange={(e) =>
-                setForm({ ...form, unlink_on_mismatch: e.target.checked })
-              }
+              onChange={(v) => setForm({ ...form, unlink_on_mismatch: v })}
             />
-            unlink on mismatch
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">Priority</span>
+          </Field>
+          <Field label={t('ruleModal.priority')}>
             <input
               className={inputCls}
               type="number"
@@ -515,8 +657,15 @@ export default function RuleModal({
               value={form.priority}
               onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })}
             />
-          </label>
+          </Field>
         </div>
+
+        {previewOpen && (
+          <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
+            <h4 className="mb-2 text-xs font-semibold text-zinc-400">{t('ruleModal.livePreview')}</h4>
+            <PreviewPanel rule={previewRule} appId={previewAppId} />
+          </div>
+        )}
 
         {err && (
           <div className="rounded-md border border-red-900 bg-red-950/40 p-2 text-sm text-red-300">
@@ -527,10 +676,10 @@ export default function RuleModal({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowPresets((s) => !s)}
+            onClick={() => setPreviewOpen((o) => !o)}
             className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800"
           >
-            {showPresets ? 'Hide presets' : 'Show presets'}
+            {previewOpen ? t('ruleModal.hidePreview') : t('ruleModal.livePreviewButton')}
           </button>
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -538,14 +687,14 @@ export default function RuleModal({
               onClick={onClose}
               className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800"
             >
-              Cancel
+              {t('ruleModal.cancel')}
             </button>
             <button
               type="submit"
               disabled={busy}
               className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              {busy ? 'Saving…' : editing ? 'Save rule' : 'Create rule'}
+              {busy ? t('ruleModal.saving') : editing ? t('ruleModal.saveRule') : t('ruleModal.createRule')}
             </button>
           </div>
         </div>
@@ -553,6 +702,3 @@ export default function RuleModal({
     </Modal>
   )
 }
-
-const inputCls =
-  'w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500'
