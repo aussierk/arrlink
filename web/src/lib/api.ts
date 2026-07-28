@@ -121,13 +121,28 @@ export type AppInput = {
 
 export const DEFAULT_POLL_INTERVAL_S = 300
 
+// 'legacy' is a reserved category produced only by the one-time migration of
+// pre-existing single-condition rules — never offered as a pickable category
+// in the UI, but must round-trip untouched when editing a migrated rule.
+export type ConditionCategory =
+  | 'user' | 'genre' | 'language' | 'quality' | 'certification' | 'collection' | 'custom'
+
+export type ConditionItem = {
+  category: ConditionCategory | 'legacy'
+  match_type: 'exact' | 'list' | 'regex'
+  match_value: string
+  join: 'AND' | 'OR' | null
+}
+
 export type RuleItem = {
   id: number
   name: string
   app_scope: number | null
+  // "All Radarr" / "All Sonarr" — applies to every app of this type instead
+  // of one specific instance. Mutually exclusive with app_scope.
+  app_type_scope: 'radarr' | 'sonarr' | null
   app_name: string | null
-  match_type: 'exact' | 'list' | 'regex'
-  match_value: string
+  conditions: ConditionItem[]
   dir_template: string
   filename_template: string | null
   enabled: boolean
@@ -138,8 +153,8 @@ export type RuleItem = {
 export type RuleInput = {
   name: string
   app_scope: number | null
-  match_type: 'exact' | 'list' | 'regex'
-  match_value: string
+  app_type_scope: 'radarr' | 'sonarr' | null
+  conditions: ConditionItem[]
   dir_template: string
   filename_template: string | null
   enabled: boolean
@@ -175,6 +190,7 @@ export type PresetItem = {
   key: string
   name: string
   description: string
+  category: ConditionCategory
   match_type: 'exact' | 'list' | 'regex'
   match_value: string
   subpath: string

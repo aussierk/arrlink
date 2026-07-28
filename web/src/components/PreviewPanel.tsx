@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, type RuleInput } from '../lib/api'
 
 type PreviewData = {
@@ -20,6 +21,7 @@ export default function PreviewPanel({
   rule: RuleInput
   appId: number | null
 }) {
+  const { t } = useTranslation()
   const [data, setData] = useState<PreviewData | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -41,10 +43,17 @@ export default function PreviewPanel({
     }
   }
 
+  // The parent's "Run Preview" button reveals this panel — run once
+  // immediately on mount so opening it is a single click, not two.
+  useEffect(() => {
+    void run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   if (appId === null) {
     return (
       <p className="text-xs text-zinc-600">
-        Pick an app to preview this rule.
+        {t('previewPanel.pickApp')}
       </p>
     )
   }
@@ -57,12 +66,14 @@ export default function PreviewPanel({
           disabled={busy}
           className="rounded-md border border-indigo-500/50 px-3 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40 disabled:opacity-50"
         >
-          {busy ? 'Previewing…' : data ? 'Re-run preview' : 'Preview'}
+          {busy ? t('previewPanel.previewing') : data ? t('previewPanel.rerun') : t('previewPanel.preview')}
         </button>
         {data && (
           <span className="text-xs text-zinc-500">
-            {data.total} file{data.total === 1 ? '' : 's'} would be linked ·{' '}
-            {new Date(stamp).toLocaleTimeString()}
+            {t('previewPanel.filesWouldLink', {
+              count: data.total,
+              time: new Date(stamp).toLocaleTimeString(),
+            })}
           </span>
         )}
       </div>
@@ -74,9 +85,9 @@ export default function PreviewPanel({
           <table className="w-full text-xs">
             <thead className="bg-zinc-900 text-left text-zinc-500">
               <tr>
-                <th className="px-2 py-1">Item</th>
-                <th className="px-2 py-1">Source</th>
-                <th className="px-2 py-1">Would link to</th>
+                <th className="px-2 py-1">{t('previewPanel.item')}</th>
+                <th className="px-2 py-1">{t('previewPanel.source')}</th>
+                <th className="px-2 py-1">{t('previewPanel.wouldLinkTo')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60">
@@ -99,13 +110,17 @@ export default function PreviewPanel({
         <div className="rounded-md border border-amber-900/60 bg-amber-950/20 p-2">
           {data.errors.map((e, i) => (
             <p key={i} className="text-xs text-amber-300">
-              {e.item_title} ({e.src_path}): {e.error}
+              {t('previewPanel.errorLine', {
+                item: e.item_title,
+                src: e.src_path,
+                error: e.error,
+              })}
             </p>
           ))}
         </div>
       )}
       {data && data.total === 0 && data.errors.length === 0 && (
-        <p className="text-xs text-zinc-600">No matching files for this rule.</p>
+        <p className="text-xs text-zinc-600">{t('previewPanel.noMatches')}</p>
       )}
     </div>
   )
