@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import LinksPanel from '../components/LinksPanel'
 import {
   api,
@@ -9,6 +10,7 @@ import {
 } from '../lib/api'
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const [health, setHealth] = useState<Health | null>(null)
   const [me, setMe] = useState<Me | null>(null)
   const [apps, setApps] = useState<AppItem[]>([])
@@ -43,10 +45,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Dashboard</h2>
-        <p className="text-sm text-zinc-500">
-          Live status for your connected apps and the links ArrLink maintains.
-        </p>
+        <h2 className="text-xl font-semibold">{t('dashboard.title')}</h2>
+        <p className="text-sm text-zinc-500">{t('dashboard.subtitle')}</p>
       </div>
 
       {err && (
@@ -58,19 +58,20 @@ export default function Dashboard() {
       {linksCount && linksCount.orphaned_rules.length > 0 && (
         <div className="rounded-md border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-300">
           <p className="font-medium">
-            {linksCount.orphaned_rules.length} rule(s) point outside the allowed
-            roots and won't link anything:
+            {t('dashboard.orphanedRules', { count: linksCount.orphaned_rules.length })}
           </p>
           <p className="mt-1 text-amber-200/80">{linksCount.orphaned_rules.join(', ')}</p>
           <p className="mt-1 text-amber-200/60">
-            Edit the rules, or set <code className="rounded bg-black/30 px-1">allowed_roots</code> to
-            include their destination in Settings.
+            <Trans i18nKey="dashboard.orphanedHint">
+              Edit the rules, or set <code className="rounded bg-black/30 px-1">allowed_roots</code> to
+              include their destination in Settings.
+            </Trans>
           </p>
         </div>
       )}
 
       <div className="grid grid-cols-4 gap-4">
-        <Card title="Status">
+        <Card title={t('dashboard.statusCard')}>
           {health ? (
             <div className="space-y-1 text-sm">
               <p>
@@ -83,48 +84,49 @@ export default function Dashboard() {
                   ● {health.status}
                 </span>
               </p>
-              <p className="text-zinc-400">version {health.version}</p>
-              <p className="text-zinc-400">schema v{health.schema_version}</p>
+              <p className="text-zinc-400">{t('dashboard.version', { version: health.version })}</p>
+              <p className="text-zinc-400">{t('dashboard.schemaVersion', { version: health.schema_version })}</p>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">loading…</p>
+            <p className="text-sm text-zinc-500">{t('common.loading')}</p>
           )}
         </Card>
-        <Card title="Auth">
+        <Card title={t('dashboard.authCard')}>
           {me ? (
             <div className="space-y-1 text-sm">
-              <p className="text-zinc-300">mode: {me.auth_mode}</p>
+              <p className="text-zinc-300">{t('dashboard.authModeLine', { mode: me.auth_mode })}</p>
               <p className="text-zinc-500">
                 {me.authenticated
-                  ? 'signed in'
-                  : 'OIDC auto-login arrives in M1'}
+                  ? t('dashboard.signedIn')
+                  : t('dashboard.oidcComing')}
               </p>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">loading…</p>
+            <p className="text-sm text-zinc-500">{t('common.loading')}</p>
           )}
         </Card>
-        <Card title="Apps">
+        <Card title={t('dashboard.appsCard')}>
           <p className="text-2xl font-semibold">{apps.length}</p>
           <p className="text-sm text-zinc-500">
-            {apps.length === 1 ? 'app connected' : 'apps connected'}
+            {t('dashboard.appsConnectedCount', { count: apps.length })}
           </p>
         </Card>
-        <Card title="Links">
+        <Card title={t('dashboard.linksCard')}>
           <p className="text-2xl font-semibold">
             {linksCount?.active_links ?? 0}
           </p>
           <p className="text-sm text-zinc-500">
-            hardlinked{linksCount?.stale_links ? ` · ${linksCount.stale_links} stale` : ''}
+            {t('dashboard.hardlinked')}
+            {linksCount?.stale_links
+              ? t('dashboard.staleSuffix', { count: linksCount.stale_links })
+              : ''}
           </p>
         </Card>
       </div>
 
-      <Card title="Connected apps">
+      <Card title={t('dashboard.connectedApps')}>
         {apps.length === 0 ? (
-          <p className="text-sm text-zinc-500">
-            No apps yet — add Radarr or Sonarr on the Apps page.
-          </p>
+          <p className="text-sm text-zinc-500">{t('dashboard.noApps')}</p>
         ) : (
           <ul className="divide-y divide-zinc-800">
             {apps.map((a) => (
@@ -141,7 +143,7 @@ export default function Dashboard() {
                 <span className="font-medium">{a.name}</span>
                 <span className="text-zinc-500">{a.url}</span>
                 <span className="ml-auto text-zinc-500">
-                  last poll: {fmtTime(a.last_poll_at)}
+                  {t('dashboard.lastPoll', { time: fmtTime(a.last_poll_at) })}
                 </span>
               </li>
             ))}
@@ -149,7 +151,7 @@ export default function Dashboard() {
         )}
       </Card>
 
-      <Card title="Links">
+      <Card title={t('dashboard.linksCard')}>
         <LinksPanel />
       </Card>
     </div>

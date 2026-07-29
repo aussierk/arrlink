@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, type AppItem, type LinkItem } from '../lib/api'
 
 /**
@@ -6,6 +7,7 @@ import { api, type AppItem, type LinkItem } from '../lib/api'
  * maintains. Embedded on the Dashboard (not a standalone page).
  */
 export default function LinksPanel() {
+  const { t } = useTranslation()
   const [links, setLinks] = useState<LinkItem[]>([])
   const [apps, setApps] = useState<AppItem[]>([])
   const [appId, setAppId] = useState('')
@@ -40,10 +42,10 @@ export default function LinksPanel() {
     setRepairMsg(null)
     try {
       const r = await api.repairLinks()
-      setRepairMsg(`Re-created ${r.fixed} link(s), ${r.failed} failed`)
+      setRepairMsg(t('linksTable.repaired', { fixed: r.fixed, failed: r.failed }))
       await load()
     } catch (e) {
-      setRepairMsg(`Repair failed: ${e}`)
+      setRepairMsg(t('linksTable.repairFailed', { error: String(e) }))
     } finally {
       setBusy(false)
     }
@@ -66,7 +68,7 @@ export default function LinksPanel() {
           value={appId}
           onChange={(e) => setAppId(e.target.value)}
         >
-          <option value="">all apps</option>
+          <option value="">{t('linksTable.allApps')}</option>
           {apps.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}
@@ -78,22 +80,22 @@ export default function LinksPanel() {
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
-          <option value="active">active</option>
-          <option value="stale">stale</option>
-          <option value="">all</option>
+          <option value="active">{t('linksTable.active')}</option>
+          <option value="stale">{t('linksTable.stale')}</option>
+          <option value="">{t('linksTable.all')}</option>
         </select>
         <button
           onClick={() => void repair()}
           disabled={busy}
           className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         >
-          {busy ? 'Repairing…' : 'Repair missing'}
+          {busy ? t('linksTable.repairing') : t('linksTable.repairMissing')}
         </button>
         <button
           onClick={() => void load()}
           className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900"
         >
-          refresh
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -112,11 +114,11 @@ export default function LinksPanel() {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="px-3 py-2">App</th>
-              <th className="px-3 py-2">Rule</th>
-              <th className="px-3 py-2">Source</th>
-              <th className="px-3 py-2">Linked to</th>
-              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">{t('linksTable.colApp')}</th>
+              <th className="px-3 py-2">{t('linksTable.colRule')}</th>
+              <th className="px-3 py-2">{t('linksTable.colSource')}</th>
+              <th className="px-3 py-2">{t('linksTable.colLinkedTo')}</th>
+              <th className="px-3 py-2">{t('linksTable.colStatus')}</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
@@ -124,8 +126,7 @@ export default function LinksPanel() {
             {links.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
-                  No links yet — the poller creates them on the next cycle (or
-                  run a rescan on an app).
+                  {t('linksTable.empty')}
                 </td>
               </tr>
             )}
@@ -143,7 +144,7 @@ export default function LinksPanel() {
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {l.status === 'active' ? (
-                    <span className="text-emerald-400">active</span>
+                    <span className="text-emerald-400">{t('linksTable.active')}</span>
                   ) : (
                     <span className="text-amber-400">{l.status}</span>
                   )}
@@ -153,7 +154,7 @@ export default function LinksPanel() {
                     onClick={() => void remove(l.id)}
                     className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
                   >
-                    remove
+                    {t('linksTable.remove')}
                   </button>
                 </td>
               </tr>

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Minimal modal dialog. Renders a centered panel over a dimmed backdrop and
@@ -8,11 +9,14 @@ export default function Modal({
   title,
   onClose,
   children,
+  size = 'md',
 }: {
   title: string
   onClose: () => void
   children: React.ReactNode
+  size?: 'md' | 'xl'
 }) {
+  const { t } = useTranslation()
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -27,7 +31,9 @@ export default function Modal({
       onMouseDown={onClose}
     >
       <div
-        className="w-full max-w-2xl rounded-lg border border-zinc-800 bg-zinc-900 shadow-xl"
+        className={`w-full rounded-lg border border-zinc-800 bg-zinc-900 shadow-xl ${
+          size === 'xl' ? 'max-w-4xl' : 'max-w-2xl'
+        }`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
@@ -35,7 +41,7 @@ export default function Modal({
           <button
             onClick={onClose}
             className="text-zinc-500 hover:text-zinc-200"
-            aria-label="Close"
+            aria-label={t('modal.close')}
           >
             ✕
           </button>

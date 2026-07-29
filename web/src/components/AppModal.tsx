@@ -1,6 +1,10 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Plug } from 'lucide-react'
 import Modal from './Modal'
+import Toggle from './ui/Toggle'
 import { api, DEFAULT_POLL_INTERVAL_S, type AppInput, type AppItem } from '../lib/api'
+import { inputCls } from '../lib/ui'
 
 /**
  * Create or edit an app. On create, `initial` is empty; on edit it is the
@@ -15,6 +19,7 @@ export default function AppModal({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const editing = initial !== null
   const [form, setForm] = useState<AppInput>(
     initial
@@ -35,7 +40,7 @@ export default function AppModal({
           poll_interval_s: DEFAULT_POLL_INTERVAL_S,
         },
   )
-  const [testResult, setTestResult] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -45,9 +50,9 @@ export default function AppModal({
     setTestResult(null)
     try {
       const r = await api.testApp({ ...form, api_key: form.api_key || 'x' })
-      setTestResult(`Connected — ${r.name} ${r.version}`)
+      setTestResult({ ok: true, message: t('appModal.connected', { name: r.name, version: r.version }) })
     } catch (e) {
-      setTestResult(`Failed: ${e}`)
+      setTestResult({ ok: false, message: t('appModal.failed', { error: String(e) }) })
     } finally {
       setTesting(false)
     }
@@ -74,21 +79,24 @@ export default function AppModal({
   }
 
   return (
-    <Modal title={editing ? `Edit ${initial!.name}` : 'Add app'} onClose={onClose}>
+    <Modal
+      title={editing ? t('appModal.editTitle', { name: initial!.name }) : t('appModal.addTitle')}
+      onClose={onClose}
+    >
       <form onSubmit={submit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">Name</span>
+            <span className="mb-1 block text-zinc-400">{t('appModal.name')}</span>
             <input
               className={inputCls}
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="My Radarr"
+              placeholder={t('appModal.namePlaceholder')}
             />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">Type</span>
+            <span className="mb-1 block text-zinc-400">{t('appModal.type')}</span>
             <select
               className={inputCls}
               value={form.type}
@@ -102,18 +110,21 @@ export default function AppModal({
             </select>
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">URL</span>
+            <span className="mb-1 block text-zinc-400">{t('appModal.url')}</span>
             <input
               className={inputCls}
               required
               value={form.url}
               onChange={(e) => setForm({ ...form, url: e.target.value })}
-              placeholder="http://host:7878"
+              placeholder={t('appModal.urlPlaceholder')}
             />
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-zinc-400">
-              API key{editing && <span className="text-zinc-600"> (blank = keep current)</span>}
+              {t('appModal.apiKey')}
+              {editing && (
+                <span className="text-zinc-600">{t('appModal.apiKeyKeepCurrent')}</span>
+              )}
             </span>
             <input
               className={inputCls}
@@ -124,7 +135,7 @@ export default function AppModal({
             />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">Poll interval (s)</span>
+            <span className="mb-1 block text-zinc-400">{t('appModal.pollInterval')}</span>
             <input
               className={inputCls}
               type="number"
@@ -136,21 +147,20 @@ export default function AppModal({
               }
             />
           </label>
-          <label className="flex items-end gap-2 pb-2 text-sm text-zinc-300">
-            <input
-              type="checkbox"
+          <div className="flex items-end pb-2">
+            <Toggle
               checked={form.enabled}
-              onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+              onChange={(v) => setForm({ ...form, enabled: v })}
+              label={t('appModal.enabled')}
             />
-            enabled
-          </label>
+          </div>
         </div>
 
         {testResult && (
           <p
-            className={`text-xs ${testResult.startsWith('Connected') ? 'text-emerald-400' : 'text-red-400'}`}
+            className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}
           >
-            {testResult}
+            {testResult.message}
           </p>
         )}
         {err && (
@@ -164,9 +174,10 @@ export default function AppModal({
             type="button"
             onClick={() => void test()}
             disabled={testing || !form.url || !form.api_key}
-            className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
           >
-            {testing ? 'Testing…' : 'Test connection'}
+            <Plug className="size-4" />
+            {testing ? t('appModal.testing') : t('appModal.testConnection')}
           </button>
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -174,14 +185,14 @@ export default function AppModal({
               onClick={onClose}
               className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
             >
-              Cancel
+              {t('appModal.cancel')}
             </button>
             <button
               type="submit"
               disabled={busy}
               className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              {busy ? 'Saving…' : editing ? 'Save changes' : 'Add app'}
+              {busy ? t('appModal.saving') : editing ? t('appModal.saveChanges') : t('appModal.addApp')}
             </button>
           </div>
         </div>
@@ -189,6 +200,3 @@ export default function AppModal({
     </Modal>
   )
 }
-
-const inputCls =
-  'w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500'

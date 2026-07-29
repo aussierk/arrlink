@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, fmtTime, type LogEntry } from '../lib/api'
 
 export default function Logs() {
+  const { t } = useTranslation()
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [level, setLevel] = useState('')
   const [err, setErr] = useState<string | null>(null)
@@ -42,26 +44,24 @@ export default function Logs() {
     <div className="space-y-6">
       <div className="flex items-end gap-3">
         <div>
-          <h2 className="text-xl font-semibold">Logs</h2>
-          <p className="text-sm text-zinc-500">
-            Live SSE stream arrives with M3.
-          </p>
+          <h2 className="text-xl font-semibold">{t('logs.title')}</h2>
+          <p className="text-sm text-zinc-500">{t('logs.subtitle')}</p>
         </div>
         <select
           className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200"
           value={level}
           onChange={(e) => setLevel(e.target.value)}
         >
-          <option value="">all levels</option>
-          <option value="error">error</option>
-          <option value="warn">warn</option>
-          <option value="info">info</option>
+          <option value="">{t('logs.allLevels')}</option>
+          <option value="error">{t('logs.error')}</option>
+          <option value="warn">{t('logs.warn')}</option>
+          <option value="info">{t('logs.info')}</option>
         </select>
         <button
           onClick={() => void load()}
           className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900"
         >
-          refresh
+          {t('common.refresh')}
         </button>
         <label className="flex items-center gap-2 text-sm text-zinc-300">
           <input
@@ -69,7 +69,7 @@ export default function Logs() {
             checked={live}
             onChange={(e) => setLive(e.target.checked)}
           />
-          live
+          {t('logs.live')}
         </label>
       </div>
 
@@ -83,16 +83,16 @@ export default function Logs() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="px-3 py-2">Time</th>
-              <th className="px-3 py-2">Level</th>
-              <th className="px-3 py-2">Message</th>
+              <th className="px-3 py-2">{t('logs.colTime')}</th>
+              <th className="px-3 py-2">{t('logs.colLevel')}</th>
+              <th className="px-3 py-2">{t('logs.colMessage')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {logs.length === 0 && (
               <tr>
                 <td colSpan={3} className="px-3 py-6 text-center text-zinc-500">
-                  No events yet.
+                  {t('logs.empty')}
                 </td>
               </tr>
             )}

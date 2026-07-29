@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
-import AppModal from '../components/AppModal'
-import { api, fmtTime, type AppItem } from '../lib/api'
+import { Trans, useTranslation } from 'react-i18next'
+import { Download, Pencil, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import AppModal from '../../components/AppModal'
+import { api, fmtTime, type AppItem } from '../../lib/api'
 
 /**
- * Apps (M6+): create and edit Radarr/Sonarr connections. Each row can be
- * edited (name, URL, API key, poll interval, enabled), tested, have its tags
+ * Connect Radarr and Sonarr — test the connection, import tags, and rescan
+ * to reconcile links. Each row can be edited, tested, have its tags
  * imported, rescanned, or deleted.
  */
-export default function Apps() {
+export default function ServicesSection() {
+  const { t } = useTranslation()
   const [apps, setApps] = useState<AppItem[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
@@ -38,11 +41,11 @@ export default function Apps() {
   }
 
   async function remove(a: AppItem) {
-    if (!confirm(`Delete app "${a.name}"? Its links will be left in place.`))
+    if (!confirm(t('settingsServices.deleteConfirm', { name: a.name })))
       return
     try {
       await api.deleteApp(a.id)
-      setOk(`Deleted app "${a.name}".`)
+      setOk(t('settingsServices.deletedMsg', { name: a.name }))
       await load()
     } catch (e) {
       setErr(String(e))
@@ -50,53 +53,54 @@ export default function Apps() {
   }
 
   async function testRow(id: number) {
-    setRowMsg((m) => ({ ...m, [id]: 'Testing…' }))
+    setRowMsg((m) => ({ ...m, [id]: t('settingsServices.testingMsg') }))
     try {
       const r = await api.testAppId(id)
-      setRowMsg((m) => ({ ...m, [id]: `ok · ${r.version}` }))
+      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.testOkMsg', { version: r.version }) }))
     } catch (ex) {
-      setRowMsg((m) => ({ ...m, [id]: `fail: ${ex}` }))
+      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.failMsg', { error: String(ex) }) }))
     }
     await load()
   }
 
   async function importRow(id: number) {
-    setRowMsg((m) => ({ ...m, [id]: 'Importing tags…' }))
+    setRowMsg((m) => ({ ...m, [id]: t('settingsServices.importingMsg') }))
     try {
       const r = await api.importTags(id)
-      setRowMsg((m) => ({ ...m, [id]: `imported ${r.imported} tags` }))
+      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.importedMsg', { count: r.imported }) }))
     } catch (ex) {
-      setRowMsg((m) => ({ ...m, [id]: `fail: ${ex}` }))
+      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.failMsg', { error: String(ex) }) }))
     }
     await load()
   }
 
   async function rescanRow(id: number) {
-    setRowMsg((m) => ({ ...m, [id]: 'Scanning…' }))
+    setRowMsg((m) => ({ ...m, [id]: t('settingsServices.scanningMsg') }))
     try {
       const r = await api.rescanApp(id)
-      setRowMsg((m) => ({ ...m, [id]: r.ok ? 'scanned' : 'scan failed' }))
+      setRowMsg((m) => ({
+        ...m,
+        [id]: r.ok ? t('settingsServices.scannedMsg') : t('settingsServices.scanFailedMsg'),
+      }))
     } catch (ex) {
-      setRowMsg((m) => ({ ...m, [id]: `scan failed: ${ex}` }))
+      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.scanFailedErrMsg', { error: String(ex) }) }))
     }
     await load()
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold">Apps</h2>
-          <p className="text-sm text-zinc-500">
-            Connect Radarr and Sonarr — test the connection, import tags, and
-            rescan to reconcile links.
-          </p>
+          <h3 className="text-sm font-semibold text-zinc-200">{t('settingsServices.title')}</h3>
+          <p className="text-xs text-zinc-500">{t('settingsServices.subtitle')}</p>
         </div>
         <button
           onClick={openNew}
-          className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+          className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
         >
-          + Add app
+          <Plus className="size-4" />
+          {t('settingsServices.addService')}
         </button>
       </div>
 
@@ -115,13 +119,13 @@ export default function Apps() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">URL</th>
-              <th className="px-3 py-2">API key</th>
-              <th className="px-3 py-2">Poll</th>
-              <th className="px-3 py-2">Last poll</th>
-              <th className="px-3 py-2">Actions</th>
+              <th className="px-3 py-2">{t('settingsServices.colName')}</th>
+              <th className="px-3 py-2">{t('settingsServices.colType')}</th>
+              <th className="px-3 py-2">{t('settingsServices.colUrl')}</th>
+              <th className="px-3 py-2">{t('settingsServices.colApiKey')}</th>
+              <th className="px-3 py-2">{t('settingsServices.colPoll')}</th>
+              <th className="px-3 py-2">{t('settingsServices.colLastPoll')}</th>
+              <th className="px-3 py-2">{t('settingsServices.colActions')}</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
@@ -129,7 +133,10 @@ export default function Apps() {
             {apps.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
-                  No apps yet — click <span className="text-indigo-400">Add app</span>.
+                  <Trans i18nKey="settingsServices.empty">
+                    No services yet — click{' '}
+                    <span className="text-indigo-400">Add service</span>.
+                  </Trans>
                 </td>
               </tr>
             )}
@@ -138,7 +145,7 @@ export default function Apps() {
                 <td className="px-3 py-2 font-medium">
                   {a.name}
                   {!a.enabled && (
-                    <span className="ml-2 text-xs text-zinc-500">(disabled)</span>
+                    <span className="ml-2 text-xs text-zinc-500">{t('settingsServices.disabled')}</span>
                   )}
                 </td>
                 <td className="px-3 py-2">{a.type}</td>
@@ -146,7 +153,7 @@ export default function Apps() {
                 <td className="px-3 py-2 font-mono text-xs text-zinc-500">
                   {a.api_key_masked}
                 </td>
-                <td className="px-3 py-2">{a.poll_interval_s}s</td>
+                <td className="px-3 py-2">{a.poll_interval_s}{t('settingsServices.pollSuffix')}</td>
                 <td className="px-3 py-2 text-zinc-400">
                   {a.last_error ? (
                     <span className="text-red-400">{a.last_error}</span>
@@ -158,21 +165,24 @@ export default function Apps() {
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => testRow(a.id)}
-                      className="rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
                     >
-                      test
+                      <Plug className="size-3.5" />
+                      {t('settingsServices.test')}
                     </button>
                     <button
                       onClick={() => importRow(a.id)}
-                      className="rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
+                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
                     >
-                      import tags
+                      <Download className="size-3.5" />
+                      {t('settingsServices.importTags')}
                     </button>
                     <button
                       onClick={() => rescanRow(a.id)}
-                      className="rounded px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40"
+                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40"
                     >
-                      rescan
+                      <RefreshCw className="size-3.5" />
+                      {t('settingsServices.rescan')}
                     </button>
                     {rowMsg[a.id] && (
                       <span className="text-xs text-zinc-500">{rowMsg[a.id]}</span>
@@ -183,15 +193,17 @@ export default function Apps() {
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => openEdit(a)}
-                      className="rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
                     >
-                      edit
+                      <Pencil className="size-3.5" />
+                      {t('settingsServices.edit')}
                     </button>
                     <button
                       onClick={() => void remove(a)}
-                      className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
+                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
                     >
-                      delete
+                      <Trash2 className="size-3.5" />
+                      {t('settingsServices.delete')}
                     </button>
                   </div>
                 </td>
