@@ -3,24 +3,18 @@ services:
     image: ghcr.io/yourname/arrlink:latest
     build: .
     container_name: arrlink
+    env_file: .env
     ports:
       - "8270:8270"
     environment:
       PUID: "1000"
       PGID: "1000"
       TZ: America/Toronto
-      LOG_LEVEL: info
+      # Must stay /config (matches the volume mount below) regardless of
+      # .env — .env.example's CONFIG_DIR=./config is for local, non-Docker
+      # dev, so it's deliberately kept out of .env's reach here (an explicit
+      # `environment:` entry always wins over env_file for the same key).
       CONFIG_DIR: /config
-      # Default: open (LAN). Password and OIDC login are independent and can
-      # both be enabled at once — see .env.example for the full list.
-      AUTH_PASSWORD_ENABLED: "false"
-      # UI_USERNAME: admin
-      # UI_PASSWORD: change-me
-      AUTH_OIDC_ENABLED: "false"
-      # OIDC_ISSUER: https://<provider>/application/o/<app>/
-      # OIDC_CLIENT_ID: <client-id>
-      # OIDC_CLIENT_SECRET: <client-secret>
-      # OIDC_AUTO_LOGIN: "true"
     volumes:
       - ./arrlink/config:/config
       # Writable link root on the SAME pool as the media (default allowed root
