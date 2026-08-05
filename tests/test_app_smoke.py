@@ -21,13 +21,18 @@ def test_health(client: TestClient):
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert body["schema_version"] == 7
+    assert body["schema_version"] == 10
 
 
 def test_auth_me_stub(client: TestClient):
+    # No auth env vars set -> open mode (both password/oidc disabled) ->
+    # always authenticated, same as get_current_user's open-mode pass-through.
     r = client.get("/api/auth/me")
     assert r.status_code == 200
-    assert r.json()["authenticated"] is False
+    j = r.json()
+    assert j["authenticated"] is True
+    assert j["password_enabled"] is False
+    assert j["oidc_enabled"] is False
 
 
 def test_apps_crud(client: TestClient):
@@ -244,8 +249,8 @@ def test_settings_roundtrip(client: TestClient):
 def test_migration_idempotent(tmp_path):
     s1 = State(tmp_path / "x.db")
     s2 = State(tmp_path / "x.db")  # second open must not fail
-    assert s1.query_one("SELECT version FROM schema_version")["version"] == 7
-    assert s2.query_one("SELECT version FROM schema_version")["version"] == 7
+    assert s1.query_one("SELECT version FROM schema_version")["version"] == 10
+    assert s2.query_one("SELECT version FROM schema_version")["version"] == 10
     # the tag repository table exists (migration 4)
     assert s1.query_one("SELECT name FROM sqlite_master WHERE name='tag_repository'")
     # migration 5 runs on every fresh DB and is a no-op without rules

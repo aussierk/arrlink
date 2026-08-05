@@ -14,7 +14,14 @@ from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 7
+# Migration version numbers must only ever increase — never reuse or reorder
+# one that has already shipped, even during active development, since any
+# already-running instance's `schema_version` row would just skip a
+# lower/equal-numbered migration as "already applied" (this bit us once:
+# versions 8/9 briefly meant a different migration than they do now, and got
+# silently skipped by an instance that had already recorded 9). Versions 8
+# and 9 are retired for that reason — do not reuse them.
+SCHEMA_VERSION = 10
 
 
 def _migration_2(conn: sqlite3.Connection) -> None:
@@ -124,6 +131,15 @@ def _migration_7(conn: sqlite3.Connection) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(rules)")}
     if "app_type_scope" not in cols:
         conn.execute("ALTER TABLE rules ADD COLUMN app_type_scope TEXT")
+
+
+def _migration_10(conn: sqlite3.Connection) -> None:
+    """M10: sessions.kind ('oidc' | 'password') — dual-mode auth means both a password session and an OIDC session can be alive at once."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}
+    if "kind" not in cols:
+        conn.execute(
+            "ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'oidc'"
+        )
 
 
 _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
@@ -243,6 +259,8 @@ _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
     (5, _migration_5),
     (6, _migration_6),
     (7, _migration_7),
+    # 8 and 9 are retired — do not reuse (see SCHEMA_VERSION comment above).
+    (10, _migration_10),
 ]
 
 
@@ -367,7 +385,8 @@ class State:
         {
             "auth_password",
             "oidc_client_secret",
-            # (auth_mode / oidc_* non-secret keys are safe to expose)
+            # (auth_password_enabled / auth_oidc_enabled / oidc_* non-secret
+            # keys are safe to expose)
         }
     )
 

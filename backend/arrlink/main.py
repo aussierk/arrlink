@@ -57,7 +57,7 @@ async def _auth_sweep(db: State, settings) -> None:
     while True:
         await asyncio.sleep(sess_mod.SWEEP_INTERVAL_S)
         auth = effective_auth(db, settings)
-        if auth["auth_mode"] != "oidc":
+        if not auth["oidc_enabled"]:
             continue
         try:
 

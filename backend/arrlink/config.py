@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import logging
+from functools import cached_property
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .auth.passwords import hash_password
 
 log = logging.getLogger(__name__)
 
@@ -19,28 +22,31 @@ def normalize_fs_fallback(value, default: str = "skip") -> str:
     return v if v in FS_FALLBACK_MODES else default
 
 
-# Auth modes (M1). The mode and credentials are env-seeded but can be
-# overridden at runtime via Settings (Settings -> Authentication).
-AUTH_MODES = ("none", "password", "oidc")
-
-
 def effective_auth(db, env) -> dict:
     """Resolve the runtime auth configuration."""
     s = db if db is not None else None
     get = (lambda k: s.get_setting(k)) if s is not None else (lambda k: None)
 
-    mode = (get("auth_mode") or env.auth_mode or "none").strip().lower()
-    if mode not in AUTH_MODES:
-        mode = "none"
+    db_password_enabled = get("auth_password_enabled")
+    password_enabled = (
+        bool(db_password_enabled) if db_password_enabled is not None else env.auth_password_enabled
+    )
+    db_oidc_enabled = get("auth_oidc_enabled")
+    oidc_enabled = bool(db_oidc_enabled) if db_oidc_enabled is not None else env.auth_oidc_enabled
 
-    # auto_login is env-only (default True); a runtime Setting may override.
+    # auto_login: env-seeded (default True), a runtime Setting may override.
     auto_login = get("oidc_auto_login")
-    auto_login = bool(auto_login) if auto_login is not None else True
+    auto_login = bool(auto_login) if auto_login is not None else env.oidc_auto_login
 
     return {
-        "auth_mode": mode,
+        "password_enabled": password_enabled,
+        "oidc_enabled": oidc_enabled,
         "auto_login": auto_login,
-        "ui_password": get("auth_password") or env.ui_password or "",
+        "ui_username": get("auth_username") or env.ui_username or "admin",
+        # Always an Argon2id hash (or "") — never plaintext. A Setting-stored
+        # password is hashed at write time (api/settings.py); an env-seeded
+        # UI_PASSWORD is hashed once here (env.ui_password_hash is cached).
+        "ui_password": get("auth_password") or env.ui_password_hash or "",
         "oidc_issuer": get("oidc_issuer") or env.oidc_issuer or "",
         "oidc_client_id": get("oidc_client_id") or env.oidc_client_id or "",
         "oidc_client_secret": get("oidc_client_secret") or env.oidc_client_secret or "",
@@ -64,14 +70,24 @@ class Settings(BaseSettings):
     # it takes precedence over this env value and is normalized on use.
     fs_fallback: str = "skip"
 
-    # Auth (M1 wires up the full OIDC flow)
-    auth_mode: str = "none"  # none | password | oidc
+    # Auth: password and OIDC login are independent — either, both, or
+    # neither may be enabled at once (see effective_auth() in this module).
+    auth_password_enabled: bool = False
+    auth_oidc_enabled: bool = False
+    oidc_auto_login: bool = True
+    ui_username: str = "admin"
     ui_password: str | None = None
     oidc_issuer: str | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None
     oidc_redirect_uri: str | None = None  # default: <origin>/api/auth/oidc/callback
     session_ttl_h: int = 12
+
+    @cached_property
+    def ui_password_hash(self) -> str:
+        """`ui_password`, hashed once (cached — this is a real Argon2id cost,
+        not something to redo per request). "" when unset."""
+        return hash_password(self.ui_password) if self.ui_password else ""
 
     @property
     def db_path(self) -> Path:

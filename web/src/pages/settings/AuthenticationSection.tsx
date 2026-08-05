@@ -1,22 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type AuthConfig } from '../../lib/api'
+import { api } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Toggle from '../../components/ui/Toggle'
 
 /**
- * Choose how people sign in. Switching mode applies immediately. Secret
- * fields are blank = keep the current value; only a new value replaces it
- * (secrets are never returned to the UI).
+ * Password and OIDC login are independent — either, both, or neither can be
+ * enabled at once (see /login, which offers whichever are on). Toggling
+ * either applies immediately. Secret fields are blank = keep the current
+ * value; only a new value replaces it (secrets are never returned to the UI).
  */
 export default function AuthenticationSection() {
   const { t } = useTranslation()
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
 
-  const [authMode, setAuthMode] = useState<AuthConfig['auth_mode']>('none')
-  const [authModes, setAuthModes] = useState<string[]>(['none', 'password', 'oidc'])
+  const [passwordEnabled, setPasswordEnabled] = useState(false)
+  const [oidcEnabled, setOidcEnabled] = useState(false)
   const [autoLogin, setAutoLogin] = useState(true)
+  const [uiUsername, setUiUsername] = useState('admin')
   const [uiPassword, setUiPassword] = useState('')
   const [uiPasswordSet, setUiPasswordSet] = useState(false)
   const [oidcIssuer, setOidcIssuer] = useState('')
@@ -28,9 +30,10 @@ export default function AuthenticationSection() {
   const load = useCallback(async () => {
     try {
       const a = await api.getAuthSettings()
-      setAuthMode(a.auth_mode)
-      setAuthModes(a.auth_modes)
+      setPasswordEnabled(a.password_enabled)
+      setOidcEnabled(a.oidc_enabled)
       setAutoLogin(a.auto_login)
+      setUiUsername(a.ui_username)
       setUiPassword('')
       setUiPasswordSet(a.ui_password_set)
       setOidcIssuer(a.oidc_issuer)
@@ -52,8 +55,10 @@ export default function AuthenticationSection() {
     setOk(null)
     try {
       await api.updateAuthSettings({
-        auth_mode: authMode,
+        password_enabled: passwordEnabled,
+        oidc_enabled: oidcEnabled,
         auto_login: autoLogin,
+        ui_username: uiUsername || undefined,
         ui_password: uiPassword || undefined,
         oidc_issuer: oidcIssuer || undefined,
         oidc_client_id: oidcClientId || undefined,
@@ -85,22 +90,24 @@ export default function AuthenticationSection() {
         </div>
       )}
 
-      <label className="block text-sm">
-        <span className="mb-1 block text-zinc-400">{t('settingsAuth.authMode')}</span>
-        <select
-          className={inputCls}
-          value={authMode}
-          onChange={(e) => setAuthMode(e.target.value as AuthConfig['auth_mode'])}
-        >
-          {authModes.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {authMode === 'password' && (
+      <Toggle
+        checked={passwordEnabled}
+        onChange={setPasswordEnabled}
+        label={t('settingsAuth.enablePassword')}
+      />
+      {passwordEnabled && (
+        <label className="block text-sm">
+          <span className="mb-1 block text-zinc-400">{t('settingsAuth.username')}</span>
+          <input
+            className={inputCls}
+            value={uiUsername}
+            onChange={(e) => setUiUsername(e.target.value)}
+            placeholder={t('settingsAuth.usernamePlaceholder')}
+            autoComplete="username"
+          />
+        </label>
+      )}
+      {passwordEnabled && (
         <label className="block text-sm">
           <span className="mb-1 block text-zinc-400">
             {t('settingsAuth.uiPassword')}{' '}
@@ -123,7 +130,12 @@ export default function AuthenticationSection() {
         </label>
       )}
 
-      {authMode === 'oidc' && (
+      <Toggle
+        checked={oidcEnabled}
+        onChange={setOidcEnabled}
+        label={t('settingsAuth.enableOidc')}
+      />
+      {oidcEnabled && (
         <div className="space-y-3 rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
           <Toggle
             checked={autoLogin}

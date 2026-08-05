@@ -314,7 +314,7 @@ def test_upgrade_v3_to_v5_in_place(tmp_path):
 
     # Opening with the current State must apply migrations 4, 5, 6, and 7, and keep data.
     s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 7
+    assert s.query_one("SELECT version FROM schema_version")["version"] == 10
 
     # the new table exists and is usable
     assert s.query_one("SELECT name FROM sqlite_master WHERE name='tag_repository'")
@@ -338,7 +338,7 @@ def test_upgrade_v3_to_v5_in_place(tmp_path):
 
     # reopening is a no-op at version 7
     s2 = State(db_path)
-    assert s2.query_one("SELECT version FROM schema_version")["version"] == 7
+    assert s2.query_one("SELECT version FROM schema_version")["version"] == 10
     assert s2.query_one("SELECT name FROM apps WHERE id=1")["name"] == "Legacy Radarr"
 
 
@@ -357,7 +357,7 @@ def test_upgrade_rewrites_legacy_linked_rules_only(tmp_path):
         ],
     )
     s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 7
+    assert s.query_one("SELECT version FROM schema_version")["version"] == 10
     by_id = {r["id"]: r["dir_template"] for r in s.query("SELECT id, dir_template FROM rules")}
     assert by_id[1] == "/media/kids"          # rewritten
     assert by_id[2] == "/media/movies/{$tag}"  # untouched
@@ -379,7 +379,7 @@ def test_upgrade_skips_rewrite_when_allowed_roots_customized(tmp_path):
         allowed_roots=["/videos"],
     )
     s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 7
+    assert s.query_one("SELECT version FROM schema_version")["version"] == 10
     by_id = {r["id"]: r["dir_template"] for r in s.query("SELECT id, dir_template FROM rules")}
     assert by_id[1] == "/linked/kids"   # left alone: user manages their roots
     assert by_id[2] == "/videos/tv"
@@ -739,64 +739,113 @@ def test_list_presets_base_folder_trailing_slash(client, tmp_path):
 
 def test_auth_view_masks_secrets(client):
     v = client.get("/api/settings/auth").json()
-    assert v["auth_mode"] == "none"
+    assert v["password_enabled"] is False
+    assert v["oidc_enabled"] is False
     assert v["auto_login"] is True
-    assert v["auth_modes"] == ["none", "password", "oidc"]
+    assert v["ui_username"] == "admin"  # default when never configured
     # no secret is ever returned as a value
     assert "ui_password" not in v and "oidc_client_secret" not in v
     assert v["ui_password_set"] is False
     assert v["oidc_client_secret_set"] is False
 
 
-def test_auth_mode_switch_live_and_password_gates(client):
-    # switch to password (env was none) — takes effect immediately
-    r = client.put("/api/settings/auth", json={"auth_mode": "password",
+def test_auth_username_settable_via_put(client):
+    r = client.put("/api/settings/auth", json={"password_enabled": True,
+                                               "ui_username": "carol",
+                                               "ui_password": "s3cret"})
+    assert r.status_code == 200, r.text
+    assert r.json()["ui_username"] == "carol"
+    # Settings just switched password mode on — need to authenticate before
+    # further /api/settings/auth calls (they're behind CurrentUser too).
+    assert client.post("/api/auth/password",
+                       json={"username": "carol", "password": "s3cret"}).status_code == 200
+    assert client.get("/api/settings/auth").json()["ui_username"] == "carol"
+    client.put("/api/settings/auth", json={"password_enabled": False})
+
+
+def test_auth_flags_switch_live_and_password_gates(client):
+    # enable password login (env had it off) — takes effect immediately
+    r = client.put("/api/settings/auth", json={"password_enabled": True,
+                                               "oidc_enabled": False,
                                                "ui_password": "s3cret"})
     assert r.status_code == 200, r.text
     assert r.json()["ui_password_set"] is True
-    assert client.get("/api/auth/me").json()["auth_mode"] == "password"
+    assert client.get("/api/auth/me").json()["password_enabled"] is True
     # data endpoint now 401 until the right password is used
     assert client.get("/api/apps").status_code == 401
     assert client.post("/api/auth/password",
-                       json={"password": "nope"}).status_code == 401
+                       json={"username": "admin", "password": "nope"}).status_code == 401
     assert client.post("/api/auth/password",
-                       json={"password": "s3cret"}).status_code == 200
+                       json={"username": "admin", "password": "s3cret"}).status_code == 200
     assert client.get("/api/apps").status_code == 200
-    # back to none
-    client.put("/api/settings/auth", json={"auth_mode": "none"})
-    assert client.get("/api/auth/me").json()["auth_mode"] == "none"
+    # back to open
+    client.put("/api/settings/auth", json={"password_enabled": False,
+                                           "oidc_enabled": False})
+    j = client.get("/api/auth/me").json()
+    assert j["password_enabled"] is False and j["oidc_enabled"] is False
     assert client.get("/api/apps").status_code == 200
 
 
 def test_auth_lockout_validation(client):
-    # password mode with no password (env + runtime) -> rejected
-    r = client.put("/api/settings/auth", json={"auth_mode": "password",
+    # password enabled with no password (env + runtime) -> rejected
+    r = client.put("/api/settings/auth", json={"password_enabled": True,
                                                "ui_password": ""})
     assert r.status_code == 422 and "password is required" in r.json()["detail"]
-    # oidc mode with no issuer/client -> rejected
-    r = client.put("/api/settings/auth", json={"auth_mode": "oidc",
+    # oidc enabled with no issuer/client -> rejected
+    r = client.put("/api/settings/auth", json={"oidc_enabled": True,
                                                "oidc_issuer": "",
                                                "oidc_client_id": ""})
     assert r.status_code == 422 and "issuer and client ID are required" in \
         r.json()["detail"]
-    # invalid mode
-    assert client.put("/api/settings/auth", json={"auth_mode": "bogus"}).status_code == 422
 
 
 def test_auth_secrets_hidden_from_settings_dump(client):
-    client.put("/api/settings/auth", json={"auth_mode": "password",
+    client.put("/api/settings/auth", json={"password_enabled": True,
                                            "ui_password": "topsecret"})
     # the generic settings dump must not leak the password
     assert "auth_password" not in client.get("/api/settings").json()
-    client.put("/api/settings/auth", json={"auth_mode": "none"})
+    client.put("/api/settings/auth", json={"password_enabled": False})
+
+
+def test_auth_password_hashed_at_rest(client):
+    client.put("/api/settings/auth", json={"password_enabled": True,
+                                           "ui_password": "topsecret"})
+    stored = client.app.state.db.get_setting("auth_password")
+    assert stored != "topsecret"
+    assert stored.startswith("$argon2id$")
+    client.put("/api/settings/auth", json={"password_enabled": False})
 
 
 def test_auth_auto_login_flag(client, monkeypatch):
-    monkeypatch.setenv("AUTH_MODE", "oidc")
+    monkeypatch.setenv("AUTH_OIDC_ENABLED", "true")
     app = create_app(db_path=client.app.state.db.db_path)
-    # fresh app on the same DB in oidc mode: auto_login defaults on, and a
-    # runtime Setting (written directly, since the endpoint is auth-gated) flips it
+    # fresh app on the same DB with oidc enabled: auto_login defaults on, and
+    # a runtime Setting (written directly, since the endpoint is auth-gated)
+    # flips it
     with TestClient(app) as c:
         assert c.get("/api/auth/me").json()["auto_login"] is True
         c.app.state.db.set_setting("oidc_auto_login", False)
         assert c.get("/api/auth/me").json()["auto_login"] is False
+
+
+def test_auth_both_enabled_at_once(client):
+    # Password and OIDC are independent — enabling both together is valid
+    # (no mutual-exclusion check), unlike the old exclusive-mode design.
+    r = client.put(
+        "/api/settings/auth",
+        json={
+            "password_enabled": True,
+            "oidc_enabled": True,
+            "ui_password": "s3cret",
+            "oidc_issuer": "https://issuer.example.com",
+            "oidc_client_id": "cid",
+            "oidc_client_secret": "csecret",
+        },
+    )
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["password_enabled"] is True and j["oidc_enabled"] is True
+    me = client.get("/api/auth/me").json()
+    assert me["password_enabled"] is True and me["oidc_enabled"] is True
+    client.put("/api/settings/auth", json={"password_enabled": False,
+                                           "oidc_enabled": False})

@@ -10,15 +10,17 @@ export class ApiError extends Error {
 let redirecting = false
 
 /**
- * A 401 means the local session is gone. Reload the SPA root so the
- * AuthGate re-runs its mode-aware logic (OIDC round-trip, password prompt,
- * or none-mode pass-through) instead of hardcoding one auth path here.
- * Redirects at most once to avoid loops.
+ * A 401 means the local session is gone. Send the browser to the dedicated
+ * /login route (preserving the current path as `next` so it can return
+ * here once signed in) instead of hardcoding one auth path here — /login
+ * itself decides between auto-redirecting to OIDC, showing the password
+ * form, or both. Redirects at most once to avoid loops.
  */
 export function redirectToLogin() {
   if (redirecting) return
   redirecting = true
-  window.location.assign('/')
+  const next = window.location.pathname + window.location.search
+  window.location.assign(`/login?next=${encodeURIComponent(next)}`)
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -53,27 +55,35 @@ export type Health = {
 
 export type Me = {
   authenticated: boolean
-  auth_mode: string
-  // oidc only: whether the gate auto-redirects to the provider on load
-  auto_login?: boolean
+  // Password and OIDC login are independent — either, both, or neither may
+  // be enabled at once; the login page offers whichever are active.
+  password_enabled: boolean
+  oidc_enabled: boolean
+  // oidc only: whether /login auto-redirects to the provider on load
+  auto_login: boolean
   email?: string | null
   name?: string | null
 }
 
 export type AuthConfig = {
-  auth_mode: 'none' | 'password' | 'oidc'
+  password_enabled: boolean
+  oidc_enabled: boolean
   auto_login: boolean
+  ui_username: string
   ui_password_set: boolean
   oidc_issuer: string
   oidc_client_id: string
   oidc_client_secret_set: boolean
   oidc_redirect_uri: string
-  auth_modes: string[]
 }
 
 export type AuthConfigInput = {
-  auth_mode: 'none' | 'password' | 'oidc'
+  password_enabled: boolean
+  oidc_enabled: boolean
   auto_login?: boolean
+  // blank = keep the current value (not a secret, but same convention —
+  // defaults to "admin" if never set at all)
+  ui_username?: string
   // blank = keep the current value (the UI can't recover secrets)
   ui_password?: string
   oidc_issuer?: string
@@ -217,6 +227,19 @@ export const api = {
   logout: async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
     window.location.assign('/')
+  },
+  /** Password login: true on success (a session cookie is now set), false on
+   * a wrong username/password. Manual fetch (not `req`) — a 401 here is an
+   * expected, inline-displayable outcome, not the "session is gone" case
+   * `req` handles. */
+  loginWithPassword: async (username: string, password: string): Promise<boolean> => {
+    const res = await fetch('/api/auth/password', {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+    return res.ok || res.type === 'opaqueredirect'
   },
   listApps: () => req<AppItem[]>('/api/apps'),
   createApp: (b: AppInput) =>

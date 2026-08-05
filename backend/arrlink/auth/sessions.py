@@ -25,6 +25,7 @@ def create_session(
     groups: list[str],
     refresh_token: str | None,
     ttl_h: float,
+    kind: str = "oidc",
 ) -> tuple[str, float, float]:
     """Insert a session; returns (token, created_at, expires_at)."""
     token = new_session_token()
@@ -32,8 +33,8 @@ def create_session(
     expires = now + ttl_h * 3600
     db.execute(
         "INSERT INTO sessions (token, email, name, groups_json, refresh_token, "
-        "created_at, expires_at) VALUES (?,?,?,?,?,?,?)",
-        (token, email, name, json.dumps(groups), refresh_token, now, expires),
+        "created_at, expires_at, kind) VALUES (?,?,?,?,?,?,?,?)",
+        (token, email, name, json.dumps(groups), refresh_token, now, expires, kind),
     )
     db.commit()
     return token, now, expires

@@ -211,7 +211,7 @@ def issuer():
 
 @pytest.fixture()
 def client(issuer, tmp_path, monkeypatch):
-    monkeypatch.setenv("AUTH_MODE", "oidc")
+    monkeypatch.setenv("AUTH_OIDC_ENABLED", "true")
     monkeypatch.setenv("OIDC_ISSUER", issuer.url)
     monkeypatch.setenv("OIDC_CLIENT_ID", CLIENT_ID)
     monkeypatch.setenv("OIDC_CLIENT_SECRET", CLIENT_SECRET)
@@ -225,7 +225,7 @@ def client(issuer, tmp_path, monkeypatch):
 
 @pytest.fixture()
 def pw_client(tmp_path, monkeypatch):
-    monkeypatch.setenv("AUTH_MODE", "password")
+    monkeypatch.setenv("AUTH_PASSWORD_ENABLED", "true")
     monkeypatch.setenv("UI_PASSWORD", "hunter2")
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     app = create_app(db_path=tmp_path / "arrlink.db")
@@ -283,8 +283,12 @@ def complete_login(client: TestClient, code: str, state: str) -> TestClient:
 def test_me_unauthenticated_without_cookie(client):
     r = client.get("/api/auth/me")
     assert r.status_code == 200
-    assert r.json() == {"authenticated": False, "auth_mode": "oidc",
-                        "auto_login": True}
+    assert r.json() == {
+        "authenticated": False,
+        "password_enabled": False,
+        "oidc_enabled": True,
+        "auto_login": True,
+    }
 
 
 def test_me_oidc_autologin_flag(client):
@@ -567,13 +571,13 @@ def test_password_mode(pw_client):
     # wrong password (JSON body — never a query param)
     assert pw_client.post(
         "/api/auth/password",
-        json={"password": "wrong"},
+        json={"username": "admin", "password": "wrong"},
         follow_redirects=False,
     ).status_code == 401
 
     r = pw_client.post(
         "/api/auth/password",
-        json={"password": "hunter2"},
+        json={"username": "admin", "password": "hunter2"},
         follow_redirects=False,
     )
     assert r.status_code == 302
@@ -588,13 +592,329 @@ def test_password_mode_rejects_missing_body(pw_client):
     assert pw_client.post("/api/auth/password", follow_redirects=False).status_code == 422
 
 
+def test_password_mode_rejects_missing_username(pw_client):
+    # password without a username → 422, not treated as "use the default"
+    assert pw_client.post(
+        "/api/auth/password", json={"password": "hunter2"}, follow_redirects=False
+    ).status_code == 422
+
+
+def test_password_username_defaults_to_admin(pw_client):
+    # UI_USERNAME was never set — "admin" is the documented default.
+    assert pw_client.post(
+        "/api/auth/password",
+        json={"username": "wrong-user", "password": "hunter2"},
+        follow_redirects=False,
+    ).status_code == 401
+    assert pw_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    ).status_code == 302
+    # case-insensitive, like the rest of the auth surface (allow-list emails/groups)
+    assert pw_client.post(
+        "/api/auth/password",
+        json={"username": "Admin", "password": "hunter2"},
+        follow_redirects=False,
+    ).status_code == 302
+
+
+def test_password_username_custom_via_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTH_PASSWORD_ENABLED", "true")
+    monkeypatch.setenv("UI_USERNAME", "alice")
+    monkeypatch.setenv("UI_PASSWORD", "hunter2")
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        assert c.post(
+            "/api/auth/password",
+            json={"username": "admin", "password": "hunter2"},
+            follow_redirects=False,
+        ).status_code == 401
+        assert c.post(
+            "/api/auth/password",
+            json={"username": "alice", "password": "hunter2"},
+            follow_redirects=False,
+        ).status_code == 302
+
+
+def test_password_username_override_via_settings(pw_client):
+    # A runtime Setting overrides the env default, same pattern as everything else.
+    pw_client.app.state.db.set_setting("auth_username", "bob")
+    assert pw_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    ).status_code == 401
+    assert pw_client.post(
+        "/api/auth/password",
+        json={"username": "bob", "password": "hunter2"},
+        follow_redirects=False,
+    ).status_code == 302
+
+
+def test_password_login_issues_opaque_token_not_the_password(pw_client):
+    # the cookie must be a session token, never the password itself.
+    r = pw_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    token = r.cookies.get("arrlink_pw")
+    assert token is not None
+    assert token != "hunter2"
+    s = sess.get_session(pw_client.app.state.db, token)
+    assert s is not None
+    assert s["email"] == "admin"
+
+
+def test_password_login_works_via_env_seeded_password_never_written_to_db(pw_client):
+    # UI_PASSWORD is env-seeded (never written through the Settings page), so
+    # nothing is ever written to the `auth_password` Setting — it's hashed
+    # once in-process (Settings.ui_password_hash) and compared from there.
+    assert pw_client.app.state.db.get_setting("auth_password") is None
+    assert pw_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    ).status_code == 302
+
+
+def test_logout_clears_and_revokes_password_session(pw_client):
+    r = pw_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    )
+    token = r.cookies.get("arrlink_pw")
+    assert pw_client.get("/api/auth/me").json()["authenticated"] is True
+
+    r = pw_client.post("/api/auth/logout", follow_redirects=False)
+    assert r.status_code == 302
+    cookies = _set_cookies(r)
+    assert 'arrlink_pw=""' in cookies and "Max-Age=0" in cookies
+    # the underlying session row is gone too, not just the cookie
+    assert sess.get_session(pw_client.app.state.db, token) is None
+    assert pw_client.get("/api/auth/me").json()["authenticated"] is False
+
+
 def test_none_mode_open(tmp_path, monkeypatch):
+    # Legacy AUTH_MODE=none still resolves to open (both flags false).
     monkeypatch.setenv("AUTH_MODE", "none")
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     app = create_app(db_path=tmp_path / "arrlink.db")
     with TestClient(app) as c:
         assert c.get("/api/apps").status_code == 200
-        assert c.get("/api/auth/me").json()["authenticated"] is False
+        j = c.get("/api/auth/me").json()
+        assert j["authenticated"] is True
+        assert j["password_enabled"] is False
+        assert j["oidc_enabled"] is False
+
+
+def test_open_mode_with_no_auth_env_at_all(tmp_path, monkeypatch):
+    # No auth env vars set whatsoever (the actual out-of-the-box default) —
+    # both flags default false, same open behavior as AUTH_MODE=none.
+    monkeypatch.delenv("AUTH_MODE", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD_ENABLED", raising=False)
+    monkeypatch.delenv("AUTH_OIDC_ENABLED", raising=False)
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        assert c.get("/api/apps").status_code == 200
+        j = c.get("/api/auth/me").json()
+        assert j["authenticated"] is True
+        assert j["password_enabled"] is False
+        assert j["oidc_enabled"] is False
+
+
+# ---------------------------------------------------------------------------
+# dual-mode auth: password + OIDC independently enabled, migration
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def both_client(issuer, tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTH_OIDC_ENABLED", "true")
+    monkeypatch.setenv("OIDC_ISSUER", issuer.url)
+    monkeypatch.setenv("OIDC_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setenv("OIDC_CLIENT_SECRET", CLIENT_SECRET)
+    monkeypatch.setenv("AUTH_PASSWORD_ENABLED", "true")
+    monkeypatch.setenv("UI_PASSWORD", "hunter2")
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    clear_discovery_cache()
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        yield c
+    clear_discovery_cache()
+
+
+def test_both_enabled_me_reports_both_flags(both_client):
+    j = both_client.get("/api/auth/me").json()
+    assert j == {
+        "authenticated": False,
+        "password_enabled": True,
+        "oidc_enabled": True,
+        "auto_login": True,
+    }
+
+
+def test_both_enabled_password_alone_grants_access(both_client):
+    r = both_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    assert both_client.get("/api/apps").status_code == 200
+    j = both_client.get("/api/auth/me").json()
+    assert j["authenticated"] is True and j["email"] == "admin"
+
+
+def test_both_enabled_oidc_alone_grants_access(both_client, issuer):
+    email = "dual@example.com"
+    code, state = start_login(both_client, issuer, email)
+    complete_login(both_client, code, state)
+    assert both_client.get("/api/apps").status_code == 200
+    j = both_client.get("/api/auth/me").json()
+    assert j["authenticated"] is True and j["email"] == email
+
+
+def test_both_enabled_neither_credential_present_is_401(both_client):
+    assert both_client.get("/api/apps").status_code == 401
+    assert both_client.get("/api/auth/me").json()["authenticated"] is False
+
+
+def test_both_enabled_bad_password_cookie_with_no_oidc_session_stays_401(both_client):
+    both_client.cookies.set("arrlink_pw", "not-a-real-token")
+    assert both_client.get("/api/apps").status_code == 401
+
+
+def test_both_enabled_session_kind_is_not_cross_acceptable(both_client, issuer):
+    # A valid *password*-kind token placed in the OIDC cookie slot (or vice
+    # versa) must not authenticate — sessions.kind ties a token to the flow
+    # that actually issued it, not just to whichever cookie carries it.
+    r = both_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    )
+    password_token = r.cookies.get("arrlink_pw")
+    both_client.cookies.delete("arrlink_pw")
+    both_client.cookies.set("arrlink_session", password_token)
+    assert both_client.get("/api/auth/me").json()["authenticated"] is False
+    both_client.cookies.delete("arrlink_session")
+
+    email = "kindcheck@example.com"
+    code, state = start_login(both_client, issuer, email)
+    complete_login(both_client, code, state)
+    oidc_token = both_client.cookies.get("arrlink_session")
+    both_client.cookies.delete("arrlink_session")
+    both_client.cookies.delete("arrlink_rt")
+    both_client.cookies.set("arrlink_pw", oidc_token)
+    assert both_client.get("/api/auth/me").json()["authenticated"] is False
+
+
+def test_new_auth_env_vars_parse_as_bool(tmp_path, monkeypatch):
+    from arrlink.config import Settings
+
+    monkeypatch.setenv("AUTH_PASSWORD_ENABLED", "true")
+    monkeypatch.setenv("AUTH_OIDC_ENABLED", "false")
+    monkeypatch.setenv("OIDC_AUTO_LOGIN", "false")
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    settings = Settings()
+    assert settings.auth_password_enabled is True
+    assert settings.auth_oidc_enabled is False
+    assert settings.oidc_auto_login is False
+
+
+def test_env_seeded_password_is_hashed_once_and_cached(tmp_path, monkeypatch):
+    from arrlink.config import Settings
+
+    monkeypatch.setenv("UI_PASSWORD", "hunter2")
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    settings = Settings()
+    h1 = settings.ui_password_hash
+    h2 = settings.ui_password_hash
+    assert h1.startswith("$argon2id$")
+    assert h1 == h2  # cached_property — same hash object every access, not recomputed
+
+
+def test_fresh_install_has_no_auth_settings(tmp_path):
+    from arrlink.state import State
+
+    db = State(tmp_path / "fresh.db")
+    assert db.get_setting("auth_password_enabled") is None
+    assert db.get_setting("auth_oidc_enabled") is None
+
+
+def test_sessions_kind_column_added_by_migration_with_safe_default(tmp_path):
+    """A DB predating the sessions.kind column gets it added, defaulting
+    existing rows to 'oidc' (that column didn't exist before dual-mode auth,
+    so every pre-existing session was necessarily an OIDC one) without
+    losing any data."""
+    import sqlite3
+
+    from arrlink.state import State
+
+    db_path = tmp_path / "pre-kind.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    conn.execute("INSERT INTO schema_version (version) VALUES (7)")
+    conn.execute(
+        "CREATE TABLE sessions (token TEXT PRIMARY KEY, email TEXT NOT NULL, "
+        "name TEXT, groups_json TEXT NOT NULL DEFAULT '[]', refresh_token TEXT, "
+        "created_at REAL NOT NULL, expires_at REAL NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO sessions (token, email, name, groups_json, refresh_token, "
+        "created_at, expires_at) VALUES ('tok1', 'alice@example.com', 'Alice', "
+        "'[]', NULL, 0, 99999999999)"
+    )
+    conn.execute(
+        "CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+    db = State(db_path)
+    row = db.query_one("SELECT * FROM sessions WHERE token='tok1'")
+    assert row is not None
+    assert row["kind"] == "oidc"
+    assert row["email"] == "alice@example.com"
+
+
+def test_sessions_kind_migration_applies_to_db_stuck_at_old_schema_version_9(tmp_path):
+    """Regression test: an early draft of the sessions.kind migration briefly shipped as version 8."""
+    import sqlite3
+
+    from arrlink.state import State
+
+    db_path = tmp_path / "stuck-at-9.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    conn.execute("INSERT INTO schema_version (version) VALUES (9)")
+    conn.execute(
+        "CREATE TABLE sessions (token TEXT PRIMARY KEY, email TEXT NOT NULL, "
+        "name TEXT, groups_json TEXT NOT NULL DEFAULT '[]', refresh_token TEXT, "
+        "created_at REAL NOT NULL, expires_at REAL NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO sessions (token, email, name, groups_json, refresh_token, "
+        "created_at, expires_at) VALUES ('tok1', 'admin', 'admin', "
+        "'[]', NULL, 0, 99999999999)"
+    )
+    conn.execute(
+        "CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+    db = State(db_path)
+    row = db.query_one("SELECT * FROM sessions WHERE token='tok1'")
+    assert row is not None
+    assert row["kind"] == "oidc"
+    assert db.query_one("SELECT version FROM schema_version")["version"] == 10
 
 
 # ---------------------------------------------------------------------------

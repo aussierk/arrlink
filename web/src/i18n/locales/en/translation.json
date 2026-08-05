@@ -19,18 +19,21 @@
     "joinAnd": "AND",
     "joinOr": "OR"
   },
-  "authGate": {
+  "loginPage": {
+    "title": "Sign in",
+    "checking": "Checking sign-in…",
+    "apiUnreachable": "Could not reach the ArrLink API.",
     "notAuthorized": "Your account is not authorized for ArrLink. Ask an admin to add your email or group.",
     "signInFailed": "Sign-in failed: {{reason}}",
-    "passwordPrompt": "Password:",
-    "signInCancelled": "Sign-in cancelled.",
-    "wrongPassword": "Wrong password.",
-    "signInFailedGeneric": "Sign-in failed.",
-    "apiUnreachable": "Could not reach the ArrLink API.",
-    "signInToContinue": "Sign in to continue.",
-    "signIn": "Sign in",
-    "trySigningIn": "Try signing in",
-    "checkingSignIn": "Checking sign-in…"
+    "redirecting": "Redirecting you to your sign-in provider…",
+    "ssoButton": "Sign in with SSO",
+    "orDivider": "or",
+    "usernameLabel": "Username",
+    "usernamePlaceholder": "username",
+    "passwordLabel": "Password",
+    "passwordSubmit": "Sign in",
+    "wrongCredentials": "Wrong username or password.",
+    "signInFailedGeneric": "Sign-in failed."
   },
   "modal": {
     "close": "Close"
@@ -103,9 +106,11 @@
     "connectedApps": "Connected apps",
     "version": "version {{version}}",
     "schemaVersion": "schema v{{version}}",
-    "authModeLine": "mode: {{mode}}",
+    "authMethodsLine": "auth: {{methods}}",
+    "methodPassword": "password",
+    "methodOidc": "OIDC",
+    "methodNone": "none (open)",
     "signedIn": "signed in",
-    "oidcComing": "OIDC auto-login arrives in M1",
     "appsConnectedCount_one": "app connected",
     "appsConnectedCount_other": "apps connected",
     "hardlinked": "hardlinked",
@@ -277,9 +282,12 @@
   },
   "settingsAuth": {
     "title": "Authentication",
-    "subtitle": "Choose how people sign in. Switching mode applies immediately. Secret fields are blank = keep the current value; only a new value replaces it (secrets are never returned to the UI).",
+    "subtitle": "Password and OIDC login are independent — enable either or both. Changes apply immediately. Secret fields are blank = keep the current value; only a new value replaces it (secrets are never returned to the UI).",
     "saved": "Authentication saved — it takes effect immediately (no restart).",
-    "authMode": "Auth mode",
+    "enablePassword": "Enable password login",
+    "enableOidc": "Enable OIDC login",
+    "username": "Username",
+    "usernamePlaceholder": "admin",
     "uiPassword": "UI password",
     "setBlankToKeep": " (set — blank to keep)",
     "uiPasswordPlaceholderSet": "••••",
@@ -363,8 +371,6 @@
     "addConditionFirst": "+ Add condition",
     "addAnotherCondition": "Add another condition:",
     "addAnd": "+ AND",
-    "addOr": "+ OR",
-    "summarize": "{{label}}: {{value}}",
-    "summarizeEmpty": "(empty)"
+    "addOr": "+ OR"
   }
 }

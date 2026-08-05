@@ -7,7 +7,8 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from ..config import AUTH_MODES, effective_auth
+from ..auth.passwords import hash_password
+from ..config import effective_auth
 from ..deps import get_db
 from ..state import State
 from .auth import CurrentUser
@@ -51,8 +52,12 @@ def effective(
 
 
 class AuthSettingsIn(BaseModel):
-    auth_mode: str
+    password_enabled: bool = False
+    oidc_enabled: bool = False
     auto_login: bool = True
+    # Not a secret, but follows the same "blank = keep current" convention
+    # as the rest of these fields (default "admin" if never set at all).
+    ui_username: str = ""
     # Blank secret fields = keep the current value (the UI can't recover them).
     ui_password: str = ""
     oidc_issuer: str = ""
@@ -65,14 +70,15 @@ def _auth_view(db: State, env) -> dict:
     """Masked view of the effective auth config (no secrets returned)."""
     auth = effective_auth(db, env)
     return {
-        "auth_mode": auth["auth_mode"],
+        "password_enabled": auth["password_enabled"],
+        "oidc_enabled": auth["oidc_enabled"],
         "auto_login": bool(auth["auto_login"]),
+        "ui_username": auth["ui_username"],
         "ui_password_set": bool(auth["ui_password"]),
         "oidc_issuer": auth["oidc_issuer"] or "",
         "oidc_client_id": auth["oidc_client_id"] or "",
         "oidc_client_secret_set": bool(auth["oidc_client_secret"]),
         "oidc_redirect_uri": auth["oidc_redirect_uri"] or "",
-        "auth_modes": list(AUTH_MODES),
     }
 
 
@@ -91,10 +97,9 @@ def put_auth(
     db: State = Depends(get_db),
 ) -> dict:
     env = request.app.state.settings
-    if body.auth_mode not in AUTH_MODES:
-        raise HTTPException(422, f"auth_mode must be one of {list(AUTH_MODES)}")
     # Validate against the EFFECTIVE (post-save) values so we never allow saving
-    # a mode that would immediately lock everyone out.
+    # a flag combination that would immediately lock everyone out. Password and
+    # OIDC are independent — both, one, or neither may be enabled.
     eff_pw = body.ui_password or db.get_setting("auth_password") or env.ui_password or ""
     eff_issuer = (
         body.oidc_issuer or db.get_setting("oidc_issuer") or env.oidc_issuer or ""
@@ -105,18 +110,21 @@ def put_auth(
         or env.oidc_client_id
         or ""
     )
-    if body.auth_mode == "password" and not eff_pw:
+    if body.password_enabled and not eff_pw:
         raise HTTPException(
-            422, "a UI password is required when auth mode is password"
+            422, "a UI password is required to enable password login"
         )
-    if body.auth_mode == "oidc" and not (eff_issuer and eff_cid):
+    if body.oidc_enabled and not (eff_issuer and eff_cid):
         raise HTTPException(
-            422, "OIDC issuer and client ID are required when auth mode is oidc"
+            422, "OIDC issuer and client ID are required to enable OIDC login"
         )
-    db.set_setting("auth_mode", body.auth_mode)
+    db.set_setting("auth_password_enabled", body.password_enabled)
+    db.set_setting("auth_oidc_enabled", body.oidc_enabled)
     db.set_setting("oidc_auto_login", body.auto_login)
+    if body.ui_username:
+        db.set_setting("auth_username", body.ui_username)
     if body.ui_password:
-        db.set_setting("auth_password", body.ui_password)
+        db.set_setting("auth_password", hash_password(body.ui_password))
     if body.oidc_issuer:
         db.set_setting("oidc_issuer", body.oidc_issuer)
     if body.oidc_client_id:
@@ -128,7 +136,11 @@ def put_auth(
             db.set_setting("oidc_redirect_uri", body.oidc_redirect_uri)
         else:
             db.delete_setting("oidc_redirect_uri")
-    db.log_event("info", f"auth settings updated (mode={body.auth_mode})")
+    db.log_event(
+        "info",
+        f"auth settings updated (password={body.password_enabled}, "
+        f"oidc={body.oidc_enabled})",
+    )
     return _auth_view(db, env)
 
 

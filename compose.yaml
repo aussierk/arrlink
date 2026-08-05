@@ -11,12 +11,16 @@ services:
       TZ: America/Toronto
       LOG_LEVEL: info
       CONFIG_DIR: /config
-      # M0: default open (LAN). M1: set to 'oidc' with the variables below.
-      AUTH_MODE: none
-      # AUTH_MODE: oidc
+      # Default: open (LAN). Password and OIDC login are independent and can
+      # both be enabled at once — see .env.example for the full list.
+      AUTH_PASSWORD_ENABLED: "false"
+      # UI_USERNAME: admin
+      # UI_PASSWORD: change-me
+      AUTH_OIDC_ENABLED: "false"
       # OIDC_ISSUER: https://<provider>/application/o/<app>/
       # OIDC_CLIENT_ID: <client-id>
       # OIDC_CLIENT_SECRET: <client-secret>
+      # OIDC_AUTO_LOGIN: "true"
     volumes:
       - ./arrlink/config:/config
       # Writable link root on the SAME pool as the media (default allowed root

@@ -8,9 +8,10 @@ import {
   Settings as SettingsIcon,
   Tags as TagsIcon,
 } from 'lucide-react'
-import AuthGate from './components/AuthGate'
+import RequireAuth from './components/RequireAuth'
 import { api, type Me } from './lib/api'
 import Dashboard from './pages/Dashboard'
+import LoginPage from './pages/LoginPage'
 import Logs from './pages/Logs'
 import Rules from './pages/Rules'
 import Settings from './pages/Settings'
@@ -27,9 +28,17 @@ const nav = [
 
 export default function App() {
   return (
-    <AuthGate>
-      <Shell />
-    </AuthGate>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/*"
+        element={
+          <RequireAuth>
+            <Shell />
+          </RequireAuth>
+        }
+      />
+    </Routes>
   )
 }
 

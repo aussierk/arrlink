@@ -15,17 +15,24 @@ reacting to new imports and tag changes.
 - Multi-stage Docker image (Node 22 → Python 3.12-slim), `PUID`/`PGID`
   (starts as root to chown volumes, drops to `PUID`/`PGID` via gosu),
   healthcheck
-- **Auth (M1)**
+- **Auth (M1, dual-mode in M10)**
+  - **Password** and **OIDC** login are independent — either, both, or
+    neither can be enabled, and the login page offers whichever are active
   - Generic **OIDC** (Auth Code + PKCE, **confidential client**): provider
     discovery, code exchange, `state`/`nonce` validation, group/email
     allow-lists (union; empty = anyone signed in)
-  - **Auto-login**: no in-app auth screen — if the browser already has a
-    provider session the OIDC round-trip is instant
+  - **Auto-login**: when OIDC is enabled, `/login` redirects straight to the
+    provider on load (instant when the browser already has a provider
+    session) — visit `/login?form=true` to skip that and reach the manual
+    sign-in form/SSO-button chooser instead (e.g. to use password login even
+    with auto-login on)
   - **Silent refresh**: 12 h local sessions; a background sweeper refreshes
     them via the stored provider refresh token (provider token rotation
     supported); rejected refreshes drop the session, which the SPA handles by
     re-triggering the instant round-trip
-  - `none` / `password` fallback modes
+  - Password login: **Argon2id**-hashed at rest (via `argon2-cffi`), opaque
+    session token (not the password) is what the cookie actually holds
+  - Open mode (both disabled, default): no login at all — LAN-only assumption
   - All data endpoints 401 without a session; `/api/health` stays open for
     the container healthcheck
 - **Apps (M2)**
@@ -39,7 +46,9 @@ reacting to new imports and tag changes.
   - Tags page with usage counts + "used by N rules" (true matcher match,
     disabled rules excluded)
 - Vite + React + TypeScript + Tailwind SPA (dark theme)
-  - Auth gate (auto-login redirect, error surfaces, header user + sign out)
+  - Dedicated `/login` page (password form and/or SSO button, whichever are
+    enabled; OIDC auto-login redirect with the `?form=true` manual-chooser
+    escape hatch; error surfaces), header user + sign out
   - Dashboard (health, auth, connected apps, and the **Links** panel —
     browse/filter/remove/**repair**)
   - Apps (create **and edit** Radarr/Sonarr connections — name, URL, API key,
@@ -157,17 +166,33 @@ docker compose up -d
 - If you prefer a different root, set the `allowed_roots` Setting (Settings
   → Linking) and use matching base folders in your rules.
 
-### OIDC setup (M1)
+### Auth setup (password / OIDC / both — M1, dual-mode in M10)
 
+Password and OIDC login are independent — enable either or both, via `.env`
+(seed defaults) and/or Settings → Authentication (runtime overrides, take
+effect immediately, no restart).
+
+**Password login**: set `AUTH_PASSWORD_ENABLED=true` and `UI_PASSWORD=...`
+(or toggle it on and set a password in Settings → Authentication).
+`UI_USERNAME` defaults to `admin` if left unset. The password is hashed at
+rest (Argon2id); the session cookie holds an opaque token, not the password
+itself.
+
+**OIDC login**:
 1. In your provider (e.g. authentik) create an **application** +
    **provider** (OpenID Connect). In the application settings use the
    **client** tab to get the **client id** and **client secret**
    (confidential client).
 2. Redirect URI: `http(s)://<host>:8270/api/auth/oidc/callback`
-3. Set `AUTH_MODE=oidc`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
+3. Set `AUTH_OIDC_ENABLED=true`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
    `OIDC_CLIENT_SECRET` in the compose file.
 4. (Optional) restrict access: Settings → Access control → allowed groups
    and/or emails (empty = any authenticated user).
+5. `OIDC_AUTO_LOGIN` (default `true`): `/login` redirects straight to the
+   provider when OIDC is enabled. Visit `/login?form=true` to bypass that
+   and reach the manual chooser (SSO button and/or the password form) —
+   this isn't linked anywhere in the UI, it's a URL you navigate to
+   directly when you want to skip auto-login for one visit.
 
 > The **id_token is decoded but not signature-verified** (claims are read
 > from the userinfo endpoint over TLS; id_token is used for nonce/exp only).

@@ -18,6 +18,7 @@ from ..deps import get_db
 from ..state import State
 from ..auth.oidc import OidcClient, OidcError, b64url_encode, decode_jwt_payload
 from ..auth import sessions as sess
+from ..auth.passwords import verify_password
 from ..config import Settings, effective_auth
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -83,6 +84,26 @@ def _set_auth_cookies(
 def _clear_auth_cookies(response: RedirectResponse, request: Request) -> None:
     response.delete_cookie(SESSION_COOKIE)
     response.delete_cookie(sess.REFRESH_TOKEN_COOKIE)
+    response.delete_cookie(PASSWORD_COOKIE)
+
+
+def _lookup_session(request: Request, db: State, auth: dict) -> dict[str, Any] | None:
+    """Check whichever credential cookie is present against its matching
+    session `kind` — password and OIDC sessions share the `sessions` table
+    (dual-mode auth means both can be alive at once), so this also confirms
+    a token actually came from the flow its cookie claims, not just that
+    *some* valid token was found. Returns the session row, or None."""
+    if auth["oidc_enabled"]:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        s = sess.get_session(db, token) if token else None
+        if s is not None and s["kind"] == "oidc" and s["expires_at"] >= time.time():
+            return s
+    if auth["password_enabled"]:
+        token = request.cookies.get(PASSWORD_COOKIE, "")
+        s = sess.get_session(db, token) if token else None
+        if s is not None and s["kind"] == "password" and s["expires_at"] >= time.time():
+            return s
+    return None
 
 
 def _allowed(db: State, email: str, groups: list[str]) -> bool:
@@ -114,31 +135,19 @@ def get_current_user(
 ) -> dict[str, Any]:
     settings: Settings = request.app.state.settings
     auth = effective_auth(db, settings)
-    mode = auth["auth_mode"]
 
-    if mode == "none":
+    if not auth["password_enabled"] and not auth["oidc_enabled"]:
         return {"email": None, "name": "local", "authenticated": True}
 
-    if mode == "password":
-        cookie = request.cookies.get(PASSWORD_COOKIE, "")
-        expected = auth["ui_password"] or ""
-        if not expected or not hmac.compare_digest(cookie, expected):
-            raise HTTPException(401, "unauthenticated")
-        return {"email": "local", "name": "local", "authenticated": True}
-
-    if mode == "oidc":
-        token = request.cookies.get(SESSION_COOKIE, "")
-        s = sess.get_session(db, token) if token else None
-        if s is None or s["expires_at"] < time.time():
-            raise HTTPException(401, "unauthenticated")
-        return {
-            "email": s["email"],
-            "name": s.get("name"),
-            "authenticated": True,
-            "token": s["token"],
-        }
-
-    raise HTTPException(500, f"unknown auth mode: {mode}")
+    s = _lookup_session(request, db, auth)
+    if s is None:
+        raise HTTPException(401, "unauthenticated")
+    return {
+        "email": s["email"],
+        "name": s.get("name"),
+        "authenticated": True,
+        "token": s["token"],
+    }
 
 
 CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
@@ -156,29 +165,25 @@ def me(
     """Never 401s — the SPA uses this to decide whether to redirect to login."""
     settings: Settings = request.app.state.settings
     auth = effective_auth(db, settings)
-    mode = auth["auth_mode"]
-    if mode == "oidc":
-        token = request.cookies.get(SESSION_COOKIE, "")
-        s = sess.get_session(db, token) if token else None
-        if s and s["expires_at"] >= time.time():
-            return {
-                "authenticated": True,
-                "auth_mode": "oidc",
-                "auto_login": bool(auth["auto_login"]),
-                "email": s["email"],
-                "name": s.get("name"),
-            }
-        return {"authenticated": False, "auth_mode": "oidc",
-                "auto_login": bool(auth["auto_login"])}
-    if mode == "password":
-        cookie = request.cookies.get(PASSWORD_COOKIE, "")
-        expected = auth["ui_password"] or ""
-        ok = bool(expected) and hmac.compare_digest(cookie, expected)
-        return {"authenticated": ok, "auth_mode": "password"}
-    return {"authenticated": False, "auth_mode": "none"}
+    result: dict[str, Any] = {
+        "authenticated": False,
+        "password_enabled": auth["password_enabled"],
+        "oidc_enabled": auth["oidc_enabled"],
+        "auto_login": bool(auth["auto_login"]),
+    }
+
+    if not auth["password_enabled"] and not auth["oidc_enabled"]:
+        result["authenticated"] = True
+        return result
+
+    s = _lookup_session(request, db, auth)
+    if s is not None:
+        result.update(authenticated=True, email=s["email"], name=s.get("name"))
+    return result
 
 
 class PasswordLogin(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=1, max_length=200)
 
 
@@ -188,19 +193,31 @@ def login_password(
     body: PasswordLogin,
     db: Annotated[State, Depends(get_db)],
 ) -> RedirectResponse:
-    # Password arrives in the JSON body (never the query string), so it cannot
-    # leak into access logs or browser history.
+    # Credentials arrive in the JSON body (never the query string), so they
+    # cannot leak into access logs or browser history.
     settings: Settings = request.app.state.settings
     auth = effective_auth(db, settings)
-    if auth["auth_mode"] != "password":
-        raise HTTPException(400, "auth mode is not password")
-    expected = auth["ui_password"] or ""
-    if not expected or not hmac.compare_digest(body.password, expected):
-        raise HTTPException(401, "wrong password")
+    if not auth["password_enabled"]:
+        raise HTTPException(400, "password login is not enabled")
+    expected_username = auth["ui_username"] or "admin"
+    expected_password = auth["ui_password"] or ""
+    username_ok = hmac.compare_digest(
+        body.username.strip().lower(), expected_username.strip().lower()
+    )
+    password_ok = bool(expected_password) and verify_password(
+        body.password, expected_password
+    )
+    # Deliberately vague about which field was wrong (no username enumeration).
+    if not (username_ok and password_ok):
+        raise HTTPException(401, "wrong username or password")
+    token, _created, _expires = sess.create_session(
+        db, expected_username, expected_username, [], None, auth["session_ttl_h"],
+        kind="password",
+    )
     response = RedirectResponse("/", status_code=302)
     response.set_cookie(
         PASSWORD_COOKIE,
-        body.password,
+        token,
         httponly=True,
         samesite="lax",
         secure=_secure(request),
@@ -217,8 +234,8 @@ def login(
 ) -> RedirectResponse:
     settings: Settings = request.app.state.settings
     auth = effective_auth(db, settings)
-    if auth["auth_mode"] != "oidc":
-        raise HTTPException(400, "auth mode is not oidc")
+    if not auth["oidc_enabled"]:
+        raise HTTPException(400, "OIDC login is not enabled")
 
     state = secrets.token_urlsafe(16)
     nonce = secrets.token_urlsafe(16)
@@ -262,6 +279,13 @@ def oidc_callback(
 ) -> RedirectResponse:
     settings: Settings = request.app.state.settings
     auth = effective_auth(db, settings)
+
+    if not auth["oidc_enabled"]:
+        # Defense in depth: an admin disabled OIDC while a login was mid-flight.
+        db.log_event("warn", "OIDC callback received while OIDC login is disabled")
+        response = RedirectResponse("/", status_code=302)
+        response.set_cookie("arrlink_auth_error", "oidc_disabled", max_age=60)
+        return response
 
     if error or not code or not state:
         db.log_event("warn", f"OIDC callback error: {error or 'missing code/state'}")
@@ -326,7 +350,8 @@ def oidc_callback(
 
     refresh_token = tok.get("refresh_token")
     token, _created, expires = sess.create_session(
-        db, email, info.get("name"), list(groups), refresh_token, auth["session_ttl_h"]
+        db, email, info.get("name"), list(groups), refresh_token, auth["session_ttl_h"],
+        kind="oidc",
     )
     db.log_event("info", f"OIDC login: {email}")
 
@@ -344,9 +369,12 @@ def oidc_callback(
 def logout(
     request: Request, db: Annotated[State, Depends(get_db)]
 ) -> RedirectResponse:
-    token = request.cookies.get(SESSION_COOKIE, "")
-    if token:
-        sess.revoke_session(db, token)
+    # Both an OIDC session and a password session may be active at once
+    # (they're independent), so revoke whichever cookies are present.
+    for cookie_name in (SESSION_COOKIE, PASSWORD_COOKIE):
+        token = request.cookies.get(cookie_name, "")
+        if token:
+            sess.revoke_session(db, token)
     response = RedirectResponse("/", status_code=302)
     _clear_auth_cookies(response, request)
     return response

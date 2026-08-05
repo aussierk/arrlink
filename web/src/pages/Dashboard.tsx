@@ -94,12 +94,18 @@ export default function Dashboard() {
         <Card title={t('dashboard.authCard')}>
           {me ? (
             <div className="space-y-1 text-sm">
-              <p className="text-zinc-300">{t('dashboard.authModeLine', { mode: me.auth_mode })}</p>
-              <p className="text-zinc-500">
-                {me.authenticated
-                  ? t('dashboard.signedIn')
-                  : t('dashboard.oidcComing')}
+              <p className="text-zinc-300">
+                {t('dashboard.authMethodsLine', {
+                  methods:
+                    [
+                      me.password_enabled && t('dashboard.methodPassword'),
+                      me.oidc_enabled && t('dashboard.methodOidc'),
+                    ]
+                      .filter(Boolean)
+                      .join(', ') || t('dashboard.methodNone'),
+                })}
               </p>
+              <p className="text-zinc-500">{t('dashboard.signedIn')}</p>
             </div>
           ) : (
             <p className="text-sm text-zinc-500">{t('common.loading')}</p>
