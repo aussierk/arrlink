@@ -80,10 +80,15 @@ class ConditionsResult:
     all_matches: dict[str, list[ConditionMatch]] = dataclasses.field(default_factory=dict)
 
 
-def match_conditions(conditions: list[dict], item_tags: list[str]) -> ConditionsResult:
+def match_conditions(
+    conditions: list[dict],
+    item_tags: list[str],
+    native: dict[str, list[str]] | None = None,
+) -> ConditionsResult:
     """Left-to-right, short-circuiting AND/OR fold over an ordered condition chain."""
     if not conditions:
         return ConditionsResult(result=False, matched_conditions=[], all_matches={})
+    native = native or {}
 
     running = False
     matched: list[ConditionMatch] = []
@@ -96,7 +101,8 @@ def match_conditions(conditions: list[dict], item_tags: list[str]) -> Conditions
             if join == "OR" and running is True:
                 continue
 
-        hits = match_rule_all(cond["match_type"], cond["match_value"], item_tags)
+        values = native.get(cond["category"], []) if cond.get("source") == "native" else item_tags
+        hits = match_rule_all(cond["match_type"], cond["match_value"], values)
         hit = bool(hits)
         if i == 0:
             running = hit
