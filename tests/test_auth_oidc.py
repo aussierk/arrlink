@@ -874,6 +874,19 @@ def test_sessions_kind_column_added_by_migration_with_safe_default(tmp_path):
     conn.execute(
         "CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL)"
     )
+    # Minimal stand-ins for tables later migrations (11-13, unrelated to this
+    # regression) alter in place — a real pre-kind instance has these; this
+    # synthetic DB only needs enough of them for those ALTER TABLEs to apply.
+    conn.execute(
+        "CREATE TABLE tags (id INTEGER PRIMARY KEY, app_id INTEGER NOT NULL, "
+        "label TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, "
+        "imported_at REAL NOT NULL)"
+    )
+    conn.execute(
+        "CREATE TABLE app_items (id INTEGER PRIMARY KEY, app_id INTEGER NOT NULL, "
+        "item_id INTEGER NOT NULL, title TEXT NOT NULL, tags_json TEXT NOT NULL "
+        "DEFAULT '[]')"
+    )
     conn.commit()
     conn.close()
 
@@ -907,6 +920,19 @@ def test_sessions_kind_migration_applies_to_db_stuck_at_old_schema_version_9(tmp
     conn.execute(
         "CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL)"
     )
+    # Minimal stand-ins for tables later migrations (11-13, unrelated to this
+    # regression) alter in place — a real stuck-at-9 instance has these; this
+    # synthetic DB only needs enough of them for those ALTER TABLEs to apply.
+    conn.execute(
+        "CREATE TABLE tags (id INTEGER PRIMARY KEY, app_id INTEGER NOT NULL, "
+        "label TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, "
+        "imported_at REAL NOT NULL)"
+    )
+    conn.execute(
+        "CREATE TABLE app_items (id INTEGER PRIMARY KEY, app_id INTEGER NOT NULL, "
+        "item_id INTEGER NOT NULL, title TEXT NOT NULL, tags_json TEXT NOT NULL "
+        "DEFAULT '[]')"
+    )
     conn.commit()
     conn.close()
 
@@ -914,7 +940,7 @@ def test_sessions_kind_migration_applies_to_db_stuck_at_old_schema_version_9(tmp
     row = db.query_one("SELECT * FROM sessions WHERE token='tok1'")
     assert row is not None
     assert row["kind"] == "oidc"
-    assert db.query_one("SELECT version FROM schema_version")["version"] == 10
+    assert db.query_one("SELECT version FROM schema_version")["version"] == 13
 
 
 # ---------------------------------------------------------------------------

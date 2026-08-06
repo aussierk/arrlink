@@ -118,6 +118,9 @@ export type TagItem = {
   count: number
   rule_count: number
   imported_at: number
+  // Manually classified category (Tags page), or null = unclassified. A
+  // classified tag counts as a known vocabulary member for its category.
+  category: ConditionCategory | null
 }
 
 export type AppInput = {
@@ -137,11 +140,32 @@ export const DEFAULT_POLL_INTERVAL_S = 300
 export type ConditionCategory =
   | 'user' | 'genre' | 'language' | 'quality' | 'certification' | 'collection' | 'custom'
 
+// The 5 categories with a real Radarr/Sonarr metadata equivalent and a
+// DB-backed vocabulary — the other two (user/custom) are purely tag-based,
+// unrestricted, and never offer "source: native" or "match_type: vocabulary".
+export const RICH_CATEGORIES: ConditionCategory[] = [
+  'genre', 'language', 'quality', 'certification', 'collection',
+]
+
+export type ConditionSource = 'tag' | 'native'
+
 export type ConditionItem = {
   category: ConditionCategory | 'legacy'
-  match_type: 'exact' | 'list' | 'regex'
+  match_type: 'exact' | 'list' | 'regex' | 'vocabulary'
   match_value: string
   join: 'AND' | 'OR' | null
+  // undefined/null == 'tag' (today's only behavior, and every already-
+  // migrated condition's implicit meaning). 'native' matches the item's
+  // real Radarr/Sonarr metadata instead of its arbitrary tags — only
+  // meaningful for RICH_CATEGORIES.
+  source?: ConditionSource | null
+}
+
+export type VocabularyEntry = {
+  value: string
+  source: 'tmdb' | 'trash' | 'instance' | 'observed'
+  external_id: string | null
+  app_id: number | null
 }
 
 export type RuleItem = {
@@ -158,6 +182,9 @@ export type RuleItem = {
   enabled: boolean
   unlink_on_mismatch: boolean
   priority: number
+  // Present on create/update responses only (not on list/get) — soft,
+  // non-blocking "this value isn't a known vocabulary member" notices.
+  vocabulary_warnings?: string[]
 }
 
 export type RuleInput = {
@@ -259,6 +286,11 @@ export const api = {
       method: 'POST',
     }),
   listTags: (appId: number) => req<TagItem[]>(`/api/apps/${appId}/tags`),
+  setTagCategory: (appId: number, tagId: number, category: ConditionCategory | null) =>
+    req<TagItem>(`/api/apps/${appId}/tags/${tagId}/category`, {
+      method: 'PATCH',
+      body: JSON.stringify({ category }),
+    }),
 
   // Tag repository: a user-curated shared tag list that can be pushed to apps
   listTagRepository: () =>
@@ -293,6 +325,33 @@ export const api = {
   updateRule: (id: number, b: RuleInput) =>
     req<RuleItem>(`/api/rules/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   deleteRule: (id: number) => req<void>(`/api/rules/${id}`, { method: 'DELETE' }),
+  checkRuleVocabulary: (b: RuleInput) =>
+    req<{ warnings: string[] }>('/api/rules/vocabulary-check', {
+      method: 'POST',
+      body: JSON.stringify(b),
+    }),
+
+  // Vocabulary: known values per condition category, refreshed automatically
+  // in the background (see Settings > Vocabulary for status + overrides).
+  getVocabulary: (category: ConditionCategory, appType: string, appId?: number | null) =>
+    req<VocabularyEntry[]>(
+      `/api/vocabulary?category=${category}&app_type=${appType}${
+        appId != null ? `&app_id=${appId}` : ''
+      }`,
+    ),
+  syncAppVocabulary: (appId: number) =>
+    req<{ ok: boolean }>(`/api/apps/${appId}/vocabulary/sync`, { method: 'POST' }),
+  importTmdbVocabulary: () =>
+    req<{ imported: Record<string, number> }>('/api/vocabulary/import/tmdb', { method: 'POST' }),
+  importTrashVocabulary: (appType: string) =>
+    req<{ imported: number }>(`/api/vocabulary/import/trash?app_type=${appType}`, { method: 'POST' }),
+  getTmdbSettings: () =>
+    req<{ api_key_set: boolean; default_key_configured: boolean }>('/api/settings/tmdb'),
+  putTmdbSettings: (apiKey: string) =>
+    req<{ api_key_set: boolean; default_key_configured: boolean }>('/api/settings/tmdb', {
+      method: 'PUT',
+      body: JSON.stringify({ api_key: apiKey }),
+    }),
   listLogs: (level?: string) =>
     req<LogEntry[]>(`/api/logs${level ? `?level=${encodeURIComponent(level)}` : ''}`),
   getSettings: () => req<Record<string, unknown>>('/api/settings'),

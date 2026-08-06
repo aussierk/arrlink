@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, fmtTime, type AppItem, type TagItem } from '../lib/api'
+import { api, fmtTime, type AppItem, type ConditionCategory, type TagItem } from '../lib/api'
+
+const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
+  'genre', 'certification', 'collection', 'quality', 'language', 'user', 'custom',
+]
 
 /**
  * Tags (M6+): two views.
@@ -61,6 +65,16 @@ export default function Tags() {
   useEffect(() => {
     void loadTags()
   }, [loadTags])
+
+  async function setTagCategory(tagId: number, category: ConditionCategory | null) {
+    if (appId === null) return
+    try {
+      const updated = await api.setTagCategory(appId, tagId, category)
+      setTags((prev) => prev.map((tg) => (tg.id === tagId ? updated : tg)))
+    } catch (e) {
+      setErr(String(e))
+    }
+  }
 
   async function doImport() {
     if (appId === null) return
@@ -269,6 +283,7 @@ export default function Tags() {
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr>
               <th className="px-3 py-2">{t('tags.appTags.colTag')}</th>
+              <th className="px-3 py-2">{t('tags.appTags.colCategory')}</th>
               <th className="px-3 py-2">{t('tags.appTags.colInUse')}</th>
               <th className="px-3 py-2">{t('tags.appTags.colRules')}</th>
               <th className="px-3 py-2">{t('tags.appTags.colImported')}</th>
@@ -277,27 +292,46 @@ export default function Tags() {
           <tbody className="divide-y divide-zinc-800">
             {tags.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
                   {appId === null
                     ? t('tags.appTags.connectFirst')
                     : t('tags.appTags.emptyImport')}
                 </td>
               </tr>
             )}
-            {tags.map((t) => (
-              <tr key={t.id} className="bg-zinc-950/40">
+            {tags.map((tag) => (
+              <tr key={tag.id} className="bg-zinc-950/40">
                 <td className="px-3 py-2 font-mono text-xs text-zinc-200">
-                  {t.label}
+                  {tag.label}
                 </td>
-                <td className="px-3 py-2 text-zinc-400">{t.count}</td>
+                <td className="px-3 py-2">
+                  <select
+                    className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200"
+                    value={tag.category ?? ''}
+                    onChange={(e) =>
+                      void setTagCategory(
+                        tag.id,
+                        (e.target.value || null) as ConditionCategory | null,
+                      )
+                    }
+                  >
+                    <option value="">{t('tags.appTags.unclassified')}</option>
+                    {CLASSIFIABLE_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {t(`ruleModal.categoryLabel.${cat}`)}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-3 py-2 text-zinc-400">{tag.count}</td>
                 <td className="px-3 py-2 text-zinc-400">
-                  {t.rule_count > 0 ? (
-                    <span className="text-indigo-300">{t.rule_count}</span>
+                  {tag.rule_count > 0 ? (
+                    <span className="text-indigo-300">{tag.rule_count}</span>
                   ) : (
                     <span className="text-zinc-600">—</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-zinc-500">{fmtTime(t.imported_at)}</td>
+                <td className="px-3 py-2 text-zinc-500">{fmtTime(tag.imported_at)}</td>
               </tr>
             ))}
           </tbody>
