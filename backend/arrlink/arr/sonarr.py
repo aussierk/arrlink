@@ -73,6 +73,14 @@ class SonarrAdapter(BaseAdapter):
 
     async def fetch_items(self) -> list[Item]:
         tags = await self.fetch_tags()
+        # Quality profile names aren't on the series payload itself (only
+        # qualityProfileId) — resolve via one extra call, same id->label
+        # translation shape as the tag vocabulary above.
+        try:
+            profiles = await self.fetch_quality_profiles()
+            profile_by_id = {p.id: p.name for p in profiles}
+        except AdapterError:
+            profile_by_id = {}
 
         series_data = await self._get_json("/api/v3/series")
         if not isinstance(series_data, list):
@@ -90,11 +98,32 @@ class SonarrAdapter(BaseAdapter):
                 year = int(year) if year else None
             except (TypeError, ValueError):
                 year = None
+            genres = [str(g).strip() for g in (s.get("genres") or []) if str(g).strip()]
+            certification = (s.get("certification") or "").strip() or None
+            qp_id = s.get("qualityProfileId")
+            try:
+                qp_id = int(qp_id) if qp_id is not None else None
+            except (TypeError, ValueError):
+                qp_id = None
+            qp_name = profile_by_id.get(qp_id) if qp_id is not None else None
+            lang_obj = s.get("originalLanguage")
+            original_language = (
+                (lang_obj.get("name") or "").strip() or None
+                if isinstance(lang_obj, dict)
+                else None
+            )
             meta[int(sid)] = {
                 "title": str(s.get("title") or ""),
                 "year": year,
                 "path": str(s.get("path") or ""),
                 "tags": translate_tag_labels(tags, s.get("tags")),
+                "genres": genres,
+                "certification": certification,
+                # Sonarr series have no collection concept — always None.
+                "collection": None,
+                "quality_profile_id": qp_id,
+                "quality_profile_name": qp_name,
+                "original_language": original_language,
             }
 
         if not meta:
@@ -134,6 +163,12 @@ class SonarrAdapter(BaseAdapter):
                     tags=m["tags"],
                     path=m["path"],
                     files=item_files,
+                    genres=m["genres"],
+                    certification=m["certification"],
+                    collection=m["collection"],
+                    quality_profile_id=m["quality_profile_id"],
+                    quality_profile_name=m["quality_profile_name"],
+                    original_language=m["original_language"],
                 )
             )
         return items

@@ -95,6 +95,7 @@ export default function Rules() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<RuleItem | null>(null)
   const [previewFor, setPreviewFor] = useState<RuleItem | null>(null)
+  const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
 
   const previewAppId = (r: { app_scope: number | null; app_type_scope: string | null }) =>
     r.app_scope ??
@@ -167,6 +168,13 @@ export default function Rules() {
       {ok && (
         <div className="rounded-md border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">
           {ok}
+        </div>
+      )}
+      {vocabWarnings.length > 0 && (
+        <div className="space-y-1 rounded-md border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-300">
+          {vocabWarnings.map((w, i) => (
+            <p key={i}>{w}</p>
+          ))}
         </div>
       )}
 
@@ -284,7 +292,10 @@ export default function Rules() {
         <RuleModal
           initial={editing}
           onClose={() => setModalOpen(false)}
-          onSaved={() => void load()}
+          onSaved={(saved) => {
+            setVocabWarnings(saved.vocabulary_warnings ?? [])
+            void load()
+          }}
         />
       )}
     </div>

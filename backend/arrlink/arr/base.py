@@ -71,6 +71,23 @@ class MediaFile:
 
 
 @dataclasses.dataclass
+class QualityProfile:
+    """One quality profile configured on the app instance
+    (`GET /v3/qualityprofile`) — instance-specific, not a universal list."""
+
+    id: int
+    name: str
+
+
+@dataclasses.dataclass
+class Language:
+    """One language known to the app instance (`GET /v3/language`)."""
+
+    id: int
+    name: str
+
+
+@dataclasses.dataclass
 class Item:
     id: int
     title: str
@@ -78,6 +95,16 @@ class Item:
     tags: list[str]
     path: str
     files: list[MediaFile]
+    # Native per-item metadata (M11+): read straight from the app's own
+    # movie/series payload, independent of the tags system. Defaulted so
+    # every existing caller/test constructing an Item positionally-or-by-
+    # keyword without these still works unchanged.
+    genres: list[str] = dataclasses.field(default_factory=list)
+    certification: str | None = None
+    collection: str | None = None  # collection *name*; Sonarr has none
+    quality_profile_id: int | None = None
+    quality_profile_name: str | None = None
+    original_language: str | None = None
 
 
 class BaseAdapter(abc.ABC):
@@ -112,6 +139,32 @@ class BaseAdapter(abc.ABC):
         Used by the tag repository's *push to app*. Radarr/Sonarr override.
         """
         raise AdapterError(f"create_tag not supported for {self.app_type}")
+
+    async def fetch_quality_profiles(self) -> list["QualityProfile"]:
+        """This instance's configured quality profiles. Radarr and Sonarr
+        both expose the identical `[{id, name}]` shape at this path, so one
+        shared implementation covers both — no per-app-type override
+        needed unless a future app type differs."""
+        data = await self._get_json("/api/v3/qualityprofile")
+        if not isinstance(data, list):
+            raise AdapterError("unexpected qualityprofile payload")
+        return [
+            QualityProfile(id=int(r["id"]), name=str(r.get("name") or ""))
+            for r in data
+            if isinstance(r, dict) and r.get("id") is not None
+        ]
+
+    async def fetch_languages(self) -> list["Language"]:
+        """This instance's known languages. Same shared-implementation
+        rationale as :meth:`fetch_quality_profiles`."""
+        data = await self._get_json("/api/v3/language")
+        if not isinstance(data, list):
+            raise AdapterError("unexpected language payload")
+        return [
+            Language(id=int(r["id"]), name=str(r.get("name") or ""))
+            for r in data
+            if isinstance(r, dict) and r.get("id") is not None
+        ]
 
     # -- shared helpers ------------------------------------------------------
 

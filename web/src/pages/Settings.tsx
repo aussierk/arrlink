@@ -5,6 +5,7 @@ import GeneralSection from './settings/GeneralSection'
 import ServicesSection from './settings/ServicesSection'
 import AuthenticationSection from './settings/AuthenticationSection'
 import AccessControlSection from './settings/AccessControlSection'
+import VocabularySection from './settings/VocabularySection'
 
 /** Settings shell: header, sub-nav, and the routed section content. */
 export default function Settings() {
@@ -25,6 +26,7 @@ export default function Settings() {
             <Route path="services" element={<ServicesSection />} />
             <Route path="authentication" element={<AuthenticationSection />} />
             <Route path="access" element={<AccessControlSection />} />
+            <Route path="vocabulary" element={<VocabularySection />} />
           </Routes>
         </div>
       </div>

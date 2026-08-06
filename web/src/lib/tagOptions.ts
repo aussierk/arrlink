@@ -25,47 +25,13 @@ export const REGEX_PICKS: RegexPick[] = [
   { label: 'Number:username (colon)', pattern: '^\\d+:\\s*(?P<user>.+)$', hint: 'any number, e.g. 2:alice → user “alice”' },
 ]
 
-/** Suggested values for the Genres condition, per service type (movie vs TV
- * genres differ conceptually even where the word lists currently overlap). */
-export const GENRE_TAGS_BY_TYPE: Record<ServiceType, string[]> = {
-  radarr: [
-    'action', 'adventure', 'animation', 'comedy', 'crime', 'drama', 'documentary',
-    'horror', 'mystery', 'romance', 'sci-fi', 'thriller', 'western',
-  ],
-  sonarr: [
-    'action', 'adventure', 'animation', 'comedy', 'crime', 'drama', 'documentary',
-    'horror', 'mystery', 'romance', 'sci-fi', 'thriller', 'western',
-  ],
-}
-
-/** Suggested values for the Certification condition, per service type — these
- * genuinely differ (movie ratings vs TV ratings). */
-export const CERTIFICATION_TAGS_BY_TYPE: Record<ServiceType, string[]> = {
-  radarr: ['G', 'PG', 'PG-13', 'R', 'NC-17'],
-  sonarr: ['TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA'],
-}
-
-export function genreTagsFor(type: ServiceType): string[] {
-  return GENRE_TAGS_BY_TYPE[type] ?? []
-}
-
-export function certificationTagsFor(type: ServiceType): string[] {
-  return CERTIFICATION_TAGS_BY_TYPE[type] ?? []
-}
-
-/** Suggested values for the Languages condition — shared across service types. */
-export const LANGUAGE_TAGS: string[] = [
-  'english', 'spanish', 'french', 'german', 'japanese', 'korean', 'italian',
-  'chinese', 'hindi', 'portuguese', 'dutch', 'russian',
-]
-
-/** Suggested values for the Quality Profile condition — shared across service types. */
-export const QUALITY_PROFILE_TAGS: string[] = [
-  '4k', 'uhd', '2160p', 'hdr', 'dolby', '1080p', 'fhd', '720p',
-]
-
-/** Suggested values for the Collections condition — no fixed catalog, purely user-entered. */
-export const COLLECTION_TAGS: string[] = []
+// Genre/certification/language/quality/collection suggestions used to be
+// small hardcoded lists here. They're now backed by the DB-persisted
+// `vocabulary` table (genre/certification from TMDB, quality from TRaSH
+// Guides + each app's own configured profiles, language from each app's
+// own configuration, collection from items already imported) — fetched via
+// api.getVocabulary() and refreshed automatically in the background (see
+// Settings > Vocabulary). See RuleModal.tsx's optionsFor().
 
 /** Extra suggestions surfaced in the Custom tags condition alongside imported app tags. */
 export const CUSTOM_TAG_SUGGESTIONS: string[] = ['kids', 'children', 'family']

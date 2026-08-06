@@ -83,6 +83,21 @@ def _as_dict(r):
     return dataclasses.asdict(r) if dataclasses.is_dataclass(r) else dict(r)
 
 
+def _native_values(it: dict) -> dict[str, list[str]]:
+    """The item's real Radarr/Sonarr metadata, keyed by condition category,
+    for conditions with source == "native" (see match_conditions). Single-
+    valued fields become a 0-or-1-element list so match_rule_all's exact/
+    list/regex matching (which all operate over a list of candidate
+    strings) works unchanged regardless of source."""
+    return {
+        "genre": it.get("genres") or [],
+        "certification": [it["certification"]] if it.get("certification") else [],
+        "collection": [it["collection"]] if it.get("collection") else [],
+        "quality": [it["quality_profile_name"]] if it.get("quality_profile_name") else [],
+        "language": [it["original_language"]] if it.get("original_language") else [],
+    }
+
+
 def _rule_applies_to_app(rule: dict, app_id: int | None, app_type: str | None) -> bool:
     """Does this rule's scope cover the given app?"""
     scope = rule.get("app_scope")
@@ -118,13 +133,14 @@ def plan_links(
         title = it.get("title") or ""
         year = it.get("year")
         tags = it.get("tags") or []
+        native = _native_values(it)
         files = [_as_dict(f) for f in (it.get("files") or [])]
 
         for f in files:
             src = f["abs_path"]
             fid = f.get("id")
             for rule in active:
-                cr = match_conditions(_rule_conditions(rule), tags)
+                cr = match_conditions(_rule_conditions(rule), tags, native=native)
                 if not cr.result:
                     continue
                 seen_dst_paths: set[str] = set()

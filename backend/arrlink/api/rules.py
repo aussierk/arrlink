@@ -13,6 +13,11 @@ from ..arr.base import AdapterError
 from ..arr.factory import get_adapter
 from ..core.planner import plan_links
 from ..core.template import DEFAULT_ROOTS
+from ..core.vocabulary import (
+    RICH_CATEGORIES,
+    expand_vocabulary_conditions,
+    validate_condition_values,
+)
 from ..deps import get_db
 from ..state import State
 from .auth import CurrentUser
@@ -26,12 +31,25 @@ class ConditionIn(BaseModel):
     # failing validation. The frontend is what restricts pickable
     # categories to the 7 new ones; "legacy" is never offered there.
     category: str = Field(min_length=1, max_length=30)
-    match_type: Literal["exact", "list", "regex"]
-    match_value: str = Field(min_length=1, max_length=2000)
+    match_type: Literal["exact", "list", "regex", "vocabulary"]
+    # min_length relaxed to 0: "vocabulary" intentionally carries an empty
+    # match_value (it means "match the whole current vocabulary set for
+    # this category" — see core/vocabulary.expand_vocabulary_conditions).
+    match_value: str = Field(min_length=0, max_length=2000)
     join: Literal["AND", "OR"] | None = None
+    # None/absent == "tag" (today's only behavior) — absorbs every already-
+    # migrated condition (no "source" key in its stored JSON) with zero
+    # data change. "native" matches the item's real Radarr/Sonarr metadata
+    # instead of its arbitrary tags; only offered for the 5 rich categories.
+    source: Literal["tag", "native"] | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> "ConditionIn":
+        if self.source == "native" and self.category not in RICH_CATEGORIES:
+            raise ValueError(
+                f"condition '{self.category}': native-metadata matching is only "
+                "available for genre/language/quality/certification/collection"
+            )
         if self.match_type == "regex":
             try:
                 re.compile(self.match_value)
@@ -43,6 +61,9 @@ class ConditionIn(BaseModel):
                     f"condition '{self.category}': list requires at least one "
                     "comma-separated tag"
                 )
+        elif self.match_type == "exact":
+            if not self.match_value.strip():
+                raise ValueError(f"condition '{self.category}': exact match requires a value")
         return self
 
 
@@ -88,6 +109,53 @@ class RuleIn(BaseModel):
         if self.filename_template is not None and "\\" in self.filename_template:
             raise ValueError("filename_template must not contain backslashes")
         return self
+
+
+def _vestigial_match_type(match_type: str) -> str:
+    """The rules.match_type column's CHECK predates 'vocabulary' and is
+    never read for matching anymore (see _migration_6's docstring) — just
+    needs *some* value satisfying its own constraint."""
+    return "list" if match_type == "vocabulary" else match_type
+
+
+def _resolve_app_type(app_scope: int | None, app_type_scope: str | None, db: State) -> str | None:
+    """The app_type a rule's conditions should be checked/expanded against,
+    or None if the rule is unscoped (applies to any app) — vocabulary
+    validation/expansion simply no-ops in that case, same as it can't know
+    which app's instance-scoped vocabulary to use either."""
+    if app_type_scope is not None:
+        return app_type_scope
+    if app_scope is not None:
+        row = db.query_one("SELECT type FROM apps WHERE id=?", (app_scope,))
+        return row["type"] if row else None
+    return None
+
+
+def _representative_app_id(app_scope: int | None, app_type_scope: str | None, db: State) -> int | None:
+    """One concrete app id to check instance-scoped vocabulary against, when
+    the rule isn't pinned to a specific app (app_type_scope) — picks any
+    enabled app of that type, same "representative" idea RuleModal already
+    uses client-side for live preview."""
+    if app_scope is not None:
+        return app_scope
+    if app_type_scope is not None:
+        row = db.query_one(
+            "SELECT id FROM apps WHERE type=? AND enabled=1 ORDER BY id LIMIT 1",
+            (app_type_scope,),
+        )
+        return row["id"] if row else None
+    return None
+
+
+def _vocabulary_warnings(body: "RuleIn", db: State) -> list[str]:
+    app_type = _resolve_app_type(body.app_scope, body.app_type_scope, db)
+    app_id = _representative_app_id(body.app_scope, body.app_type_scope, db)
+    warnings: list[str] = []
+    for c in body.conditions:
+        warnings.extend(
+            validate_condition_values(c.model_dump(), db, app_type, app_id)
+        )
+    return warnings
 
 
 def _rule_out(row) -> dict:
@@ -139,7 +207,7 @@ def create_rule(
             body.name,
             body.app_scope,
             body.app_type_scope,
-            first.match_type,
+            _vestigial_match_type(first.match_type),
             first.match_value,
             json.dumps([c.model_dump() for c in body.conditions]),
             body.dir_template,
@@ -151,7 +219,9 @@ def create_rule(
     )
     db.commit()
     db.log_event("info", f"rule added: {body.name}", rule_id=cur.lastrowid)
-    return _rule_out(db.query_one("SELECT * FROM rules WHERE id=?", (cur.lastrowid,)))
+    out = _rule_out(db.query_one("SELECT * FROM rules WHERE id=?", (cur.lastrowid,)))
+    out["vocabulary_warnings"] = _vocabulary_warnings(body, db)
+    return out
 
 
 @router.patch("/{rule_id}")
@@ -176,7 +246,7 @@ def update_rule(
             body.name,
             body.app_scope,
             body.app_type_scope,
-            first.match_type,
+            _vestigial_match_type(first.match_type),
             first.match_value,
             json.dumps([c.model_dump() for c in body.conditions]),
             body.dir_template,
@@ -188,7 +258,9 @@ def update_rule(
         ),
     )
     db.commit()
-    return _rule_out(db.query_one("SELECT * FROM rules WHERE id=?", (rule_id,)))
+    out = _rule_out(db.query_one("SELECT * FROM rules WHERE id=?", (rule_id,)))
+    out["vocabulary_warnings"] = _vocabulary_warnings(body, db)
+    return out
 
 
 @router.delete("/{rule_id}", status_code=204)
@@ -200,6 +272,16 @@ def delete_rule(
     if cur.rowcount == 0:
         raise HTTPException(404, "rule not found")
     db.log_event("info", f"rule deleted: {rule_id}")
+
+
+@router.post("/vocabulary-check")
+def vocabulary_check(
+    body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
+    """Dry-run vocabulary-membership validation with no persistence, so the
+    rule editor can show warnings live while the user is still typing —
+    mirrors how /preview already dry-runs plan_links without saving."""
+    return {"warnings": _vocabulary_warnings(body, db)}
 
 
 @router.post("/preview")
@@ -232,8 +314,9 @@ def preview(
         "app_type_scope": body.app_type_scope,
     }
     roots = db.get_setting("allowed_roots") or list(DEFAULT_ROOTS)
+    rules = expand_vocabulary_conditions([rule], db, app_id, row["type"])
     planned, errors = plan_links(
-        [rule], items, row["name"], app_id, roots, app_type=row["type"]
+        rules, items, row["name"], app_id, roots, app_type=row["type"]
     )
 
     return {

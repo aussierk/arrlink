@@ -68,6 +68,14 @@ class RadarrAdapter(BaseAdapter):
 
     async def fetch_items(self) -> list[Item]:
         vocabulary = await self.fetch_tags()
+        # Quality profile names aren't on the movie payload itself (only
+        # qualityProfileId) — resolve via one extra call, same id->label
+        # translation shape as the tag vocabulary above.
+        try:
+            profiles = await self.fetch_quality_profiles()
+            profile_by_id = {p.id: p.name for p in profiles}
+        except AdapterError:
+            profile_by_id = {}
         data = await self._get_json("/api/v3/movie")
         if not isinstance(data, list):
             raise AdapterError("unexpected movie payload")
@@ -85,6 +93,26 @@ class RadarrAdapter(BaseAdapter):
                 year = int(year) if year else None
             except (TypeError, ValueError):
                 year = None
+            genres = [str(g).strip() for g in (row.get("genres") or []) if str(g).strip()]
+            certification = (row.get("certification") or "").strip() or None
+            collection_obj = row.get("collection")
+            collection = (
+                (collection_obj.get("name") or "").strip() or None
+                if isinstance(collection_obj, dict)
+                else None
+            )
+            qp_id = row.get("qualityProfileId")
+            try:
+                qp_id = int(qp_id) if qp_id is not None else None
+            except (TypeError, ValueError):
+                qp_id = None
+            qp_name = profile_by_id.get(qp_id) if qp_id is not None else None
+            lang_obj = row.get("originalLanguage")
+            original_language = (
+                (lang_obj.get("name") or "").strip() or None
+                if isinstance(lang_obj, dict)
+                else None
+            )
             size = movie_file.get("size")
             try:
                 size = int(size) if size is not None else None
@@ -116,6 +144,12 @@ class RadarrAdapter(BaseAdapter):
                             inode=finode,
                         )
                     ],
+                    genres=genres,
+                    certification=certification,
+                    collection=collection,
+                    quality_profile_id=qp_id,
+                    quality_profile_name=qp_name,
+                    original_language=original_language,
                 )
             )
         return items

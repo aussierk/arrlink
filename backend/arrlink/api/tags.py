@@ -7,7 +7,7 @@ import json
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..arr.base import AdapterError
 from ..arr.factory import get_adapter
@@ -22,6 +22,23 @@ router = APIRouter(prefix="/api", tags=["tags"])
 class TagImportIn(BaseModel):
     labels: list[str] = Field(min_length=1, max_length=500)
     counts: dict[str, int] = {}
+
+
+_CLASSIFIABLE_CATEGORIES = frozenset(
+    {"genre", "certification", "collection", "quality", "language", "user", "custom"}
+)
+
+
+class TagCategoryIn(BaseModel):
+    # null clears the classification (back to "unclassified", today's
+    # implicit default for every pre-existing tag).
+    category: str | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "TagCategoryIn":
+        if self.category is not None and self.category not in _CLASSIFIABLE_CATEGORIES:
+            raise ValueError(f"unknown category '{self.category}'")
+        return self
 
 
 def _condition_matches_label(mt: str, mv: str, label: str) -> bool:
@@ -93,6 +110,26 @@ def list_tags(
         d["rule_count"] = sum(1 for r in rules if _rule_matches_label(r, t["label"]))
         out.append(d)
     return out
+
+
+@router.patch("/apps/{app_id}/tags/{tag_id}/category")
+def set_tag_category(
+    app_id: int,
+    tag_id: int,
+    body: TagCategoryIn,
+    _user: CurrentUser,
+    db: State = Depends(get_db),
+) -> dict:
+    """Manually classify an existing tag into a condition category, so
+    tag-based rule matching in that category can be trusted (or vocabulary-
+    validated) even when the tag's literal text isn't itself a recognized
+    vocabulary value — see core/vocabulary.py."""
+    row = db.query_one("SELECT id FROM tags WHERE id=? AND app_id=?", (tag_id, app_id))
+    if not row:
+        raise HTTPException(404, "tag not found")
+    db.execute("UPDATE tags SET category=? WHERE id=?", (body.category, tag_id))
+    db.commit()
+    return dict(db.query_one("SELECT * FROM tags WHERE id=?", (tag_id,)))
 
 
 @router.post("/apps/{app_id}/tags/import", status_code=201)

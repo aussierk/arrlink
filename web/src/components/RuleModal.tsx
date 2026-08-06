@@ -9,27 +9,27 @@ import TagSelect from './ui/TagSelect'
 import Field from './ui/Field'
 import {
   api,
+  RICH_CATEGORIES,
   type AppItem,
   type ConditionCategory,
   type ConditionItem,
+  type ConditionSource,
   type PresetItem,
   type RuleInput,
   type RuleItem,
   type TagItem,
+  type VocabularyEntry,
 } from '../lib/api'
 import {
   CUSTOM_TAG_SUGGESTIONS,
-  LANGUAGE_TAGS,
-  QUALITY_PROFILE_TAGS,
   REGEX_PICKS,
-  COLLECTION_TAGS,
-  certificationTagsFor,
-  genreTagsFor,
   joinList,
   parseList,
   type ServiceType,
 } from '../lib/tagOptions'
 import { inputCls } from '../lib/ui'
+
+const RICH = new Set<string>(RICH_CATEGORIES)
 
 const CUSTOM = '__custom__'
 
@@ -96,7 +96,7 @@ export default function RuleModal({
 }: {
   initial: RuleItem | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (saved: RuleItem) => void
 }) {
   const { t } = useTranslation()
   const editing = initial !== null
@@ -124,6 +124,11 @@ export default function RuleModal({
   const [busy, setBusy] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [presets, setPresets] = useState<PresetItem[]>([])
+  // Known values per rich category (genre/language/quality/certification/
+  // collection), backed by the DB vocabulary table — TMDB/TRaSH/instance
+  // synced automatically in the background (see Settings > Vocabulary).
+  const [vocab, setVocab] = useState<Partial<Record<ConditionCategory, VocabularyEntry[]>>>({})
+  const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
 
   useEffect(() => {
     api.listApps().then(setApps).catch(() => {})
@@ -159,15 +164,49 @@ export default function RuleModal({
       .catch(() => setTags([]))
   }, [representativeAppId])
 
+  useEffect(() => {
+    if (form.app_scope === null && form.app_type_scope === null) {
+      setVocab({})
+      return
+    }
+    let cancelled = false
+    Promise.all(
+      RICH_CATEGORIES.map((cat) =>
+        api
+          .getVocabulary(cat, serviceType, representativeAppId)
+          .then((entries) => [cat, entries] as const)
+          .catch(() => [cat, []] as const),
+      ),
+    ).then((pairs) => {
+      if (!cancelled) setVocab(Object.fromEntries(pairs))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [serviceType, representativeAppId, form.app_scope, form.app_type_scope])
+
+  // Debounced, non-blocking vocabulary-membership check — mirrors how Live
+  // Preview already dry-runs without saving. Purely advisory: never blocks
+  // submit, just surfaces "this value isn't a known X" hints as you edit.
+  useEffect(() => {
+    if (conditions.length === 0) {
+      setVocabWarnings([])
+      return
+    }
+    const body: RuleInput = { ...form, conditions }
+    const handle = setTimeout(() => {
+      api
+        .checkRuleVocabulary(body)
+        .then((r) => setVocabWarnings(r.warnings))
+        .catch(() => setVocabWarnings([]))
+    }, 400)
+    return () => clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conditions, form.app_scope, form.app_type_scope])
+
   const knownTags = useMemo(
-    () =>
-      new Set([
-        ...genreTagsFor(serviceType),
-        ...certificationTagsFor(serviceType),
-        ...LANGUAGE_TAGS,
-        ...QUALITY_PROFILE_TAGS,
-      ]),
-    [serviceType],
+    () => new Set(RICH_CATEGORIES.flatMap((cat) => (vocab[cat] ?? []).map((v) => v.value))),
+    [vocab],
   )
   const customOptions = useMemo(() => {
     const appTags = tags.map((t) => t.label).filter((l) => !knownTags.has(l))
@@ -181,28 +220,22 @@ export default function RuleModal({
   // category is typed to include 'legacy' for round-tripping, so these
   // accept the wider type to stay assignable from c.category.
   function optionsFor(category: ConditionCategory | 'legacy'): string[] {
-    switch (category) {
-      case 'genre':
-        return genreTagsFor(serviceType)
-      case 'certification':
-        return certificationTagsFor(serviceType)
-      case 'language':
-        return LANGUAGE_TAGS
-      case 'quality':
-        return QUALITY_PROFILE_TAGS
-      case 'collection':
-        return COLLECTION_TAGS
-      case 'custom':
-        return customOptions
-      case 'user':
-      case 'legacy':
-        return []
+    if (RICH.has(category)) {
+      // Vocabulary values, plus any tag already manually classified into
+      // this category (Tags page) — both count as known members.
+      const fromVocab = (vocab[category as ConditionCategory] ?? []).map((v) => v.value)
+      const fromClassifiedTags = tags.filter((t) => t.category === category).map((t) => t.label)
+      return Array.from(new Set([...fromVocab, ...fromClassifiedTags]))
     }
+    if (category === 'custom') return customOptions
+    return [] // user, legacy
   }
 
-  function creatableFor(category: ConditionCategory | 'legacy', matchType: ConditionItem['match_type']) {
-    if (matchType === 'regex') return true
-    return category === 'collection' || category === 'custom' || category === 'user'
+  function creatableFor(_category: ConditionCategory | 'legacy', matchType: ConditionItem['match_type']) {
+    // "vocabulary" means "match anything currently known" — no free text to
+    // enter. Every other match type stays creatable: vocabulary suggestions
+    // may simply not be synced yet, and shouldn't block typing a value.
+    return matchType !== 'vocabulary'
   }
 
   function updateBlock(i: number, patch: Partial<ConditionItem>) {
@@ -278,7 +311,7 @@ export default function RuleModal({
       setErr(t('ruleModal.addConditionErr'))
       return
     }
-    if (conditions.some((c) => !c.match_value.trim())) {
+    if (conditions.some((c) => c.match_type !== 'vocabulary' && !c.match_value.trim())) {
       setErr(t('ruleModal.conditionValueErr'))
       return
     }
@@ -289,12 +322,10 @@ export default function RuleModal({
         filename_template: form.filename_template || null,
         conditions: conditions.map((c, i) => ({ ...c, join: i === 0 ? null : c.join })),
       }
-      if (editing && initial) {
-        await api.updateRule(initial.id, body)
-      } else {
-        await api.createRule(body)
-      }
-      onSaved()
+      const saved = editing && initial
+        ? await api.updateRule(initial.id, body)
+        : await api.createRule(body)
+      onSaved(saved)
       onClose()
     } catch (e) {
       setErr(String(e))
@@ -311,6 +342,15 @@ export default function RuleModal({
   function renderConditionValue(i: number) {
     const c = conditions[i]
     const selected = selectedFor(c)
+
+    if (c.match_type === 'vocabulary') {
+      const known = optionsFor(c.category)
+      return (
+        <p className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-400">
+          {t('ruleModal.vocabularyMatchHint', { count: known.length })}
+        </p>
+      )
+    }
 
     if (c.category === 'user' && c.match_type === 'regex') {
       const regexPick = REGEX_PICKS.find((p) => p.pattern === c.match_value)
@@ -567,9 +607,38 @@ export default function RuleModal({
                             <option value="list">{t('ruleModal.matchTypeListOption')}</option>
                             <option value="exact">{t('ruleModal.matchTypeExactOption')}</option>
                             <option value="regex">{t('ruleModal.matchTypeRegex')}</option>
+                            {RICH.has(c.category) && (
+                              <option value="vocabulary">{t('ruleModal.matchTypeVocabulary')}</option>
+                            )}
                           </select>
                         </Field>
                       </div>
+                      {RICH.has(c.category) && (
+                        <Field label={t('ruleModal.matchSource')}>
+                          <div className="flex gap-1.5">
+                            {(['tag', 'native'] as ConditionSource[]).map((src) => (
+                              <button
+                                key={src}
+                                type="button"
+                                onClick={() => updateBlock(i, { source: src === 'tag' ? null : src })}
+                                className={
+                                  'rounded-md border px-3 py-1 text-xs ' +
+                                  ((c.source ?? 'tag') === src
+                                    ? 'border-indigo-500 bg-indigo-950/40 text-indigo-300'
+                                    : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800')
+                                }
+                              >
+                                {src === 'tag' ? t('ruleModal.sourceTag') : t('ruleModal.sourceNative')}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="mt-1 text-[11px] text-zinc-500">
+                            {(c.source ?? 'tag') === 'native'
+                              ? t('ruleModal.sourceNativeHint')
+                              : t('ruleModal.sourceTagHint')}
+                          </p>
+                        </Field>
+                      )}
                       <Field label={t('ruleModal.value')}>{renderConditionValue(i)}</Field>
                     </div>
                   </div>
@@ -664,6 +733,14 @@ export default function RuleModal({
           <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
             <h4 className="mb-2 text-xs font-semibold text-zinc-400">{t('ruleModal.livePreview')}</h4>
             <PreviewPanel rule={previewRule} appId={previewAppId} />
+          </div>
+        )}
+
+        {vocabWarnings.length > 0 && (
+          <div className="space-y-1 rounded-md border border-amber-900/60 bg-amber-950/20 p-2 text-xs text-amber-300">
+            {vocabWarnings.map((w, idx) => (
+              <p key={idx}>{w}</p>
+            ))}
           </div>
         )}
 

@@ -14,6 +14,7 @@ from .fsutil import remove_link, resolve_fs_fallback
 from .linker import reconcile
 from .planner import plan_links
 from .template import DEFAULT_ROOTS
+from .vocabulary import expand_vocabulary_conditions, sync_tmdb_vocabulary, sync_trash_vocabulary
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,11 @@ JITTER = 0.2
 MAX_BACKOFF = 60.0
 DELETE_AFTER = 3
 TICK_S = 5.0
+# TMDB/TRaSH data is shared per app_type, not per app instance, and changes
+# rarely (new genre/certification codes are a years-long cadence) — a daily
+# check with a multi-day staleness threshold is plenty, not a constant call.
+VOCAB_LOOP_S = 24 * 3600.0
+VOCAB_STALE_S = 7 * 24 * 3600.0
 
 
 class Poller:
@@ -38,6 +44,7 @@ class Poller:
             t.cancel()
         self._tasks = {}
         asyncio.create_task(self._loop())
+        asyncio.create_task(self._vocabulary_loop())
 
     async def stop(self) -> None:
         for t in self._tasks.values():
@@ -75,6 +82,79 @@ class Poller:
         row = self.db.query_one("SELECT poll_interval_s FROM apps WHERE id=?", (app_id,))
         return float(row["poll_interval_s"] if row else 30)
 
+    # ------------------------------------------------------- vocabulary sync
+
+    async def _vocabulary_loop(self) -> None:
+        """Independent, long-cadence background refresh of TMDB genre/
+        certification + the TRaSH Guides quality dictionary — shared per
+        app_type, not per app instance, so it doesn't belong in _app_loop.
+        Best-effort: a TMDB/TRaSH hiccup is logged and never affects
+        linking. See VOCAB_LOOP_S/VOCAB_STALE_S."""
+        while True:
+            try:
+                app_types = {
+                    r["type"] for r in self.db.query(
+                        "SELECT DISTINCT type FROM apps WHERE enabled=1"
+                    )
+                }
+                if self._vocab_stale("genre", None) or self._vocab_stale("certification", None):
+                    counts = await sync_tmdb_vocabulary(self.db)
+                    if counts:
+                        self.db.log_event("info", f"synced TMDB vocabulary: {counts}")
+                for app_type in app_types:
+                    if self._vocab_stale("quality", None, app_type=app_type, source="trash"):
+                        n = await sync_trash_vocabulary(self.db, app_type)
+                        self.db.log_event(
+                            "info", f"synced {n} TRaSH quality name(s) for {app_type}"
+                        )
+            except Exception as e:  # noqa: BLE001 - best-effort background sync
+                log.warning("vocabulary sync failed: %s", e)
+            await asyncio.sleep(VOCAB_LOOP_S)
+
+    def _vocab_stale(
+        self, category: str, app_id: int | None, app_type: str | None = None, source: str | None = None
+    ) -> bool:
+        sql = "SELECT MAX(imported_at) AS ts FROM vocabulary WHERE category=? AND app_id IS ?"
+        params: list = [category, app_id]
+        if app_type is not None:
+            sql += " AND app_type=?"
+            params.append(app_type)
+        if source is not None:
+            sql += " AND source=?"
+            params.append(source)
+        row = self.db.query_one(sql, tuple(params))
+        ts = row["ts"] if row else None
+        return ts is None or (time.time() - ts) > VOCAB_STALE_S
+
+    def _sync_instance_vocabulary(self, app_id: int, app_type: str, items) -> None:
+        """Per-instance vocabulary: this app's own configured quality
+        profiles/languages (cheap adapter calls) and collection names
+        observed in its already-imported items (pure derivation, no
+        external call) — refreshed automatically every poll, unlike the
+        TMDB/TRaSH global sync above. Best-effort: never fails the poll."""
+        try:
+            from ..arr.factory import get_adapter
+
+            app = self.db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
+            adapter = get_adapter(app["type"], app["url"], app["api_key"])
+            profiles = asyncio.run(adapter.fetch_quality_profiles())
+            languages = asyncio.run(adapter.fetch_languages())
+            self.db.sync_vocabulary(
+                "quality", app_type, app_id,
+                [(p.name, str(p.id)) for p in profiles if p.name], "instance",
+            )
+            self.db.sync_vocabulary(
+                "language", app_type, app_id,
+                [(l.name, str(l.id)) for l in languages if l.name], "instance",
+            )
+            collections = sorted({c for c in (i.collection for i in items) if c})
+            self.db.sync_vocabulary(
+                "collection", app_type, app_id,
+                [(c, None) for c in collections], "observed",
+            )
+        except Exception as e:  # noqa: BLE001 - best-effort, suggestion data only
+            log.warning("instance vocabulary sync failed for app %s: %s", app_id, e)
+
     # ------------------------------------------------------------- polling
 
     def poll_once(self, app_id: int) -> bool:
@@ -100,6 +180,7 @@ class Poller:
 
         self._store_tags(app_id, tags)
         self._store_items(app_id, items)
+        self._sync_instance_vocabulary(app_id, app["type"], items)
         self._reconcile_app(app_id, app["name"], app["type"], items)
         self.db.execute(
             "UPDATE apps SET last_error=NULL, last_poll_at=?, item_count=? WHERE id=?",
@@ -133,22 +214,31 @@ class Poller:
                 (app_id, item.id),
             )
             tags_json = json.dumps(sorted(item.tags))
+            genres_json = json.dumps(sorted(item.genres))
+            native = (
+                item.certification, item.collection, item.quality_profile_id,
+                item.quality_profile_name, item.original_language,
+            )
             if existing is None:
                 cur = self.db.execute(
                     "INSERT INTO app_items (app_id, item_id, title, year, tags_json, "
-                    "path, file_count, first_seen, last_seen, missing_strikes) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,0)",
+                    "path, file_count, first_seen, last_seen, missing_strikes, "
+                    "genres_json, certification, collection, quality_profile_id, "
+                    "quality_profile_name, original_language) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?)",
                     (app_id, item.id, item.title, item.year, tags_json, item.path,
-                     len(item.files), now, now),
+                     len(item.files), now, now, genres_json, *native),
                 )
                 item_db_id = cur.lastrowid
             else:
                 item_db_id = existing["id"]
                 self.db.execute(
                     "UPDATE app_items SET title=?, year=?, tags_json=?, path=?, "
-                    "file_count=?, last_seen=?, missing_strikes=0 WHERE id=?",
+                    "file_count=?, last_seen=?, missing_strikes=0, genres_json=?, "
+                    "certification=?, collection=?, quality_profile_id=?, "
+                    "quality_profile_name=?, original_language=? WHERE id=?",
                     (item.title, item.year, tags_json, item.path, len(item.files),
-                     now, item_db_id),
+                     now, genres_json, *native, item_db_id),
                 )
 
             file_ids: list[int | None] = []
@@ -239,7 +329,8 @@ class Poller:
     def _reconcile_app(self, app_id: int, app_name: str, app_type: str, items) -> None:
         settings = self.settings
         roots = self.db.get_setting("allowed_roots") or list(DEFAULT_ROOTS)
-        rules = self.db.query("SELECT * FROM rules WHERE enabled=1")
+        rules = [dict(r) for r in self.db.query("SELECT * FROM rules WHERE enabled=1")]
+        rules = expand_vocabulary_conditions(rules, self.db, app_id, app_type)
         # attach stored file ids (already backfilled by _store_items)
         plan, errors = plan_links(rules, items, app_name, app_id, roots, app_type=app_type)
 
