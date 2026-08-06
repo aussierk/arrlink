@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 # versions 8/9 briefly meant a different migration than they do now, and got
 # silently skipped by an instance that had already recorded 9). Versions 8
 # and 9 are retired for that reason — do not reuse them.
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 13
 
 
 def _migration_2(conn: sqlite3.Connection) -> None:
@@ -140,6 +140,65 @@ def _migration_10(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'oidc'"
         )
+
+
+def _migration_11(conn: sqlite3.Connection) -> None:
+    """M11: vocabulary — known values per condition category, at one of two scopes encoded by app_id:"""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS vocabulary (
+            id INTEGER PRIMARY KEY,
+            category TEXT NOT NULL CHECK (category IN
+                ('genre','certification','collection','quality','language')),
+            app_type TEXT NOT NULL CHECK (app_type IN ('radarr','sonarr')),
+            app_id INTEGER REFERENCES apps(id) ON DELETE CASCADE,
+            value TEXT NOT NULL,
+            external_id TEXT,
+            source TEXT NOT NULL CHECK (source IN
+                ('tmdb','trash','instance','observed')),
+            imported_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_vocabulary_lookup
+            ON vocabulary(category, app_type, app_id);
+        """
+    )
+    # A plain UNIQUE(category, app_type, app_id, value) would not dedupe two
+    # shared-scope (app_id IS NULL) rows, since SQLite treats NULL as
+    # distinct from itself in unique indexes — COALESCE to a sentinel fixes
+    # this. Expression indexes aren't supported by executescript on all
+    # SQLite builds uniformly with IF NOT EXISTS + CREATE TABLE in one go,
+    # so create it as a separate statement.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_vocabulary_unique ON "
+        "vocabulary(category, app_type, COALESCE(app_id, -1), value)"
+    )
+
+
+def _migration_12(conn: sqlite3.Connection) -> None:
+    """M12: manual tag->category classification, so tag-based matching in a rich category."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(tags)")}
+    if "category" not in cols:
+        conn.execute(
+            "ALTER TABLE tags ADD COLUMN category TEXT CHECK (category IS NULL "
+            "OR category IN ('genre','certification','collection','quality',"
+            "'language','user','custom'))"
+        )
+
+
+def _migration_13(conn: sqlite3.Connection) -> None:
+    """M13: native *arr per-item metadata (genres/certification/collection/ quality profile/original language)."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(app_items)")}
+    adds = {
+        "genres_json": "TEXT NOT NULL DEFAULT '[]'",
+        "certification": "TEXT",
+        "collection": "TEXT",
+        "quality_profile_id": "INTEGER",
+        "quality_profile_name": "TEXT",
+        "original_language": "TEXT",
+    }
+    for name, ddl in adds.items():
+        if name not in cols:
+            conn.execute(f"ALTER TABLE app_items ADD COLUMN {name} {ddl}")
 
 
 _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
@@ -261,6 +320,9 @@ _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
     (7, _migration_7),
     # 8 and 9 are retired — do not reuse (see SCHEMA_VERSION comment above).
     (10, _migration_10),
+    (11, _migration_11),
+    (12, _migration_12),
+    (13, _migration_13),
 ]
 
 
@@ -360,6 +422,37 @@ class State:
         self.commit()
         return len(tags)
 
+    # -- vocabulary (known values per condition category) -------------------
+
+    def sync_vocabulary(
+        self,
+        category: str,
+        app_type: str,
+        app_id: int | None,
+        entries: list[tuple[str, str | None]],
+        source: str,
+    ) -> int:
+        """Full replace for one (category, app_type, app_id) scope — same
+        idiom as :meth:`sync_app_tags`: ``entries`` is treated as the
+        complete current set for that scope, so removed/renamed values are
+        cleared, not left stale. ``entries`` is a list of (value,
+        external_id) pairs.
+        """
+        ts = now()
+        self.execute(
+            "DELETE FROM vocabulary WHERE category=? AND app_type=? AND "
+            "app_id IS ?",
+            (category, app_type, app_id),
+        )
+        for value, external_id in entries:
+            self.execute(
+                "INSERT INTO vocabulary (category, app_type, app_id, value, "
+                "external_id, source, imported_at) VALUES (?,?,?,?,?,?,?)",
+                (category, app_type, app_id, value, external_id, source, ts),
+            )
+        self.commit()
+        return len(entries)
+
     # -- settings (runtime JSON key/value) ----------------------------------
 
     def get_setting(self, key: str, default: Any = None) -> Any:
@@ -385,6 +478,7 @@ class State:
         {
             "auth_password",
             "oidc_client_secret",
+            "tmdb_api_key",
             # (auth_password_enabled / auth_oidc_enabled / oidc_* non-secret
             # keys are safe to expose)
         }

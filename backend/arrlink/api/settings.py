@@ -144,6 +144,32 @@ def put_auth(
     return _auth_view(db, env)
 
 
+class TmdbSettingsIn(BaseModel):
+    # Blank = keep the current value (mirrors oidc_client_secret above) —
+    # never required, ArrLink falls back to the operator-configured default
+    # (TMDB_API_KEY env var) when neither is set. See core/vocabulary.py.
+    api_key: str = ""
+
+
+@router.get("/tmdb")
+def get_tmdb(_user: CurrentUser, db: State = Depends(get_db)) -> dict:
+    from ..core.vocabulary import DEFAULT_TMDB_API_KEY
+
+    return {
+        "api_key_set": bool((db.get_setting("tmdb_api_key") or "").strip()),
+        "default_key_configured": bool(DEFAULT_TMDB_API_KEY),
+    }
+
+
+@router.put("/tmdb")
+def put_tmdb(
+    body: TmdbSettingsIn, _user: CurrentUser, db: State = Depends(get_db)
+) -> dict:
+    if body.api_key:
+        db.set_setting("tmdb_api_key", body.api_key)
+    return get_tmdb(_user, db)
+
+
 @router.put("/{key}")
 def set_setting(
     key: str, body: SettingValue, _user: CurrentUser, db: State = Depends(get_db)

@@ -23,6 +23,7 @@ from .api import (
     rules,
     settings as settings_api,
     tags,
+    vocabulary as vocabulary_api,
 )
 from .auth import sessions as sess_mod
 from .auth.oidc import OidcClient
@@ -138,6 +139,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(logs.router)
     app.include_router(settings_api.router)
     app.include_router(presets_api.router)
+    app.include_router(vocabulary_api.router)
 
     dist = find_dist(Path(__file__).resolve())
     if dist:
