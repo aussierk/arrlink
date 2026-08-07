@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 from typing import Any
 
@@ -137,12 +138,7 @@ def _vocabulary_values(db: State, category: str, app_type: str, app_id: int | No
 def expand_vocabulary_conditions(
     rules: list[dict], db: State, app_id: int | None, app_type: str | None
 ) -> list[dict]:
-    """Replace every match_type=='vocabulary' condition with an equivalent
-    'list' condition (comma-joined match_value), substituting the union of
-    known vocabulary + classified-tag values for its (category, app_type,
-    app_id) scope. Keeps core/matching.py and core/planner.py DB-free —
-    this is the one place vocabulary expansion happens, called once per
-    (app, rules) evaluation right before plan_links()."""
+    """Replace every match_type=='vocabulary' condition with an equivalent 'list' condition."""
     if app_type is None:
         # Unscoped rule (no specific app/app_type) — nothing to resolve
         # against; leave any "vocabulary" condition as a no-op empty list
@@ -162,7 +158,7 @@ def expand_vocabulary_conditions(
             if cond.get("match_type") == "vocabulary":
                 values = expand_to(cond.get("category"))
                 cond["match_type"] = "list"
-                cond["match_value"] = ",".join(sorted(values))
+                cond["match_value"] = json.dumps(sorted(values))
                 changed = True
         if changed:
             # _rule_conditions() prefers a pre-parsed "conditions" key over

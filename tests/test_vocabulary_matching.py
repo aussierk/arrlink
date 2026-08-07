@@ -1,6 +1,7 @@
 """Vocabulary table, native-metadata matching, tag classification."""
 from __future__ import annotations
 
+import json
 import socket
 import threading
 import time
@@ -180,13 +181,15 @@ def test_expand_vocabulary_conditions_and_validate(client):
 
     rule = {"id": 1, "conditions": [_cond("genre", "vocabulary", "")]}
     expanded = expand_vocabulary_conditions([rule], db, app_id, "radarr")
-    values = set(expanded[0]["conditions"][0]["match_value"].split(","))
+    # JSON-array-encoded (not comma-joined) so a value containing a literal
+    # comma can't be misread as two values -- see matching._parse_list_value.
+    values = set(json.loads(expanded[0]["conditions"][0]["match_value"]))
     assert values == {"Action", "Comedy"}
     assert expanded[0]["conditions"][0]["match_type"] == "list"
 
     # unscoped (app_type None) -> empty expansion, no crash
     expanded_unscoped = expand_vocabulary_conditions([rule], db, None, None)
-    assert expanded_unscoped[0]["conditions"][0]["match_value"] == ""
+    assert json.loads(expanded_unscoped[0]["conditions"][0]["match_value"]) == []
 
     warn = validate_condition_values(
         {"category": "genre", "match_type": "exact", "match_value": "Horror"}, db, "radarr", app_id
@@ -199,6 +202,41 @@ def test_expand_vocabulary_conditions_and_validate(client):
     assert validate_condition_values(
         {"category": "genre", "match_type": "regex", "match_value": "^Hor"}, db, "radarr", app_id
     ) == []
+
+
+def test_expand_vocabulary_conditions_value_containing_comma_matches_whole(client):
+    """Regression test: a vocabulary value that itself contains a literal
+    comma (e.g. a collection name) must not be split into two bogus match
+    targets -- expand_vocabulary_conditions() JSON-encodes the expanded
+    list precisely so this can't happen (see matching._parse_list_value)."""
+    from arrlink.core.matching import match_conditions
+
+    db = client.app.state.db
+    db.execute("INSERT INTO apps (name, type, url, api_key, created_at) VALUES ('r','radarr','http://x','k',0)")
+    db.commit()
+    app_id = db.query_one("SELECT id FROM apps")["id"]
+    db.sync_vocabulary(
+        "collection", "radarr", app_id,
+        [("Ocean's Eleven, Twelve & Thirteen Collection", None), ("Solo Movies", None)],
+        "observed",
+    )
+
+    rule = {"id": 1, "conditions": [_cond("collection", "vocabulary", "")]}
+    expanded = expand_vocabulary_conditions([rule], db, app_id, "radarr")
+    cond = expanded[0]["conditions"][0]
+    assert cond["match_type"] == "list"
+
+    # the comma-containing value matches as one whole tag/value...
+    r = match_conditions(
+        [cond], item_tags=["Ocean's Eleven, Twelve & Thirteen Collection"],
+        native={"collection": []},
+    )
+    assert r.result is True
+    # ...and neither bogus half-split fragment matches anything on its own
+    r2 = match_conditions(
+        [cond], item_tags=["Ocean's Eleven"], native={"collection": []}
+    )
+    assert r2.result is False
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ placeholder resolution.
 from __future__ import annotations
 
 import dataclasses
+import json
 import re
 
 
@@ -25,6 +26,17 @@ def match_rule(match_type: str, match_value: str, item_tags: list[str]) -> RuleM
     return matches[0] if matches else None
 
 
+def _parse_list_value(match_value: str) -> set[str]:
+    """A "list" match_value is normally simple comma-separated text a user typed by hand in the rule editor."""
+    try:
+        decoded = json.loads(match_value)
+    except (TypeError, ValueError):
+        decoded = None
+    if isinstance(decoded, list):
+        return {str(v).strip() for v in decoded if str(v).strip()}
+    return {s.strip() for s in match_value.split(",") if s.strip()}
+
+
 def match_rule_all(match_type: str, match_value: str, item_tags: list[str]) -> list[RuleMatch]:
     """Like :func:`match_rule`, but returns every item tag that satisfies the
     matcher instead of stopping at the first — used to fan a single condition
@@ -34,7 +46,7 @@ def match_rule_all(match_type: str, match_value: str, item_tags: list[str]) -> l
         return [RuleMatch(tag=t) for t in item_tags if t == target]
 
     if match_type == "list":
-        targets = {s.strip() for s in match_value.split(",") if s.strip()}
+        targets = _parse_list_value(match_value)
         return [RuleMatch(tag=t) for t in item_tags if t in targets]
 
     if match_type == "regex":
