@@ -41,9 +41,21 @@ def reconcile(
     planned: dict[tuple[int, int, str], PlannedLink] = {
         (p.rule_id, p.file_id, p.match_key): p for p in plan if p.file_id is not None
     }
+    # Detect two different (rule, file) plans both wanting the same
+    # destination path -- e.g. two overlapping rules -- and name both
+    # rules explicitly. fsutil.create_link() would eventually catch this
+    # too (an inode mismatch when the second create attempt finds the first
+    # link already sitting at dst), but only as a generic "name collision"
+    # error with no indication of *which* rules are fighting over it.
     seen_dsts: dict[str, tuple[int, int]] = {}
     for p in plan:
-        seen_dsts.setdefault(p.dst_path, (p.rule_id, p.file_id))
+        prev = seen_dsts.setdefault(p.dst_path, (p.rule_id, p.file_id))
+        if prev != (p.rule_id, p.file_id):
+            res.errors.append(
+                f"{p.dst_path}: rule {prev[0]} and rule {p.rule_id} both "
+                "plan to link here -- only one can occupy this destination; "
+                "check for overlapping rules"
+            )
 
     rows = db.query(
         "SELECT * FROM links WHERE app_id=? AND status IN ('active','stale')",

@@ -459,3 +459,46 @@ def test_series_deleted_grace(client, sonarr_media):
     # miss 3 -> item gone -> link removed
     _poll(client, app_id)
     assert not os.path.exists(dst)
+
+
+def test_single_episode_file_deleted_grace_unlinks_not_orphans(client, sonarr_media):
+    """Regression test: a series with MULTIPLE episode files losing just
+    ONE of them (the series itself stays present) must go through the same
+    unlink-then-delete path as whole-item removal, not silently cascade-
+    delete the `links` row out from under an un-retired hardlink still on
+    disk. "The Show" has two episode files (Pilot, Second) -- only Pilot
+    disappears here."""
+    origin, tv = sonarr_media
+    app_id = _add_app(client, origin)
+    _make_rule(client, "show", "tv-14", f"{tv.linked_dir}/show")
+    _poll(client, app_id)
+    pilot_dst = f"{tv.linked_dir}/show/The Show - S01E01 - Pilot.mkv"
+    second_dst = f"{tv.linked_dir}/show/The Show - S01E02 - Second.mkv"
+    assert os.path.exists(pilot_dst)
+    assert os.path.exists(second_dst)
+
+    # remove ONLY the Pilot episode file -- the series (and its other
+    # episode) are still reported as present
+    show = tv.series[0]
+    assert show["title"] == "The Show"
+    show["files"] = [f for f in show["files"] if "Pilot" not in f["path"]]
+    os.remove(f"{tv.media_dir}/The Show/The Show - S01E01 - Pilot.mkv")
+
+    # misses 1..2 -> link survives (grace), unrelated episode untouched
+    _poll(client, app_id)
+    assert os.path.exists(pilot_dst)
+    _poll(client, app_id)
+    assert os.path.exists(pilot_dst)
+    assert os.path.exists(second_dst)
+
+    # miss 3 -> file gone for good -> its hardlink is actually unlinked from
+    # disk (not left orphaned) and its `links` row survives as 'missing'
+    # (not silently cascade-deleted)
+    _poll(client, app_id)
+    assert not os.path.exists(pilot_dst)
+    assert os.path.exists(second_dst)  # the still-present episode is untouched
+
+    links = client.get("/api/links?status=missing").json()
+    pilot_links = [l for l in links if l["dst_path"] == pilot_dst]
+    assert len(pilot_links) == 1
+    assert pilot_links[0]["status"] == "missing"

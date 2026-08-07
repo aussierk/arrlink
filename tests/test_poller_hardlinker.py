@@ -264,6 +264,12 @@ def test_deleted_item_grace(client, radarr_media):
     _poll(client, app_id)
     assert not os.path.exists(dst)
 
+    # regression: the links row itself must survive as status='missing' for
+    # the UI/repair flow, not get silently cascade-deleted the moment
+    # app_items is (item_id/file_id both reference it ON DELETE CASCADE)
+    missing = client.get("/api/links?status=missing").json()
+    assert any(l["dst_path"] == dst for l in missing)
+
 
 # ---------------------------------------------------------------------------
 # rename keeps the link (re-linked under the new name)
@@ -373,6 +379,31 @@ def test_cross_device_copy_fallback(
     assert _ino(dst) != _ino(src)
     with open(dst) as f:
         assert f.read() == "Kids Movie data"
+
+
+# ---------------------------------------------------------------------------
+# two rules both planning the same destination -> named in a warning
+# ---------------------------------------------------------------------------
+
+
+def test_overlapping_rules_same_dst_logs_named_conflict(client, radarr_media):
+    """Regression test: when two different rules both plan a link at the
+    identical destination path, the warning must name both rule ids (not
+    just a generic "name collision" from the eventual fsutil-level clash)."""
+    origin, media = radarr_media
+    app_id = _add_app(client, origin)
+    # give the Kids Movie a second tag so two separate rules both match it
+    media.set_tags(1, ["kids", "family"])
+
+    rule_a = _make_rule(client, "kids-rule", "kids", f"{media.linked_dir}/shared")
+    rule_b = _make_rule(client, "family-rule", "family", f"{media.linked_dir}/shared")
+    _poll(client, app_id)
+
+    dst = f"{media.linked_dir}/shared/Kids Movie.2019.mkv"
+    logs = client.get("/api/logs?limit=50").json()
+    conflict_msgs = [e["message"] for e in logs if dst in e["message"]]
+    assert conflict_msgs, logs
+    assert any(str(rule_a) in m and str(rule_b) in m for m in conflict_msgs)
 
 
 # ---------------------------------------------------------------------------

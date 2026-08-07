@@ -67,20 +67,26 @@ class Poller:
         backoff = 0.0
         try:
             while True:
+                # Stop (rather than loop forever as a no-op) once the app is
+                # disabled or deleted -- _loop() only ever starts a task per
+                # enabled app, it never cancels one, so this is the one place
+                # that notices and lets the task actually exit; re-enabling
+                # the app later has _loop() spawn a fresh task as normal.
+                row = self.db.query_one(
+                    "SELECT enabled, poll_interval_s FROM apps WHERE id=?", (app_id,)
+                )
+                if row is None or not row["enabled"]:
+                    return
                 ok = await asyncio.to_thread(self.poll_once, app_id)
                 if ok:
                     backoff = 0.0
-                    base = self._interval(app_id)
+                    base = float(row["poll_interval_s"] or 30)
                     await asyncio.sleep(base * (1 + random.uniform(-JITTER, JITTER)))
                 else:
                     backoff = min(backoff * 2 or 5.0, MAX_BACKOFF)
                     await asyncio.sleep(backoff)
         finally:
             self._tasks.pop(app_id, None)
-
-    def _interval(self, app_id: int) -> float:
-        row = self.db.query_one("SELECT poll_interval_s FROM apps WHERE id=?", (app_id,))
-        return float(row["poll_interval_s"] if row else 30)
 
     # ------------------------------------------------------- vocabulary sync
 
@@ -289,6 +295,29 @@ class Poller:
                             (strikes, frow["id"]),
                         )
                     else:
+                        # file gone for good: unlink its hardlinks from disk
+                        # FIRST (links.file_id is ON DELETE CASCADE, so the
+                        # DELETE below would otherwise silently drop the
+                        # links row -- before _reconcile_app() ever sees it
+                        # -- leaking the physical hardlink on disk with zero
+                        # record of it anywhere; mirrors the item-level
+                        # deletion path just below, which already does this).
+                        # file_id is cleared in the same UPDATE: leaving it
+                        # set would just have the DELETE below cascade the
+                        # row away a moment later anyway, silently undoing
+                        # the "keep it as a visible 'missing' record" intent.
+                        for lrow in self.db.query(
+                            "SELECT dst_path FROM links WHERE file_id=? AND "
+                            "status IN ('active','stale')",
+                            (frow["id"],),
+                        ):
+                            r = remove_link(lrow["dst_path"])
+                            if r.ok:
+                                self.db.execute(
+                                    "UPDATE links SET status='missing', file_id=NULL "
+                                    "WHERE dst_path=?",
+                                    (lrow["dst_path"],),
+                                )
                         self.db.execute("DELETE FROM app_files WHERE id=?", (frow["id"],))
             self.db.commit()
 
@@ -307,7 +336,13 @@ class Poller:
                     )
                 else:
                     # item gone for good: unlink its hardlinks from disk
-                    # FIRST (the schema cascade would orphan them), then delete
+                    # FIRST (the schema cascade would orphan them), then
+                    # delete. item_id AND file_id are cleared in the same
+                    # UPDATE: app_files.item_id also cascades on
+                    # app_items(id), so deleting this row cascades through
+                    # app_files down to links.file_id too (two FK hops, not
+                    # one) -- leaving either set would have the DELETE below
+                    # remove this "missing" row right back out from under it.
                     for lrow in self.db.query(
                         "SELECT dst_path FROM links WHERE item_id=? AND status "
                         "IN ('active','stale')",
@@ -316,7 +351,8 @@ class Poller:
                         r = remove_link(lrow["dst_path"])
                         if r.ok:
                             self.db.execute(
-                                "UPDATE links SET status='missing' WHERE dst_path=?",
+                                "UPDATE links SET status='missing', item_id=NULL, "
+                                "file_id=NULL WHERE dst_path=?",
                                 (lrow["dst_path"],),
                             )
                     self.db.execute(
