@@ -6,7 +6,7 @@ import hmac
 import secrets
 import time
 from typing import Annotated, Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,34 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SESSION_COOKIE = "arrlink_session"
 PASSWORD_COOKIE = "arrlink_pw"
 
+# How long an initiated-but-never-completed OIDC login (state/verifier/nonce
+# row) stays valid. Anything older is treated as abandoned.
+OIDC_LOGIN_TTL_S = 600
+
+# Error codes the callback itself ever sets on the arrlink_auth_error cookie
+# (see oidc_callback below) plus the handful an IdP's own `error` query param
+# can legitimately be (per OAuth2/OIDC core: RFC 6749 §4.1.2.1, OIDC Core
+# §3.1.2.6). Anything else — including arbitrary provider-supplied text —
+# is not trusted to reach the UI verbatim; see _sanitize_error_code().
+_KNOWN_AUTH_ERROR_CODES = frozenset(
+    {
+        "oidc_disabled",
+        "missing_code",
+        "not_authorized",
+        "invalid_request",
+        "unauthorized_client",
+        "access_denied",
+        "unsupported_response_type",
+        "invalid_scope",
+        "server_error",
+        "temporarily_unavailable",
+        "interaction_required",
+        "login_required",
+        "account_selection_required",
+        "consent_required",
+    }
+)
+
 
 # --------------------------------------------------------------------------
 # helpers
@@ -42,11 +70,37 @@ def _client(auth: dict) -> OidcClient:
     )
 
 
-def _redirect_uri(request: Request, auth: dict) -> str:
+def _redirect_uri(request: Request, db: State, auth: dict) -> str:
     if auth["oidc_redirect_uri"]:
         return auth["oidc_redirect_uri"]
+    # Not pinned: derived from the request's Host header, which is only as
+    # trustworthy as whatever sits in front of this app (nothing, by
+    # default — see compose.yaml, which publishes the port directly). A
+    # spoofed Host would poison the redirect_uri sent to the provider, so
+    # this is logged every time it happens rather than silently trusted.
+    db.log_event(
+        "warn",
+        "OIDC redirect_uri not configured — derived from the request Host "
+        "header (spoofable unless a trusted reverse proxy is in front of "
+        "this app). Set OIDC_REDIRECT_URI to pin it.",
+    )
     base = str(request.base_url).rstrip("/")
     return f"{base}/api/auth/oidc/callback"
+
+
+def _sanitize_next(path: str | None) -> str:
+    """Only ever allow a same-origin, relative path for a post-login redirect — never let `next` become an open redirect."""
+    if not path or "\\" in path or not path.startswith("/"):
+        return "/"
+    parsed = urlsplit(path)
+    if parsed.scheme or parsed.netloc:
+        return "/"
+    return path
+
+
+def _sanitize_error_code(code: str | None) -> str:
+    """Never let an OIDC provider's raw `error` query param reach the UI verbatim."""
+    return code if code in _KNOWN_AUTH_ERROR_CODES else "server_error"
 
 
 def _secure(request: Request) -> bool:
@@ -242,10 +296,17 @@ def login(
     verifier = secrets.token_urlsafe(48)
     challenge = b64url_encode(hashlib.sha256(verifier.encode()).digest())
 
+    # Opportunistically sweep abandoned login attempts (never completed, so
+    # never deleted by the callback) each time a new one is started — cheap,
+    # and keeps the table from growing unbounded without a separate task.
+    db.execute(
+        "DELETE FROM oidc_logins WHERE created_at < ?",
+        (time.time() - OIDC_LOGIN_TTL_S,),
+    )
     db.execute(
         "INSERT INTO oidc_logins (state, verifier, nonce, next_path, created_at) "
         "VALUES (?,?,?,?,?)",
-        (state, verifier, nonce, next, time.time()),
+        (state, verifier, nonce, _sanitize_next(next), time.time()),
     )
     db.commit()
 
@@ -254,7 +315,7 @@ def login(
     params = {
         "response_type": "code",
         "client_id": client.client_id,
-        "redirect_uri": _redirect_uri(request, auth),
+        "redirect_uri": _redirect_uri(request, db, auth),
         # offline_access: ask the provider for a refresh token so silent
         # session refresh works with real providers.
         "scope": "openid profile email offline_access",
@@ -290,18 +351,23 @@ def oidc_callback(
     if error or not code or not state:
         db.log_event("warn", f"OIDC callback error: {error or 'missing code/state'}")
         response = RedirectResponse("/", status_code=302)
-        response.set_cookie("arrlink_auth_error", error or "missing_code", max_age=60)
+        response.set_cookie(
+            "arrlink_auth_error", _sanitize_error_code(error or "missing_code"),
+            max_age=60,
+        )
         return response
 
     row = db.query_one("SELECT * FROM oidc_logins WHERE state=?", (state,))
-    if row is None:
-        raise HTTPException(400, "unknown or expired login state")
     db.execute("DELETE FROM oidc_logins WHERE state=?", (state,))
     db.commit()
+    if row is None or row["created_at"] < time.time() - OIDC_LOGIN_TTL_S:
+        raise HTTPException(400, "unknown or expired login state")
 
     client = _client(auth)
     try:
-        tok = client.exchange_code(code, row["verifier"], _redirect_uri(request, auth))
+        tok = client.exchange_code(
+            code, row["verifier"], _redirect_uri(request, db, auth)
+        )
     except OidcError as e:
         db.log_event("warn", f"OIDC code exchange failed: {e.detail}")
         raise HTTPException(502, f"OIDC exchange failed: {e.detail}") from e
@@ -355,9 +421,10 @@ def oidc_callback(
     )
     db.log_event("info", f"OIDC login: {email}")
 
-    next_path = row["next_path"] or "/"
-    if not next_path.startswith("/") or next_path.startswith("//"):
-        next_path = "/"
+    # Sanitized again here (not just at storage time in login()) as
+    # defense in depth -- this is the value that actually goes into the
+    # redirect a browser follows.
+    next_path = _sanitize_next(row["next_path"])
     response = RedirectResponse(next_path, status_code=302)
     _set_auth_cookies(
         response, request, token, refresh_token, int(expires - time.time())

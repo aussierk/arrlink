@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -116,6 +117,16 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app = FastAPI(title="ArrLink", version=__version__, lifespan=lifespan)
     app.state.settings = settings
     app.state.db = db
+
+    # Opt-in Host-header allow-list (TRUSTED_HOSTS env) -- unset by default,
+    # matching every deployment's behavior before this existed. When OIDC is
+    # enabled without an explicitly pinned oidc_redirect_uri, that URL is
+    # derived from the request's own Host header (see api/auth.py); setting
+    # this closes off a spoofed Host on a directly-exposed deployment.
+    if settings.trusted_hosts:
+        hosts = [h.strip() for h in settings.trusted_hosts.split(",") if h.strip()]
+        if hosts:
+            app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
 
     # Permissive CORS only for the Vite dev server (:5173) during development.
     # In production the SPA is served from the same origin, so this is inert.

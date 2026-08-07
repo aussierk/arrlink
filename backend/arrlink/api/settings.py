@@ -17,6 +17,27 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 _KEY_RE = re.compile(r"^[a-z0-9_.-]{1,64}$")
 
+# Keys owned by a dedicated endpoint (PUT /auth, PUT /tmdb) with its own
+# validation (viable-auth-method checks, hashing) and audit logging. The
+# generic PUT/DELETE /{key} below must never touch these directly -- doing
+# so would let any authenticated caller write an unhashed/unvalidated
+# auth_password (or flip auth_*_enabled) with no log_event trail, bypassing
+# every safeguard put_auth() enforces.
+_PROTECTED_SETTING_KEYS = frozenset(
+    {
+        "auth_password",
+        "auth_password_enabled",
+        "auth_oidc_enabled",
+        "oidc_auto_login",
+        "auth_username",
+        "oidc_issuer",
+        "oidc_client_id",
+        "oidc_client_secret",
+        "oidc_redirect_uri",
+        "tmdb_api_key",
+    }
+)
+
 
 class SettingValue(BaseModel):
     value: object
@@ -176,11 +197,16 @@ def set_setting(
 ) -> dict:
     if not _KEY_RE.match(key):
         raise HTTPException(422, "invalid setting key")
+    if key in _PROTECTED_SETTING_KEYS:
+        raise HTTPException(
+            403, f"{key!r} must be changed via its dedicated settings endpoint"
+        )
     try:
         json.dumps(body.value)
     except (TypeError, ValueError) as e:
         raise HTTPException(422, "value must be JSON-serializable") from e
     db.set_setting(key, body.value)
+    db.log_event("info", f"setting updated: {key}")
     return db.all_settings()
 
 
@@ -188,4 +214,9 @@ def set_setting(
 def delete_setting(
     key: str, _user: CurrentUser, db: State = Depends(get_db)
 ) -> None:
+    if key in _PROTECTED_SETTING_KEYS:
+        raise HTTPException(
+            403, f"{key!r} must be changed via its dedicated settings endpoint"
+        )
     db.delete_setting(key)
+    db.log_event("info", f"setting deleted: {key}")

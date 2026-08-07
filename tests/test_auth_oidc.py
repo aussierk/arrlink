@@ -348,6 +348,45 @@ def test_unknown_state_rejected(client):
     assert r.status_code == 400
 
 
+def test_expired_login_state_rejected_and_swept(client, issuer):
+    """Regression test: an abandoned login (state/verifier/nonce row) must
+    not stay valid forever, and old abandoned rows get swept on the next
+    login rather than accumulating unbounded."""
+    from arrlink.api.auth import OIDC_LOGIN_TTL_S
+
+    email = "eve@example.com"
+    code, state = start_login(client, issuer, email)
+    # backdate it past the TTL, as if it had been sitting abandoned
+    client.app.state.db.execute(
+        "UPDATE oidc_logins SET created_at=? WHERE state=?",
+        (time.time() - OIDC_LOGIN_TTL_S - 1, state),
+    )
+    client.app.state.db.commit()
+
+    r = client.get(
+        f"/api/auth/oidc/callback?code={code}&state={state}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    # the expired row itself was consumed (deleted) by the rejected attempt
+    assert client.app.state.db.query_one(
+        "SELECT 1 FROM oidc_logins WHERE state=?", (state,)
+    ) is None
+
+    # a second, unrelated abandoned row gets swept just by starting a new
+    # login (not only when someone bothers to complete/reject the old one)
+    client.app.state.db.execute(
+        "INSERT INTO oidc_logins (state, verifier, nonce, next_path, created_at) "
+        "VALUES ('stale-state', 'v', 'n', '/', ?)",
+        (time.time() - OIDC_LOGIN_TTL_S - 1,),
+    )
+    client.app.state.db.commit()
+    start_login(client, issuer, "frank@example.com")
+    assert client.app.state.db.query_one(
+        "SELECT 1 FROM oidc_logins WHERE state='stale-state'"
+    ) is None
+
+
 def test_nonce_mismatch_rejected(client, issuer):
     email = "dave@example.com"
     issuer.add_user(email)
@@ -962,3 +1001,89 @@ def test_b64url_roundtrip():
     enc = b64url_encode(data)
     assert "=" not in enc
     assert b64url_decode(enc) == data
+
+
+# ---------------------------------------------------------------------------
+# unit: TRUSTED_HOSTS / redirect_uri Host-header hardening
+# ---------------------------------------------------------------------------
+
+
+def test_trusted_hosts_unset_by_default_accepts_any_host(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        r = c.get("/api/health", headers={"Host": "anything.example"})
+        assert r.status_code == 200
+
+
+def test_trusted_hosts_set_rejects_unknown_host(tmp_path, monkeypatch):
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("TRUSTED_HOSTS", "arrlink.example.com,127.0.0.1")
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        ok = c.get("/api/health", headers={"Host": "arrlink.example.com"})
+        assert ok.status_code == 200
+        bad = c.get("/api/health", headers={"Host": "evil.example"})
+        assert bad.status_code == 400
+
+
+def test_redirect_uri_not_pinned_logs_warning(client):
+    """When OIDC is enabled without OIDC_REDIRECT_URI pinned, deriving it
+    from the request's own (spoofable, absent a trusted proxy) Host header
+    must be visible in the event log, not silent."""
+    client.get("/api/auth/login", follow_redirects=False)
+    # query events directly -- /api/logs is itself auth-gated in this
+    # fixture's OIDC-enabled config, and this check only cares about what
+    # got logged, not the API's own access control
+    rows = client.app.state.db.query(
+        "SELECT message FROM events ORDER BY id DESC LIMIT 50"
+    )
+    assert any("redirect_uri not configured" in r["message"] for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# unit: next/error sanitization (open-redirect hardening)
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_next_blocks_open_redirect_variants():
+    from arrlink.api.auth import _sanitize_next
+
+    assert _sanitize_next("/rules") == "/rules"
+    assert _sanitize_next("/rules?x=1") == "/rules?x=1"
+    assert _sanitize_next(None) == "/"
+    assert _sanitize_next("") == "/"
+    assert _sanitize_next("evil.com") == "/"
+    assert _sanitize_next("//evil.com") == "/"
+    assert _sanitize_next("https://evil.com") == "/"
+    # backslash bypass: browsers normalize a leading backslash to "/" when
+    # resolving against an http(s) base (WHATWG URL spec), so a naive "//"
+    # prefix check alone would let this resolve off-site
+    assert _sanitize_next("/\\evil.com") == "/"
+    assert _sanitize_next("/\\/evil.com") == "/"
+    assert _sanitize_next("\\\\evil.com") == "/"
+
+
+def test_sanitize_error_code_collapses_unknown_values():
+    from arrlink.api.auth import _sanitize_error_code
+
+    assert _sanitize_error_code("access_denied") == "access_denied"
+    assert _sanitize_error_code("not_authorized") == "not_authorized"
+    assert _sanitize_error_code(None) == "server_error"
+    assert _sanitize_error_code("") == "server_error"
+    # arbitrary/attacker-influenced provider text must never pass through
+    assert _sanitize_error_code("<script>alert(1)</script>") == "server_error"
+    assert _sanitize_error_code("some made up provider message") == "server_error"
+
+
+def test_oidc_login_sanitizes_next_at_storage_time(client):
+    """login() must sanitize `next` before it's even stored, not just when
+    the callback later reads it back out -- defense in depth."""
+    r = client.get(
+        "/api/auth/login?next=%2F%5Cevil.com", follow_redirects=False
+    )
+    assert r.status_code == 302
+    row = client.app.state.db.query_one(
+        "SELECT next_path FROM oidc_logins ORDER BY created_at DESC LIMIT 1"
+    )
+    assert row["next_path"] == "/"

@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     oidc_client_secret: str | None = None
     oidc_redirect_uri: str | None = None  # default: <origin>/api/auth/oidc/callback
     session_ttl_h: int = 12
+    # Comma-separated hostnames this app is allowed to think it's being
+    # reached as (e.g. "arrlink.example.com,192.168.1.50"). Unset (default)
+    # = no restriction, same as before this existed. When OIDC is enabled
+    # and oidc_redirect_uri isn't pinned, the redirect_uri sent to the
+    # provider is derived from the request's own Host header -- setting
+    # this closes that off from a spoofed Host on a directly-exposed
+    # deployment (see main.py, which adds TrustedHostMiddleware only when
+    # this is set).
+    trusted_hosts: str | None = None
 
     @cached_property
     def ui_password_hash(self) -> str:

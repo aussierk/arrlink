@@ -849,3 +849,34 @@ def test_auth_both_enabled_at_once(client):
     assert me["password_enabled"] is True and me["oidc_enabled"] is True
     client.put("/api/settings/auth", json={"password_enabled": False,
                                            "oidc_enabled": False})
+
+
+def test_generic_settings_endpoint_rejects_protected_auth_keys(client):
+    """Regression test: auth-sensitive keys must only be writable through
+    PUT /api/settings/auth (hashing + validation + audit log), never the
+    generic PUT/DELETE /api/settings/{key} -- otherwise any authenticated
+    caller could plant an unvalidated, unhashed, un-audited password/flag
+    directly, bypassing every safeguard put_auth() enforces."""
+    for key in (
+        "auth_password", "auth_password_enabled", "auth_oidc_enabled",
+        "oidc_auto_login", "auth_username", "oidc_issuer", "oidc_client_id",
+        "oidc_client_secret", "oidc_redirect_uri", "tmdb_api_key",
+    ):
+        r = client.put(f"/api/settings/{key}", json={"value": "anything"})
+        assert r.status_code == 403, (key, r.text)
+        assert client.delete(f"/api/settings/{key}").status_code == 403
+
+    # an ordinary, non-auth setting is untouched by this
+    r = client.put("/api/settings/fs_fallback", json={"value": "copy"})
+    assert r.status_code == 200
+    assert client.get("/api/settings").json()["fs_fallback"] == "copy"
+
+
+def test_generic_settings_endpoint_logs_events(client):
+    client.put("/api/settings/fs_fallback", json={"value": "copy"})
+    logs = client.get("/api/logs?limit=20").json()
+    assert any("setting updated: fs_fallback" in e["message"] for e in logs)
+    client.delete("/api/settings/fs_fallback")
+    logs = client.get("/api/logs?limit=20").json()
+    assert any("setting deleted: fs_fallback" in e["message"] for e in logs)
+
