@@ -111,8 +111,6 @@
     "methodOidc": "OIDC",
     "methodNone": "none (open)",
     "signedIn": "signed in",
-    "authDisabledWarning": "Login is disabled — this app is open to anyone who can reach it",
-    "authDisabledHint": "Anyone who can reach this app can use it, with no login. Turn on password or OIDC login in <0>Settings → Authentication</0>.",
     "appsConnectedCount_one": "app connected",
     "appsConnectedCount_other": "apps connected",
     "hardlinked": "hardlinked",
