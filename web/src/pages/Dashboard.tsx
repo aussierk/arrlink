@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import LinksPanel from '../components/LinksPanel'
 import {
   api,
@@ -65,6 +66,22 @@ export default function Dashboard() {
             <Trans i18nKey="dashboard.orphanedHint">
               Edit the rules, or set <code className="rounded bg-black/30 px-1">allowed_roots</code> to
               include their destination in Settings.
+            </Trans>
+          </p>
+        </div>
+      )}
+
+      {me && !me.password_enabled && !me.oidc_enabled && (
+        <div className="rounded-md border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-300">
+          <p className="font-medium">{t('dashboard.authDisabledWarning')}</p>
+          <p className="mt-1 text-amber-200/60">
+            <Trans i18nKey="dashboard.authDisabledHint">
+              Anyone who can reach this app can use it, with no login. Turn on password or
+              OIDC login in{' '}
+              <Link className="underline hover:text-amber-100" to="/settings/authentication">
+                Settings → Authentication
+              </Link>
+              .
             </Trans>
           </p>
         </div>
