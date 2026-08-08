@@ -1,6 +1,56 @@
-fastapi>=0.115,<1.0
-uvicorn[standard]>=0.30
-httpx>=0.27
-pydantic-settings>=2.3
-python-multipart>=0.0.9
-argon2-cffi>=23.1
+# Exact-pinned (direct + full transitive closure), not open ranges, so a
+# `docker compose build` today resolves to the identical set every time --
+# previously (">=" lower bounds only) every build could silently pull a
+# different, unreviewed transitive version, including a compromised or
+# vulnerable release, with nothing to diff. Regenerate after a deliberate
+# upgrade with:
+#   pip install --upgrade fastapi 'uvicorn[standard]' httpx pydantic-settings \
+#       python-multipart argon2-cffi
+#   pip freeze | grep -viE '^(pip|setuptools|wheel)=='
+# and re-pin the direct deps' extras/bounds below by hand -- an extras-only
+# dependency (e.g. uvicorn[standard]'s pyyaml) doesn't always show up the
+# same way in every `pip freeze` capture, so also run
+# `pip install --dry-run -r requirements.txt` against the *result* and
+# confirm every line says "already satisfied" at the exact pinned version,
+# with nothing pulled in unpinned (this is exactly how the missing pyyaml
+# pin below was caught after the first pass of this file missed it).
+# NOTE: not hash-pinned (no `--hash=...` per line, e.g. via
+# `pip-compile --generate-hashes`) -- that needs network access to fetch
+# per-platform wheel hashes, which wasn't available when this was generated.
+# Hash-pinning would be a stronger guarantee (rejects a tampered artifact
+# even at an already-pinned version) and is worth adding if this becomes a
+# concern; exact-version pinning alone already closes the "different build,
+# different code" reproducibility gap this was written to fix.
+
+fastapi==0.141.1
+starlette==1.6.0
+pydantic==2.13.4
+pydantic-core==2.46.4
+pydantic-settings==2.15.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+annotated-types==0.8.0
+annotated-doc==0.0.5
+
+uvicorn[standard]==0.52.4
+click==8.5.0
+h11==0.16.0
+httptools==0.8.0
+python-dotenv==1.2.3
+uvloop==0.22.1
+watchfiles==1.2.0
+websockets==17.1
+PyYAML==6.0.3
+
+httpx==0.28.1
+httpcore==1.0.9
+certifi==2025.1.31
+idna==3.10
+anyio==4.14.2
+
+python-multipart==0.0.32
+
+argon2-cffi==25.1.0
+argon2-cffi-bindings==26.1.0
+cffi==2.1.1
+pycparser==3.0

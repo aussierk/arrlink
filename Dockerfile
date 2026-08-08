@@ -35,7 +35,10 @@ RUN chmod +x /entrypoint.sh \
 
 EXPOSE 8270
 
+# Reads $PORT at check time (not baked in at build time) so a custom
+# PORT set via .env/compose.yaml's environment: doesn't leave the
+# container permanently reporting unhealthy despite working correctly.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import sys,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8270/api/health',timeout=3); sys.exit(0 if r.status==200 else 1)"
+    CMD python -c "import os,sys,urllib.request; p=os.environ.get('PORT','8270'); r=urllib.request.urlopen(f'http://127.0.0.1:{p}/api/health',timeout=3); sys.exit(0 if r.status==200 else 1)"
 
 ENTRYPOINT ["/entrypoint.sh"]
