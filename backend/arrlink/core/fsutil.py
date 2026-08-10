@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat as stat_mod
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,10 +46,7 @@ def same_device(a: str, b: str) -> bool | None:
 
 
 def create_link(src: str, dst: str, fallback: str = "skip") -> LinkResult:
-    """Hardlink src -> dst, with the configured fallback on cross-device.
-
-    Idempotent: if dst already exists and points at the same inode, no-op ok.
-    """
+    """Hardlink src -> dst, with the configured fallback on cross-device."""
     if os.path.islink(src):
         return LinkResult(False, dst, "source is a symlink (refused)")
     if not os.path.isfile(src):
@@ -71,16 +69,53 @@ def create_link(src: str, dst: str, fallback: str = "skip") -> LinkResult:
     if dev is False and fallback == "skip":
         return LinkResult(False, dst, "cross-filesystem (hardlink impossible)")
 
-    try:
-        if dev is False and fallback == "copy":
-            shutil.copy2(src, dst)
-        elif dev is False and fallback == "symlink":
+    if dev is False and fallback == "symlink":
+        try:
             os.symlink(src, dst)
-        else:
-            os.link(src, dst)
-        return LinkResult(True, dst)
+            return LinkResult(True, dst)
+        except OSError as e:
+            return LinkResult(False, dst, f"{e.__class__.__name__}: {e}")
+
+    try:
+        fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
     except OSError as e:
-        return LinkResult(False, dst, f"{e.__class__.__name__}: {e}")
+        return LinkResult(False, dst, f"source changed before linking: {e}")
+    try:
+        st = os.fstat(fd)
+        if not stat_mod.S_ISREG(st.st_mode):
+            return LinkResult(
+                False, dst, "source changed before linking (not a regular file)"
+            )
+
+        if dev is False and fallback == "copy":
+            try:
+                with os.fdopen(fd, "rb", closefd=False) as sf, open(dst, "wb") as df:
+                    shutil.copyfileobj(sf, df)
+                os.chmod(dst, stat_mod.S_IMODE(st.st_mode))
+                os.utime(dst, (st.st_atime, st.st_mtime))
+            except OSError as e:
+                return LinkResult(False, dst, f"{e.__class__.__name__}: {e}")
+            return LinkResult(True, dst)
+
+        try:
+            os.link(src, dst, follow_symlinks=False)
+        except OSError as e:
+            return LinkResult(False, dst, f"{e.__class__.__name__}: {e}")
+
+        dlst = os.lstat(dst)
+        if (
+            not stat_mod.S_ISREG(dlst.st_mode)
+            or dlst.st_ino != st.st_ino
+            or dlst.st_dev != st.st_dev
+        ):
+            try:
+                os.unlink(dst)
+            except OSError:
+                pass
+            return LinkResult(False, dst, "source changed during linking (aborted)")
+        return LinkResult(True, dst)
+    finally:
+        os.close(fd)
 
 
 def resolve_fs_fallback(db, env_default: str = "skip") -> str:
