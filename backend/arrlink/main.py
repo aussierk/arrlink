@@ -125,6 +125,15 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     # this closes off a spoofed Host on a directly-exposed deployment.
     if settings.trusted_hosts:
         hosts = [h.strip() for h in settings.trusted_hosts.split(",") if h.strip()]
+        # Always keep the container's own loopback trusted regardless of
+        # what's configured -- the Dockerfile HEALTHCHECK always probes
+        # 127.0.0.1, so a TRUSTED_HOSTS value that (reasonably) only lists
+        # the app's real external hostname would otherwise 400 the
+        # container's own healthcheck and leave it permanently "unhealthy"
+        # despite serving real traffic correctly.
+        for loopback in ("127.0.0.1", "localhost", "::1"):
+            if loopback not in hosts:
+                hosts.append(loopback)
         if hosts:
             app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
 

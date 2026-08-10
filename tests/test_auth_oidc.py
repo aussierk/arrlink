@@ -320,6 +320,22 @@ def test_full_oidc_login_flow(client, issuer):
     assert client.get("/api/apps").status_code == 200
 
 
+def test_oidc_state_cannot_be_reused_after_consumption(client, issuer):
+    """Regression test: the login-state row is claimed and consumed
+    atomically (DELETE ... RETURNING), so a second callback with the same
+    state -- whether from a double-fired redirect or a replayed callback
+    URL -- can never see it as still present."""
+    email = "grace@example.com"
+    code, state = start_login(client, issuer, email)
+    complete_login(client, code, state)
+
+    r2 = client.get(
+        f"/api/auth/oidc/callback?code={code}&state={state}",
+        follow_redirects=False,
+    )
+    assert r2.status_code == 400
+
+
 def test_login_preserves_next_path(client, issuer):
     email = "bob@example.com"
     code, state = start_login(client, issuer, email, next_path="/rules")
@@ -1027,6 +1043,22 @@ def test_trusted_hosts_set_rejects_unknown_host(tmp_path, monkeypatch):
         assert bad.status_code == 400
 
 
+def test_trusted_hosts_always_allows_loopback_even_when_not_listed(tmp_path, monkeypatch):
+    """Regression test: the Dockerfile HEALTHCHECK always probes
+    127.0.0.1, so a TRUSTED_HOSTS value that (reasonably) only lists the
+    app's real external hostname -- exactly the .env.example example --
+    must not 400 the container's own healthcheck."""
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("TRUSTED_HOSTS", "arrlink.example.com")
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        for host in ("127.0.0.1", "localhost"):
+            r = c.get("/api/health", headers={"Host": host})
+            assert r.status_code == 200, (host, r.text)
+        bad = c.get("/api/health", headers={"Host": "evil.example"})
+        assert bad.status_code == 400
+
+
 def test_redirect_uri_not_pinned_logs_warning(client):
     """When OIDC is enabled without OIDC_REDIRECT_URI pinned, deriving it
     from the request's own (spoofable, absent a trusted proxy) Host header
@@ -1062,6 +1094,27 @@ def test_sanitize_next_blocks_open_redirect_variants():
     assert _sanitize_next("/\\evil.com") == "/"
     assert _sanitize_next("/\\/evil.com") == "/"
     assert _sanitize_next("\\\\evil.com") == "/"
+
+
+def test_secure_ignores_spoofed_forwarded_proto_header():
+    """Regression test: _secure() must rely only on request.url.scheme (set
+    by uvicorn's ProxyHeadersMiddleware, which only trusts a peer listed in
+    FORWARDED_ALLOW_IPS) -- not re-read the raw X-Forwarded-Proto header
+    directly, which any client can set (the port is published directly by
+    default)."""
+    from unittest.mock import MagicMock
+
+    from arrlink.api.auth import _secure
+
+    req = MagicMock()
+    req.url.scheme = "http"
+    req.headers = {"x-forwarded-proto": "https"}  # spoofed, must be ignored
+    assert _secure(req) is False
+
+    req2 = MagicMock()
+    req2.url.scheme = "https"
+    req2.headers = {}
+    assert _secure(req2) is True
 
 
 def test_sanitize_error_code_collapses_unknown_values():

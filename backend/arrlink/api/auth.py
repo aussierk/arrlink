@@ -104,9 +104,8 @@ def _sanitize_error_code(code: str | None) -> str:
 
 
 def _secure(request: Request) -> bool:
-    return request.url.scheme == "https" or request.headers.get(
-        "x-forwarded-proto", ""
-    ) == "https"
+    """Whether to set the Secure cookie flag."""
+    return request.url.scheme == "https"
 
 
 def _set_auth_cookies(
@@ -357,8 +356,17 @@ def oidc_callback(
         )
         return response
 
-    row = db.query_one("SELECT * FROM oidc_logins WHERE state=?", (state,))
-    db.execute("DELETE FROM oidc_logins WHERE state=?", (state,))
+    # Claim-and-consume atomically (DELETE ... RETURNING, not a separate
+    # SELECT then DELETE) so two concurrent callbacks for the same state
+    # (a double-fired redirect, or a replayed callback URL) can't both see
+    # the row as still present and both proceed with the same code -- not
+    # exploitable against a spec-compliant IdP (authorization codes are
+    # single-use there, RFC 6749 SS4.1.2), but there's no reason for our own
+    # anti-replay check to have a race window a non-compliant IdP could
+    # slip through.
+    row = db.query_one(
+        "DELETE FROM oidc_logins WHERE state=? RETURNING *", (state,)
+    )
     db.commit()
     if row is None or row["created_at"] < time.time() - OIDC_LOGIN_TTL_S:
         raise HTTPException(400, "unknown or expired login state")

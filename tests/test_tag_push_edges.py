@@ -816,6 +816,24 @@ def test_auth_password_hashed_at_rest(client):
     client.put("/api/settings/auth", json={"password_enabled": False})
 
 
+def test_password_login_cookie_secure_flag_ignores_spoofed_header(client):
+    """Regression test: a plain-HTTP request carrying a spoofed
+    X-Forwarded-Proto: https header must not get a Secure session cookie --
+    only the connection's real scheme (as TestClient sees it, plain http)
+    counts."""
+    client.put("/api/settings/auth", json={"password_enabled": True,
+                                           "ui_password": "s3cret"})
+    r = client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "s3cret"},
+        headers={"X-Forwarded-Proto": "https"},
+    )
+    assert r.status_code == 200
+    set_cookie = " | ".join(r.headers.get_list("set-cookie"))
+    assert "secure" not in set_cookie.lower()
+    client.put("/api/settings/auth", json={"password_enabled": False})
+
+
 def test_auth_auto_login_flag(client, monkeypatch):
     monkeypatch.setenv("AUTH_OIDC_ENABLED", "true")
     app = create_app(db_path=client.app.state.db.db_path)
