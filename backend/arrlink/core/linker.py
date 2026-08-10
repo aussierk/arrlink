@@ -199,6 +199,20 @@ def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
     r = create_link(p.src_path, p.dst_path, fallback)
     if r.ok:
         res.created += 1
+        # A prior item/file at this exact destination that was grace-
+        # deleted (poller.py) left behind a status='missing' row with
+        # item_id/file_id nulled out (so the delete of its now-gone
+        # app_items/app_files row wouldn't cascade it away too). That row
+        # can never be reused by the INSERT below (NULL never equals NULL
+        # in the ON CONFLICT target), so without this it would sit forever
+        # as a dead "missing" entry once this destination is legitimately
+        # relinked. Safe to drop now: this dst_path is being actively
+        # reoccupied, so any old history for it is definitely obsolete.
+        db.execute(
+            "DELETE FROM links WHERE app_id=? AND dst_path=? AND status='missing' "
+            "AND item_id IS NULL AND file_id IS NULL",
+            (app_id, p.dst_path),
+        )
         db.execute(
             "INSERT INTO links (rule_id, app_id, item_id, file_id, src_path, "
             "dst_path, inode, status, created_at, missing_strikes, match_key) "

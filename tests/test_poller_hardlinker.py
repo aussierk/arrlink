@@ -270,6 +270,18 @@ def test_deleted_item_grace(client, radarr_media):
     missing = client.get("/api/links?status=missing").json()
     assert any(l["dst_path"] == dst for l in missing)
 
+    # regression: if the same item later reappears, the old 'missing' row
+    # (item_id/file_id now NULL, so it can never be reused/updated by the
+    # fresh INSERT) must not linger forever as a zombie once this dst_path
+    # is legitimately reoccupied by a new active link
+    media.add("Kids Movie/Kids Movie.2019.mkv", "Kids Movie", 2019, ["kids"])
+    _poll(client, app_id)
+    assert os.path.exists(dst)
+    active = client.get("/api/links?status=active").json()
+    assert any(l["dst_path"] == dst for l in active)
+    missing_after = client.get("/api/links?status=missing").json()
+    assert not any(l["dst_path"] == dst for l in missing_after)
+
 
 # ---------------------------------------------------------------------------
 # rename keeps the link (re-linked under the new name)
