@@ -1140,3 +1140,140 @@ def test_oidc_login_sanitizes_next_at_storage_time(client):
         "SELECT next_path FROM oidc_logins ORDER BY created_at DESC LIMIT 1"
     )
     assert row["next_path"] == "/"
+
+
+# ---------------------------------------------------------------------------
+# password login lockout
+# ---------------------------------------------------------------------------
+
+
+def test_password_lockout_after_threshold_failures(pw_client):
+    from arrlink.auth.lockout import THRESHOLD
+
+    for _ in range(THRESHOLD):
+        r = pw_client.post(
+            "/api/auth/password", json={"username": "admin", "password": "wrong"}
+        )
+        assert r.status_code == 401
+
+    # locked now -- even the CORRECT password is rejected
+    r = pw_client.post(
+        "/api/auth/password", json={"username": "admin", "password": "hunter2"}
+    )
+    assert r.status_code == 401
+    assert r.json()["detail"] == "wrong username or password"
+
+
+def test_password_lockout_persists_across_restart(pw_client, tmp_path, monkeypatch):
+    from arrlink.auth.lockout import THRESHOLD
+    from arrlink.main import create_app
+
+    for _ in range(THRESHOLD):
+        pw_client.post(
+            "/api/auth/password", json={"username": "admin", "password": "wrong"}
+        )
+
+    db_path = pw_client.app.state.db.db_path
+    app2 = create_app(db_path=db_path)
+    with TestClient(app2) as c2:
+        r = c2.post(
+            "/api/auth/password", json={"username": "admin", "password": "hunter2"}
+        )
+        assert r.status_code == 401
+
+
+def test_password_lockout_resets_on_success(pw_client):
+    from arrlink.auth.lockout import THRESHOLD
+
+    for _ in range(THRESHOLD - 1):
+        pw_client.post(
+            "/api/auth/password", json={"username": "admin", "password": "wrong"}
+        )
+    ok = pw_client.post(
+        "/api/auth/password", json={"username": "admin", "password": "hunter2"}
+    )
+    assert ok.status_code == 200
+
+    row = pw_client.app.state.db.query_one(
+        "SELECT * FROM login_attempts WHERE username='admin'"
+    )
+    assert row is None
+
+    # one more failure starts a fresh count, not accumulated from before
+    pw_client.post(
+        "/api/auth/password", json={"username": "admin", "password": "wrong"}
+    )
+    row = pw_client.app.state.db.query_one(
+        "SELECT fail_count FROM login_attempts WHERE username='admin'"
+    )
+    assert row["fail_count"] == 1
+
+
+def test_password_lockout_logs_event(pw_client):
+    from arrlink.auth.lockout import THRESHOLD
+
+    for _ in range(THRESHOLD):
+        pw_client.post(
+            "/api/auth/password", json={"username": "admin", "password": "wrong"}
+        )
+    rows = pw_client.app.state.db.query(
+        "SELECT message FROM events ORDER BY id DESC LIMIT 10"
+    )
+    assert any("locked" in r["message"] for r in rows)
+
+
+def test_password_lockout_visible_in_settings_auth(both_client, issuer):
+    from arrlink.auth.lockout import THRESHOLD
+
+    email = "admin-oidc@example.com"
+    code, state = start_login(both_client, issuer, email)
+    complete_login(both_client, code, state)
+
+    for _ in range(THRESHOLD):
+        both_client.post(
+            "/api/auth/password", json={"username": "admin", "password": "wrong"}
+        )
+
+    j = both_client.get("/api/settings/auth").json()
+    assert j["password_locked"] is True
+    assert j["password_locked_until"] is not None
+
+
+def test_password_unlock_endpoint_clears_lockout(both_client, issuer):
+    from arrlink.auth.lockout import THRESHOLD
+
+    email = "admin-oidc2@example.com"
+    code, state = start_login(both_client, issuer, email)
+    complete_login(both_client, code, state)
+
+    for _ in range(THRESHOLD):
+        both_client.post(
+            "/api/auth/password", json={"username": "admin", "password": "wrong"}
+        )
+    assert both_client.get("/api/settings/auth").json()["password_locked"] is True
+
+    r = both_client.post("/api/auth/password/unlock")
+    assert r.status_code == 200
+    assert both_client.get("/api/settings/auth").json()["password_locked"] is False
+
+    ok = both_client.post(
+        "/api/auth/password", json={"username": "admin", "password": "hunter2"}
+    )
+    assert ok.status_code == 200
+
+
+def test_password_lockout_is_case_insensitive_single_bucket(pw_client):
+    from arrlink.auth.lockout import THRESHOLD
+
+    usernames = ["admin", "Admin", "ADMIN", "AdMiN"]
+    for i in range(THRESHOLD):
+        pw_client.post(
+            "/api/auth/password",
+            json={"username": usernames[i % len(usernames)], "password": "wrong"},
+        )
+    r = pw_client.post(
+        "/api/auth/password", json={"username": "admin", "password": "hunter2"}
+    )
+    assert r.status_code == 401
+    rows = pw_client.app.state.db.query("SELECT * FROM login_attempts")
+    assert len(rows) == 1

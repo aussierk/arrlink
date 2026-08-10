@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 # versions 8/9 briefly meant a different migration than they do now, and got
 # silently skipped by an instance that had already recorded 9). Versions 8
 # and 9 are retired for that reason — do not reuse them.
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 15
 
 
 def _migration_2(conn: sqlite3.Connection) -> None:
@@ -185,6 +185,25 @@ def _migration_12(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migration_15(conn: sqlite3.Connection) -> None:
+    """M15: persisted password-login lockout, keyed by username.
+
+    A DB row (not an in-memory counter) so a lockout survives a process
+    restart -- this is a security control, not just a nicety.
+    """
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            username TEXT PRIMARY KEY,
+            fail_count INTEGER NOT NULL DEFAULT 0,
+            first_fail_at REAL,
+            last_fail_at REAL,
+            locked_until REAL
+        );
+        """
+    )
+
+
 def _migration_13(conn: sqlite3.Connection) -> None:
     """M13: native *arr per-item metadata (genres/certification/collection/ quality profile/original language)."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(app_items)")}
@@ -323,6 +342,7 @@ _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
     (11, _migration_11),
     (12, _migration_12),
     (13, _migration_13),
+    (15, _migration_15),
 ]
 
 

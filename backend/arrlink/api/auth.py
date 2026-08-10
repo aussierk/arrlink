@@ -17,6 +17,7 @@ from fastapi.responses import RedirectResponse
 from ..deps import get_db
 from ..state import State
 from ..auth.oidc import OidcClient, OidcError, b64url_encode, decode_jwt_payload
+from ..auth import lockout
 from ..auth import sessions as sess
 from ..auth.passwords import verify_password
 from ..config import Settings, effective_auth
@@ -254,15 +255,29 @@ def login_password(
         raise HTTPException(400, "password login is not enabled")
     expected_username = auth["ui_username"] or "admin"
     expected_password = auth["ui_password"] or ""
+    lockout_key = expected_username.strip().lower()
+    # Keyed by the one *real* configured username, not whatever the caller
+    # submitted -- keying by the submitted value would let an attacker
+    # dodge the lockout entirely just by varying the username field on
+    # every guess, since it's otherwise always wrong anyway.
+    st = lockout.status(db, lockout_key)
     username_ok = hmac.compare_digest(
         body.username.strip().lower(), expected_username.strip().lower()
     )
+    # Always run verify_password (even while already locked) so a locked
+    # response costs the same Argon2id time as a normal wrong-password one
+    # -- skipping it would itself be a timing side channel revealing
+    # lockout state.
     password_ok = bool(expected_password) and verify_password(
         body.password, expected_password
     )
-    # Deliberately vague about which field was wrong (no username enumeration).
-    if not (username_ok and password_ok):
+    # Deliberately vague about which field was wrong (no username
+    # enumeration) -- and, for the same reason, a locked account gets the
+    # exact same response as a wrong password, not a distinguishable one.
+    if st.locked or not (username_ok and password_ok):
+        lockout.record_failure(db, lockout_key)
         raise HTTPException(401, "wrong username or password")
+    lockout.reset(db, lockout_key)
     token, _created, _expires = sess.create_session(
         db, expected_username, expected_username, [], None, auth["session_ttl_h"],
         kind="password",
@@ -277,6 +292,23 @@ def login_password(
         max_age=auth["session_ttl_h"] * 3600,
     )
     return response
+
+
+@router.post("/password/unlock")
+def unlock_password(
+    request: Request,
+    _user: CurrentUser,
+    db: Annotated[State, Depends(get_db)],
+) -> dict:
+    """Escape hatch for an admin locked out of password login who still has
+    a valid session (e.g. via OIDC, or a password session issued before the
+    lockout) -- clears the lockout immediately rather than waiting it out."""
+    settings: Settings = request.app.state.settings
+    auth = effective_auth(db, settings)
+    lockout_key = (auth["ui_username"] or "admin").strip().lower()
+    lockout.reset(db, lockout_key)
+    db.log_event("info", "password lockout manually cleared")
+    return {"ok": True}
 
 
 @router.get("/login")

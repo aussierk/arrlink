@@ -7,6 +7,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from ..auth import lockout
 from ..auth.passwords import hash_password
 from ..config import effective_auth
 from ..deps import get_db
@@ -90,12 +91,15 @@ class AuthSettingsIn(BaseModel):
 def _auth_view(db: State, env) -> dict:
     """Masked view of the effective auth config (no secrets returned)."""
     auth = effective_auth(db, env)
+    st = lockout.status(db, (auth["ui_username"] or "admin").strip().lower())
     return {
         "password_enabled": auth["password_enabled"],
         "oidc_enabled": auth["oidc_enabled"],
         "auto_login": bool(auth["auto_login"]),
         "ui_username": auth["ui_username"],
         "ui_password_set": bool(auth["ui_password"]),
+        "password_locked": st.locked,
+        "password_locked_until": st.locked_until,
         "oidc_issuer": auth["oidc_issuer"] or "",
         "oidc_client_id": auth["oidc_client_id"] or "",
         "oidc_client_secret_set": bool(auth["oidc_client_secret"]),
