@@ -17,6 +17,7 @@ from . import __version__
 from .api import (
     apps,
     auth,
+    backup as backup_api,
     health,
     links as links_api,
     logs,
@@ -29,8 +30,10 @@ from .api import (
 from .auth import sessions as sess_mod
 from .auth.oidc import OidcClient
 from .config import effective_auth, get_settings, setup_logging
+from .core import backup as backup_core
 from .core.poller import Poller
 from .core.template import audit_rule_roots
+from .singleton import InstanceLockError, acquire_instance_lock, release_instance_lock
 from .state import State
 
 log = logging.getLogger(__name__)
@@ -83,17 +86,47 @@ async def _auth_sweep(db: State, settings) -> None:
             log.warning("auth sweep error: %s", e)
 
 
+async def _backup_loop(db: State, settings) -> None:
+    """Background loop: nightly DB backup with retention (PLAN.md SS7/SS11)."""
+    if not settings.backup_enabled:
+        return
+    while True:
+        try:
+            age = backup_core.newest_backup_age_s(settings.backup_dir)
+            if age is None or age > backup_core.STALE_S:
+                await asyncio.to_thread(
+                    backup_core.run_backup_cycle, db, settings.db_path,
+                    settings.backup_dir, settings.backup_retention_days,
+                )
+        except Exception as e:  # noqa: BLE001 - never crash the app
+            log.warning("backup loop error: %s", e)
+        await asyncio.sleep(backup_core.CHECK_INTERVAL_S)
+
+
 def create_app(db_path: Path | None = None) -> FastAPI:
     """Build the app. `db_path` overrides the default (used by tests)."""
     settings = get_settings()
     setup_logging(settings.log_level)
-    db = State(db_path or settings.db_path)
+    resolved_db_path = db_path or settings.db_path
+    # Acquired before State() so the migration step itself is also
+    # protected from a concurrent racer, and so a conflict fails as
+    # early/loudly as possible. This can only log to stdout/stderr (no
+    # State/db.log_event exists yet) -- the correct channel anyway: an
+    # admin debugging "container won't start" reads `docker logs`, not the
+    # in-app Logs page (which needs a running instance to view).
+    try:
+        lock_path = acquire_instance_lock(resolved_db_path.parent)
+    except InstanceLockError:
+        log.error("startup aborted: instance lock already held")
+        raise
+    db = State(resolved_db_path)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Always run the sweep: the auth mode can be switched to oidc at
         # runtime, and it self-dormants when oidc is not active.
         task = asyncio.create_task(_auth_sweep(db, settings))
+        task_backup = asyncio.create_task(_backup_loop(db, settings))
         poller = Poller(db, settings)
         app.state.poller = poller
         # Legacy-root audit: enabled rules whose dir template escapes the
@@ -113,6 +146,9 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             await poller.stop()
             if task:
                 task.cancel()
+            if task_backup:
+                task_backup.cancel()
+            release_instance_lock(lock_path)
 
     app = FastAPI(title="ArrLink", version=__version__, lifespan=lifespan)
     app.state.settings = settings
@@ -152,6 +188,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(backup_api.router)
     app.include_router(apps.router)
     app.include_router(links_api.router)
     app.include_router(tags.router)
@@ -174,6 +211,3 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             return FileResponse(dist / "index.html")
 
     return app
-
-
-app = create_app()

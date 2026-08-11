@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     # deployment (see main.py, which adds TrustedHostMiddleware only when
     # this is set).
     trusted_hosts: str | None = None
+    # Deployment-time knobs, not a runtime Setting: someone already doing
+    # volume-level snapshots of config_dir should be able to opt out at
+    # deploy time, but there's no legitimate reason for an authenticated
+    # caller to disable their own backups at runtime the way e.g.
+    # fs_fallback is meant to be tunable.
+    backup_enabled: bool = True
+    backup_retention_days: int = 7
 
     @cached_property
     def ui_password_hash(self) -> str:
@@ -101,6 +108,10 @@ class Settings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self.config_dir / "arrlink.db"
+
+    @property
+    def backup_dir(self) -> Path:
+        return self.config_dir / "backups"
 
 
 def get_settings() -> Settings:
