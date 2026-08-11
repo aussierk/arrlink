@@ -136,7 +136,7 @@ Dockerfile           multi-stage build
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest tests/ -q
-CONFIG_DIR=./config .venv/bin/python -m uvicorn arrlink.main:app --app-dir backend --port 8270 --reload
+CONFIG_DIR=./config .venv/bin/python -m uvicorn arrlink.main:create_app --factory --app-dir backend --port 8270 --reload
 # the poller starts automatically; rescan an app from the UI or:
 #   curl -X POST http://localhost:8270/api/apps/1/rescan
 
@@ -198,6 +198,56 @@ itself.
 > from the userinfo endpoint over TLS; id_token is used for nonce/exp only).
 > This keeps the client dependency-free and works with any standard provider.
 
+**Password login lockout**: 5 failed attempts within 15 minutes locks the
+account for 15 minutes (persisted — survives a restart). If you're locked
+out and still have a valid OIDC session, `POST /api/auth/password/unlock`
+clears it immediately; with password-only auth and no other session, either
+wait it out or run
+`sqlite3 /config/arrlink.db "DELETE FROM login_attempts;"`.
+
+## Security
+
+**Don't expose ArrLink directly to the internet.** It has no built-in TLS
+termination and is designed to sit on a LAN or behind a reverse proxy —
+put one (with TLS) in front of it for anything reachable outside your LAN,
+same as you would for Radarr/Sonarr themselves.
+
+- `FORWARDED_ALLOW_IPS`: uvicorn only honors `X-Forwarded-For`/`-Proto` from
+  this IP/CIDR (default: localhost only). Set it to your reverse proxy's
+  address if you have one, so it isn't trusting forwarded headers from
+  arbitrary clients.
+- `TRUSTED_HOSTS`: comma-separated hostname allow-list for the `Host`
+  header (default: unrestricted). Recommended if OIDC is enabled without
+  `OIDC_REDIRECT_URI` pinned and there's no host-checking proxy in front of
+  ArrLink — otherwise the redirect URI sent to your provider is derived
+  from whatever `Host` header the request carries. `127.0.0.1`/`localhost`
+  stay implicitly trusted regardless (the container's own healthcheck
+  needs them).
+- Password login is rate-limited (see above); there's no rate limiting on
+  other endpoints, matching the LAN-first assumption. If you're exposing
+  ArrLink beyond your LAN, OIDC is the recommended login method.
+
+Found a vulnerability? See `SECURITY.md`.
+
+## Backups
+
+`/config/backups/arrlink-YYYYMMDD-HHMMSS.db` — a nightly backup of the
+whole database (rules, apps, settings, everything except the physical
+media/hardlinks themselves, which live independently), retained for 7 days.
+Uses SQLite's own online backup API, safe against a live database — no
+downtime, no pausing the poller. Configurable via `BACKUP_ENABLED` (default
+`true`) and `BACKUP_RETENTION_DAYS` (default `7`); `GET /api/backup` lists
+existing backups, `POST /api/backup/run` triggers one manually. This
+doesn't back up your actual media or hardlinks — just ArrLink's own
+configuration database.
+
+## Compatibility
+
+Targets the `/v3/` API surface of current Radarr/Sonarr releases (`/v3/tag`,
+`/v3/movie`, `/v3/series`, `/v3/episodefile`, etc.). No specific minimum
+version has been verified/pinned — if something breaks against your
+version, please open an issue.
+
 ## Milestones
 
 | # | Scope | Status |
@@ -210,3 +260,7 @@ itself.
 | M5 | Sonarr adapter (series + episodefile join, tag-id → label) | ✅ done |
 | M6 | presets, runtime fs fallback, Settings page, lifecycle polish | ✅ done |
 | M7 | docs, image publish, homelab test matrix | next |
+
+## License
+
+[MIT](LICENSE)

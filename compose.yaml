@@ -1,6 +1,6 @@
 services:
   arrlink:
-    image: ghcr.io/yourname/arrlink:latest
+    image: ghcr.io/aussierk/arrlink:latest
     build: .
     container_name: arrlink
     env_file: .env
