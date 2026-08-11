@@ -19,6 +19,12 @@ FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-127.0.0.1}"
 chown -R "${PUID}:${PGID}" /config 2>/dev/null || true
 [ -d /linked ] && chown -R "${PUID}:${PGID}" /linked 2>/dev/null || true
 
-exec gosu "${PUID}:${PGID}" python -m uvicorn arrlink.main:app \
+# --factory, not arrlink.main:app: create_app() now acquires the
+# single-instance lock (singleton.py) as a side effect of being called, so
+# it must only run when uvicorn actually starts the server -- a bare
+# module-level `app = create_app()` would acquire a real lock the instant
+# anything merely imports arrlink.main (e.g. a local dev server and a
+# concurrent test run against the same default ./config path).
+exec gosu "${PUID}:${PGID}" python -m uvicorn arrlink.main:create_app --factory \
     --host 0.0.0.0 --port "${PORT}" \
     --proxy-headers --forwarded-allow-ips "${FORWARDED_ALLOW_IPS}"
