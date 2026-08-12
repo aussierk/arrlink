@@ -66,7 +66,10 @@ class RadarrAdapter(BaseAdapter):
             raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'",
                               status=r.status_code)
 
-    async def fetch_items(self) -> list[Item]:
+    async def fetch_items(self, known_fingerprints=None) -> list[Item]:
+        # Radarr's item list is a single /movie call, so there's nothing to
+        # skip -- known_fingerprints is accepted for interface parity and
+        # ignored.
         vocabulary = await self.fetch_tags()
         # Quality profile names aren't on the movie payload itself (only
         # qualityProfileId) — resolve via one extra call, same id->label

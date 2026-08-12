@@ -27,6 +27,10 @@ class PlannedLink:
     dst_dir: str
     dst_filename: str
     file_id: int | None = None
+    # The current source file's inode, as stat'd by the adapter when it built
+    # the snapshot. Lets the reconciler skip re-stat'ing the source on every
+    # poll (see linker._ensure_present). None if the adapter couldn't stat it.
+    src_inode: int | None = None
     # "" for the rule's primary destination; "category=tag" for a fan-out
     # extra (when a condition matched more than one of the item's tags).
     # Stable across polls (tied to the matched tag, not the resolved path),
@@ -136,15 +140,24 @@ def plan_links(
         native = _native_values(it)
         files = [_as_dict(f) for f in (it.get("files") or [])]
 
-        for f in files:
-            src = f["abs_path"]
-            fid = f.get("id")
-            for rule in active:
-                cr = match_conditions(_rule_conditions(rule), tags, native=native)
-                if not cr.result:
-                    continue
+        # Rule matching depends only on the item's tags/native metadata, not
+        # on individual files — evaluate it once per (item, rule) and reuse
+        # for every file, rather than re-running it
+        for rule in active:
+            cr = match_conditions(_rule_conditions(rule), tags, native=native)
+            if not cr.result:
+                continue
+            variants = _fanout_variants(cr)
+            for f in files:
+                src = f["abs_path"]
+                fid = f.get("id")
+                # files_stale => this item's files came from the stored
+                # snapshot, not a fresh adapter fetch (Sonarr delta-skip), so
+                # the stored inode could lag a same-size file replacement.
+                # Drop it so the reconciler does a live source stat instead.
+                src_inode = None if it.get("files_stale") else f.get("inode")
                 seen_dst_paths: set[str] = set()
-                for match_key, matched_conditions in _fanout_variants(cr):
+                for match_key, matched_conditions in variants:
                     try:
                         dst_dir, dst_name = resolve_destination(
                             rule["dir_template"],
@@ -184,6 +197,7 @@ def plan_links(
                             dst_filename=dst_name,
                             dst_path=dst_path,
                             file_id=fid,
+                            src_inode=src_inode,
                             match_key=match_key,
                         )
                     )

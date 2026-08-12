@@ -5,7 +5,7 @@ import dataclasses
 import os
 import time
 
-from ..state import State
+from ..state import COMMIT_BATCH, State
 from .fsutil import create_link, ensure_dir, inode_of, remove_link
 from .planner import PlannedLink
 
@@ -62,51 +62,64 @@ def reconcile(
         (app_id,),
     )
 
+    # One lookup for every rule referenced below, instead of a
+    # `SELECT * FROM rules WHERE id=?` per non-matching link inside _retire().
+    rules_by_id = {r["id"]: r for r in db.query("SELECT * FROM rules")}
+
+    # Both passes interleave real os.link/os.unlink with their DB writes. The
+    # transaction wrapper keeps each COMMIT_BATCH-sized chunk atomic while
+    # still releasing the WAL writer lock between chunks (so a concurrent API
+    # write isn't starved past busy_timeout) and bounding a mid-loop failure's
+    # blast radius to one chunk -- the DB and filesystem stay consistent only
+    # up to the last committed batch, and the next poll re-reconciles the rest
+    # (self-healing, by design).
+
     # --- pass 1: links we already have -----------------------------------
-    for row in rows:
-        key = (row["rule_id"], row["file_id"], row["match_key"] or "")
-        dst = row["dst_path"]
-        src = row["src_path"]
+    with db.transaction():
+        for i, row in enumerate(rows):
+            if i and i % COMMIT_BATCH == 0:
+                db.commit()
+            key = (row["rule_id"], row["file_id"], row["match_key"] or "")
+            dst = row["dst_path"]
+            src = row["src_path"]
 
-        if key in planned:
-            p = planned.pop(key)
-            if p.dst_path == dst:
-                _ensure_present(db, row, src, dst, p, res, fallback, now)
-            else:
-                # dst changed (file renamed/moved, or template edited) ->
-                # recreate under the new dst, drop the old
-                r = remove_link(dst)
-                if not r.ok and r.error:
-                    res.errors.append(f"old link {dst}: {r.error}")
-                if p.file_id is not None:
-                    _create(db, p, app_id, res, fallback, now)
+            if key in planned:
+                p = planned.pop(key)
+                if p.dst_path == dst:
+                    _ensure_present(db, row, dst, p, res, fallback, now)
                 else:
-                    res.skipped += 1
-                res.moved += 1
-            continue
+                    # dst changed (file renamed/moved, or template edited) ->
+                    # recreate under the new dst, drop the old
+                    r = remove_link(dst)
+                    if not r.ok and r.error:
+                        res.errors.append(f"old link {dst}: {r.error}")
+                    if p.file_id is not None:
+                        _create(db, p, app_id, res, fallback, now)
+                    else:
+                        res.skipped += 1
+                    res.moved += 1
+                continue
 
-        # --- key not in plan: rule no longer matches / file deleted -------
-        _retire(db, row, src, dst, live_srcs, unlink_on_mismatch, res, now,
-                delete_after, fallback)
+            # --- key not in plan: rule no longer matches / file deleted ---
+            _retire(db, row, src, dst, live_srcs, unlink_on_mismatch, res, now,
+                    delete_after, fallback, rules_by_id)
 
     # --- pass 2: links that should exist but don't ------------------------
-    for p in planned.values():
-        if p.file_id is None:
-            continue
-        _create(db, p, app_id, res, fallback, now)
+    with db.transaction():
+        for i, p in enumerate(planned.values()):
+            if i and i % COMMIT_BATCH == 0:
+                db.commit()
+            if p.file_id is None:
+                continue
+            _create(db, p, app_id, res, fallback, now)
 
     return res
 
 
-
-def _ensure_present(db, row, src, dst, p, res, fallback, now) -> None:
-    """Keep an already-placed link valid (idempotent).
-
-    The link is valid only while dst points at the *same inode as the
-    current source*. This catches: quality upgrades (src replaced -> new
-    inode) and any drift. If dst is gone, re-create from the source.
-    """
-    src_ino = inode_of(src)
+def _ensure_present(db, row, dst, p, res, fallback, now) -> None:
+    """Keep an already-placed link valid (idempotent)."""
+    src = p.src_path
+    src_ino = p.src_inode if p.src_inode is not None else inode_of(src)
     dst_ino = inode_of(dst)
     if dst_ino is None:
         # dst vanished on disk: re-create if the source still exists
@@ -119,13 +132,11 @@ def _ensure_present(db, row, src, dst, p, res, fallback, now) -> None:
                     "missing_strikes=0, created_at=? WHERE id=?",
                     (inode_of(dst), src, now, row["id"]),
                 )
-                db.commit()
             else:
                 res.skipped += 1
                 res.errors.append(f"{dst}: {r.error}")
         else:
             db.execute("UPDATE links SET status='stale' WHERE id=?", (row["id"],))
-            db.commit()
         return
 
     if dst_ino != src_ino:
@@ -141,7 +152,6 @@ def _ensure_present(db, row, src, dst, p, res, fallback, now) -> None:
                     "WHERE id=?",
                     (inode_of(dst), src, row["id"]),
                 )
-                db.commit()
             else:
                 res.skipped += 1
                 res.errors.append(f"{dst}: {r2.error}")
@@ -153,13 +163,12 @@ def _ensure_present(db, row, src, dst, p, res, fallback, now) -> None:
             "UPDATE links SET inode=?, src_path=?, missing_strikes=0 WHERE id=?",
             (dst_ino, src, row["id"]),
         )
-        db.commit()
 
 
 def _retire(db, row, src, dst, live_srcs, unlink_on_mismatch, res, now,
-            delete_after, fallback) -> None:
+            delete_after, fallback, rules_by_id) -> None:
     """Remove (or defer) a link that is no longer planned."""
-    rule = db.query_one("SELECT * FROM rules WHERE id=?", (row["rule_id"] or 0,))
+    rule = rules_by_id.get(row["rule_id"])
     rule_unlink = bool(rule["unlink_on_mismatch"]) if rule else unlink_on_mismatch
     src_exists = src in live_srcs and inode_of(src) is not None
 
@@ -171,13 +180,11 @@ def _retire(db, row, src, dst, live_srcs, unlink_on_mismatch, res, now,
                 "UPDATE links SET missing_strikes=? WHERE id=?",
                 (strikes, row["id"]),
             )
-            db.commit()
             return
     elif not rule_unlink:
         # source still there but rule no longer matches; user opted out of
         # auto-unlink -> keep it (mark stale so the UI can show it)
         db.execute("UPDATE links SET status='stale' WHERE id=?", (row["id"],))
-        db.commit()
         return
 
     r = remove_link(dst)
@@ -186,7 +193,6 @@ def _retire(db, row, src, dst, live_srcs, unlink_on_mismatch, res, now,
     else:
         res.errors.append(f"remove {dst}: {r.error}")
     db.execute("UPDATE links SET status='missing' WHERE id=?", (row["id"],))
-    db.commit()
 
 
 def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
@@ -206,8 +212,7 @@ def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
         # can never be reused by the INSERT below (NULL never equals NULL
         # in the ON CONFLICT target), so without this it would sit forever
         # as a dead "missing" entry once this destination is legitimately
-        # relinked. Safe to drop now: this dst_path is being actively
-        # reoccupied, so any old history for it is definitely obsolete.
+        # relinked.
         db.execute(
             "DELETE FROM links WHERE app_id=? AND dst_path=? AND status='missing' "
             "AND item_id IS NULL AND file_id IS NULL",
@@ -224,7 +229,6 @@ def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
             (p.rule_id, app_id, p.item_id, p.file_id, p.src_path, p.dst_path,
              inode_of(p.dst_path), now, p.match_key),
         )
-        db.commit()
     else:
         res.skipped += 1
         res.errors.append(f"{p.dst_path}: {r.error}")

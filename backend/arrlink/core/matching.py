@@ -7,8 +7,21 @@ placeholder resolution.
 from __future__ import annotations
 
 import dataclasses
+import functools
 import json
 import re
+
+
+@functools.lru_cache(maxsize=512)
+def _compiled(pattern: str) -> "re.Pattern | None":
+    """Compile (and cache) a rule's regex. Returns None for an invalid
+    pattern — a bad regex simply never matches, same as before. Cached
+    because plan_links evaluates the same handful of rule patterns across
+    every item in the library on every poll."""
+    try:
+        return re.compile(pattern)
+    except re.error:
+        return None
 
 
 @dataclasses.dataclass
@@ -50,9 +63,8 @@ def match_rule_all(match_type: str, match_value: str, item_tags: list[str]) -> l
         return [RuleMatch(tag=t) for t in item_tags if t in targets]
 
     if match_type == "regex":
-        try:
-            pattern = re.compile(match_value)
-        except re.error:
+        pattern = _compiled(match_value)
+        if pattern is None:
             return []
         out = []
         for t in item_tags:

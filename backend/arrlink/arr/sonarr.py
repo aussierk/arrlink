@@ -16,7 +16,17 @@ from .base import (
 
 # Bound concurrent per-series episodefile requests so a large library does not
 # open a flood of connections at once.
-FILE_FETCH_CONCURRENCY = 8
+FILE_FETCH_CONCURRENCY = 16
+
+
+def _series_fingerprint(s: dict) -> str | None:
+    """A cheap "did this series' file set change" marker from the series
+    payload's own statistics block -- no extra call. None when the payload
+    carries no statistics (then the poller always re-fetches, never skips)."""
+    stats = s.get("statistics")
+    if not isinstance(stats, dict):
+        return None
+    return f"{stats.get('episodeFileCount', 0)}:{stats.get('sizeOnDisk', 0)}"
 
 
 class SonarrAdapter(BaseAdapter):
@@ -71,7 +81,8 @@ class SonarrAdapter(BaseAdapter):
             raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'",
                               status=r.status_code)
 
-    async def fetch_items(self) -> list[Item]:
+    async def fetch_items(self, known_fingerprints=None) -> list[Item]:
+        known = known_fingerprints or {}
         tags = await self.fetch_tags()
         # Quality profile names aren't on the series payload itself (only
         # qualityProfileId) — resolve via one extra call, same id->label
@@ -124,53 +135,71 @@ class SonarrAdapter(BaseAdapter):
                 "quality_profile_id": qp_id,
                 "quality_profile_name": qp_name,
                 "original_language": original_language,
+                "stats_fingerprint": _series_fingerprint(s),
             }
 
         if not meta:
             return []
 
-        # Fetch each series' episode files in parallel (bounded). Any HTTP
-        # failure propagates so the poller backs off without removals.
+        # Delta fetch: only pull /episodefile for series whose fingerprint
+        # changed (or that we have no fingerprint for). Unchanged series are
+        # returned with files_stale=True and the poller reuses stored rows.
+        to_fetch = [
+            sid for sid, m in meta.items()
+            if m["stats_fingerprint"] is None
+            or known.get(sid) != m["stats_fingerprint"]
+        ]
+
+        # Fetch each changed series' episode files in parallel (bounded). Any
+        # HTTP failure propagates so the poller backs off without removals.
         sem = asyncio.Semaphore(FILE_FETCH_CONCURRENCY)
 
-        async def _files(sid: int) -> tuple[int, list]:
+        async def _files(sid: int) -> tuple[int, list[MediaFile]]:
             async with sem:
                 data = await self._get_json(f"/api/v3/episodefile?seriesId={sid}")
                 if not isinstance(data, list):
                     raise AdapterError(f"unexpected episodefile payload for series {sid}")
-                return sid, data
+                series_path = meta[sid]["path"]
+                specs = [
+                    (str(f["path"]), f.get("size"))
+                    for f in data
+                    if isinstance(f, dict) and f.get("path")
+                ]
+                # os.stat per file, off the event loop 
+                mfiles = await asyncio.to_thread(
+                    lambda: [
+                        self._stat_file(p, series_path, sz) for p, sz in specs
+                    ]
+                )
+                return sid, mfiles
 
-        results = await asyncio.gather(*(_files(sid) for sid in meta))
+        fetched = dict(await asyncio.gather(*(_files(sid) for sid in to_fetch)))
 
         items: list[Item] = []
-        for sid, files in results:
-            m = meta[sid]
-            item_files: list[MediaFile] = []
-            for f in files:
-                if not isinstance(f, dict):
-                    continue
-                path = f.get("path")
-                if not path:
-                    continue
-                item_files.append(self._stat_file(str(path), m["path"], f.get("size")))
-            if not item_files:
-                continue  # series with no files on disk
-            items.append(
-                Item(
-                    id=sid,
-                    title=m["title"],
-                    year=m["year"],
-                    tags=m["tags"],
-                    path=m["path"],
-                    files=item_files,
-                    genres=m["genres"],
-                    certification=m["certification"],
-                    collection=m["collection"],
-                    quality_profile_id=m["quality_profile_id"],
-                    quality_profile_name=m["quality_profile_name"],
-                    original_language=m["original_language"],
-                )
+        for sid, m in meta.items():
+            common = dict(
+                id=sid,
+                title=m["title"],
+                year=m["year"],
+                tags=m["tags"],
+                path=m["path"],
+                genres=m["genres"],
+                certification=m["certification"],
+                collection=m["collection"],
+                quality_profile_id=m["quality_profile_id"],
+                quality_profile_name=m["quality_profile_name"],
+                original_language=m["original_language"],
+                stats_fingerprint=m["stats_fingerprint"],
             )
+            if sid in fetched:
+                item_files = fetched[sid]
+                if not item_files:
+                    continue  # series with no files on disk
+                items.append(Item(**common, files=item_files, files_stale=False))
+            else:
+                # unchanged since last poll -> poller rehydrates files from
+                # the stored app_files rows before reconciling.
+                items.append(Item(**common, files=[], files_stale=True))
         return items
 
     @staticmethod

@@ -95,16 +95,15 @@ class Item:
     tags: list[str]
     path: str
     files: list[MediaFile]
-    # Native per-item metadata (M11+): read straight from the app's own
-    # movie/series payload, independent of the tags system. Defaulted so
-    # every existing caller/test constructing an Item positionally-or-by-
-    # keyword without these still works unchanged.
+    # Read straight from the app's own movie/series payload, independent of the tags system. 
     genres: list[str] = dataclasses.field(default_factory=list)
     certification: str | None = None
     collection: str | None = None  # collection *name*; Sonarr has none
     quality_profile_id: int | None = None
     quality_profile_name: str | None = None
     original_language: str | None = None
+    stats_fingerprint: str | None = None
+    files_stale: bool = False
 
 
 class BaseAdapter(abc.ABC):
@@ -130,7 +129,9 @@ class BaseAdapter(abc.ABC):
         """The app's tag vocabulary with usage counts."""
 
     @abc.abstractmethod
-    async def fetch_items(self) -> list[Item]:
+    async def fetch_items(
+        self, known_fingerprints: "dict[int, str] | None" = None
+    ) -> list[Item]:
         """All items that have at least one file on disk."""
 
     async def create_tag(self, label: str) -> None:
