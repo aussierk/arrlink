@@ -9,19 +9,23 @@ import logging
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 log = logging.getLogger(__name__)
 
+# Long write loops (the poller's snapshot store, the reconciler) commit every
+# this many rows rather than holding SQLite's single WAL writer lock for the
+# whole poll. Also bounds how much a mid-loop failure can roll back.
+COMMIT_BATCH = 500
+
 # Migration version numbers must only ever increase — never reuse or reorder
-# one that has already shipped, even during active development, since any
+# one that has already shipped, even during active development, since an
 # already-running instance's `schema_version` row would just skip a
-# lower/equal-numbered migration as "already applied" (this bit us once:
-# versions 8/9 briefly meant a different migration than they do now, and got
-# silently skipped by an instance that had already recorded 9). Versions 8
-# and 9 are retired for that reason — do not reuse them.
-SCHEMA_VERSION = 15
+# lower/equal-numbered migration as "already applied". Versions 8, 9, 14,
+# and 16 are retired/unused — do not reuse them.
+SCHEMA_VERSION = 18
 
 
 def _migration_2(conn: sqlite3.Connection) -> None:
@@ -185,6 +189,20 @@ def _migration_12(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migration_17(conn: sqlite3.Connection) -> None:
+    """M17: indexes for the poller/reconciler hot paths."""
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_links_app_status ON links(app_id, status);
+        CREATE INDEX IF NOT EXISTS idx_links_file ON links(file_id);
+        CREATE INDEX IF NOT EXISTS idx_links_item ON links(item_id);
+        CREATE INDEX IF NOT EXISTS idx_links_status ON links(status);
+        CREATE INDEX IF NOT EXISTS idx_app_files_item_inode
+            ON app_files(item_id, inode);
+        """
+    )
+
+
 def _migration_15(conn: sqlite3.Connection) -> None:
     """M15: persisted password-login lockout, keyed by username.
 
@@ -202,6 +220,13 @@ def _migration_15(conn: sqlite3.Connection) -> None:
         );
         """
     )
+
+
+def _migration_18(conn: sqlite3.Connection) -> None:
+    """M18: app_items.stats_fingerprint — a cheap per-item "did the file set change" marker."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(app_items)")}
+    if "stats_fingerprint" not in cols:
+        conn.execute("ALTER TABLE app_items ADD COLUMN stats_fingerprint TEXT")
 
 
 def _migration_13(conn: sqlite3.Connection) -> None:
@@ -343,6 +368,8 @@ _MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
     (12, _migration_12),
     (13, _migration_13),
     (15, _migration_15),
+    (17, _migration_17),
+    (18, _migration_18),
 ]
 
 
@@ -368,6 +395,9 @@ class State:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA wal_autocheckpoint=1000")
+        conn.execute("PRAGMA cache_size=-16000")  # ~16 MiB page cache
         return conn
 
     @property
@@ -410,6 +440,24 @@ class State:
 
     def commit(self) -> None:
         self.conn.commit()
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """Batch a group of writes into a single commit."""
+        conn = self.conn
+        depth = getattr(self._local, "txn_depth", 0)
+        self._local.txn_depth = depth + 1
+        try:
+            yield conn
+        except BaseException:
+            if depth == 0:
+                conn.rollback()
+            raise
+        else:
+            if depth == 0:
+                conn.commit()
+        finally:
+            self._local.txn_depth = depth
 
     # -- events -------------------------------------------------------------
 
