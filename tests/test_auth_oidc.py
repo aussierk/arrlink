@@ -942,6 +942,15 @@ def test_sessions_kind_column_added_by_migration_with_safe_default(tmp_path):
         "item_id INTEGER NOT NULL, title TEXT NOT NULL, tags_json TEXT NOT NULL "
         "DEFAULT '[]')"
     )
+    # Stand-ins for the tables migration 14 adds indexes to.
+    conn.execute(
+        "CREATE TABLE app_files (id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL, "
+        "rel_path TEXT NOT NULL, inode INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE links (id INTEGER PRIMARY KEY, app_id INTEGER, "
+        "file_id INTEGER, item_id INTEGER, status TEXT NOT NULL DEFAULT 'active')"
+    )
     conn.commit()
     conn.close()
 
@@ -988,6 +997,15 @@ def test_sessions_kind_migration_applies_to_db_stuck_at_old_schema_version_9(tmp
         "item_id INTEGER NOT NULL, title TEXT NOT NULL, tags_json TEXT NOT NULL "
         "DEFAULT '[]')"
     )
+    # Stand-ins for the tables migration 14 adds indexes to.
+    conn.execute(
+        "CREATE TABLE app_files (id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL, "
+        "rel_path TEXT NOT NULL, inode INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE links (id INTEGER PRIMARY KEY, app_id INTEGER, "
+        "file_id INTEGER, item_id INTEGER, status TEXT NOT NULL DEFAULT 'active')"
+    )
     conn.commit()
     conn.close()
 
@@ -995,7 +1013,7 @@ def test_sessions_kind_migration_applies_to_db_stuck_at_old_schema_version_9(tmp
     row = db.query_one("SELECT * FROM sessions WHERE token='tok1'")
     assert row is not None
     assert row["kind"] == "oidc"
-    assert db.query_one("SELECT version FROM schema_version")["version"] == 13
+    assert db.query_one("SELECT version FROM schema_version")["version"] == 18
 
 
 # ---------------------------------------------------------------------------

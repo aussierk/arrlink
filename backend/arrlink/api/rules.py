@@ -289,18 +289,35 @@ def preview(
     body: RuleIn,
     _user: CurrentUser,
     app_id: int = Query(...),
+    live: bool = Query(
+        default=False,
+        description="Fetch items live from the app instead of using the "
+        "last poll's stored snapshot.",
+    ),
     db: State = Depends(get_db),
 ) -> dict:
-    """Dry-run the rule against the app's current items (no links created)."""
+    """Dry-run the rule against the app's current items (no links created).
+
+    Defaults to the poller's stored snapshot (fast, may be as stale as the
+    app's poll interval). ``?live=true`` forces a fresh ``fetch_items()``;
+    an app that has never been polled also falls back to live automatically.
+    """
+    from ..core.snapshot import snapshot_items
+
     row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
     if not row:
         raise HTTPException(404, "app not found")
-    try:
-        adapter = get_adapter(row["type"], row["url"], row["api_key"])
-        items = asyncio.run(adapter.fetch_items())
-    except (ValueError, AdapterError) as e:
-        detail = getattr(e, "detail", None) or str(e)
-        raise HTTPException(502, detail) from e
+
+    source = "snapshot"
+    items = [] if live else snapshot_items(db, app_id)
+    if not items:
+        source = "live"
+        try:
+            adapter = get_adapter(row["type"], row["url"], row["api_key"])
+            items = asyncio.run(adapter.fetch_items())
+        except (ValueError, AdapterError) as e:
+            detail = getattr(e, "detail", None) or str(e)
+            raise HTTPException(502, detail) from e
 
     rule = {
         "id": 0,
@@ -322,6 +339,8 @@ def preview(
     return {
         "app_id": app_id,
         "app_name": row["name"],
+        "source": source,
+        "snapshot_at": row["last_poll_at"] if source == "snapshot" else None,
         "total": len(planned),
         "sample": [
             {

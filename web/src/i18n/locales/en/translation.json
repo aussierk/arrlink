@@ -13,7 +13,9 @@
   },
   "common": {
     "loading": "loading…",
-    "refresh": "refresh"
+    "refresh": "refresh",
+    "prev": "Previous",
+    "next": "Next"
   },
   "conditions": {
     "joinAnd": "AND",
@@ -75,7 +77,8 @@
     "colStatus": "Status",
     "colCreated": "Created",
     "empty": "No links yet — the poller creates them on the next cycle (or run a rescan on an app).",
-    "remove": "remove"
+    "remove": "remove",
+    "showingRange": "Showing {{from}}–{{to}} of {{total}}"
   },
   "links": {
     "title": "Links",
@@ -92,7 +95,11 @@
     "source": "Source",
     "wouldLinkTo": "Would link to",
     "errorLine": "{{item}} ({{src}}): {{error}}",
-    "noMatches": "No matching files for this rule."
+    "noMatches": "No matching files for this rule.",
+    "refreshFromApp": "Refresh from app",
+    "refreshing": "Refreshing…",
+    "fromSnapshot": "from last poll ({{time}})",
+    "fromLive": "live from app"
   },
   "dashboard": {
     "title": "Dashboard",

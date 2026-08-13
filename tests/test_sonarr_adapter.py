@@ -34,6 +34,8 @@ class Tv:
         self.series: list[dict] = []
         self._tag_ids: dict[str, int] = {}
         self._next_tag_id = 1
+        # per-series /episodefile call log (delta-fetch assertions)
+        self.episodefile_calls: list[int] = []
 
     def tag_id(self, label: str) -> int:
         if label not in self._tag_ids:
@@ -68,6 +70,16 @@ class Tv:
         self.series[index]["tags"] = [self.tag_id(t) for t in labels]
 
     # ---- payloads (the wire shape) ------------------------------------
+    def _statistics(self, s):
+        """Mirror real Sonarr: episode file count + on-disk byte total,
+        computed from what's actually on disk right now (a real instance
+        refreshes these on a rescan). Drives the poller's delta fetch."""
+        present = [f for f in s["files"] if os.path.exists(f["path"])]
+        return {
+            "episodeFileCount": len(present),
+            "sizeOnDisk": sum(os.path.getsize(f["path"]) for f in present),
+        }
+
     def series_payload(self):
         return [
             {
@@ -76,6 +88,7 @@ class Tv:
                 "year": s["year"],
                 "path": s["path"],
                 "tags": s["tags"],
+                "statistics": self._statistics(s),
             }
             for s in self.series
         ]
@@ -131,6 +144,7 @@ def build_sonarr(origin: str, tv: Tv) -> FastAPI:
         if seriesId is None:
             # real API: bare /v3/episodefile requires seriesId or ids
             return JSONResponse({"error": "seriesId required"}, status_code=400)
+        tv.episodefile_calls.append(seriesId)
         return tv.files_by_series(seriesId)
 
     return app
@@ -341,7 +355,7 @@ def test_import_creates_hardlinks(client, sonarr_media):
     assert _ino(f"{tv.linked_dir}/kids/Family Show - S01E01 - Start.mkv") == _ino(src3)
 
     # 2 files x 2 rules (The Show) + 1 file x 1 rule (Family) = 5 links
-    links = client.get("/api/links?status=active").json()
+    links = client.get("/api/links?status=active").json()["items"]
     assert len(links) == 5
 
     s = client.get("/api/apps/summary").json()
@@ -434,7 +448,7 @@ def test_collision_skips(client, sonarr_media):
     with open(foreign) as f:
         assert f.read() == "someone else's file"
     assert _ino(src) == src_ino
-    links = client.get("/api/links?status=active").json()
+    links = client.get("/api/links?status=active").json()["items"]
     assert not any(l["dst_path"] == foreign for l in links)
 
 
@@ -498,7 +512,98 @@ def test_single_episode_file_deleted_grace_unlinks_not_orphans(client, sonarr_me
     assert not os.path.exists(pilot_dst)
     assert os.path.exists(second_dst)  # the still-present episode is untouched
 
-    links = client.get("/api/links?status=missing").json()
+    links = client.get("/api/links?status=missing").json()["items"]
     pilot_links = [l for l in links if l["dst_path"] == pilot_dst]
     assert len(pilot_links) == 1
     assert pilot_links[0]["status"] == "missing"
+
+
+# ---------------------------------------------------------------------------
+# P1.3: Sonarr delta fetch — skip /episodefile for unchanged series
+# ---------------------------------------------------------------------------
+
+
+def test_delta_fetch_skips_unchanged_series(client, sonarr_media):
+    origin, tv = sonarr_media
+    app_id = _add_app(client, origin)
+    _make_rule(client, "cert", "tv-14", f"{tv.linked_dir}/tv-14")
+    _make_rule(client, "kids", "kids", f"{tv.linked_dir}/kids")
+
+    # first poll: no stored fingerprints yet -> every series is fetched
+    # (1 = The Show, 2 = Family Show; 3 = Pending Show has no files and is
+    # always re-checked since it never gets a stored row)
+    _poll(client, app_id)
+    assert {1, 2} <= set(tv.episodefile_calls)
+    assert os.path.exists(f"{tv.linked_dir}/tv-14/The Show - S01E01 - Pilot.mkv")
+
+    # second poll: series 1 & 2 unchanged -> neither is re-fetched
+    tv.episodefile_calls.clear()
+    _poll(client, app_id)
+    assert 1 not in tv.episodefile_calls and 2 not in tv.episodefile_calls
+    assert os.path.exists(f"{tv.linked_dir}/tv-14/The Show - S01E01 - Pilot.mkv")
+    assert os.path.exists(f"{tv.linked_dir}/kids/Family Show - S01E01 - Start.mkv")
+
+    # add an episode to The Show -> its fingerprint changes -> only it is re-fetched
+    tv.add_episode(0, "The Show - S01E03 - Third.mkv", b"third data")
+    tv.episodefile_calls.clear()
+    _poll(client, app_id)
+    assert 1 in tv.episodefile_calls and 2 not in tv.episodefile_calls
+    assert os.path.exists(f"{tv.linked_dir}/tv-14/The Show - S01E03 - Third.mkv")
+
+
+def test_delta_fetch_grace_still_unlinks_on_stale_polls(client, sonarr_media):
+    """A file removed from a multi-episode series must still complete its
+    3-poll grace and be unlinked, even though polls 2 and 3 don't re-fetch
+    the series (only the healthy rows are rehydrated; the struck one keeps
+    being struck)."""
+    origin, tv = sonarr_media
+    app_id = _add_app(client, origin)
+    _make_rule(client, "cert", "tv-14", f"{tv.linked_dir}/tv-14")
+    _poll(client, app_id)
+    pilot_dst = f"{tv.linked_dir}/tv-14/The Show - S01E01 - Pilot.mkv"
+    second_dst = f"{tv.linked_dir}/tv-14/The Show - S01E02 - Second.mkv"
+    assert os.path.exists(pilot_dst) and os.path.exists(second_dst)
+
+    tv.series[0]["files"] = [
+        f for f in tv.series[0]["files"] if "Pilot" not in f["path"]
+    ]
+    os.remove(f"{tv.media_dir}/The Show/The Show - S01E01 - Pilot.mkv")
+
+    _poll(client, app_id)  # miss 1 (re-fetched: count changed)
+    assert os.path.exists(pilot_dst)
+    tv.episodefile_calls.clear()
+    _poll(client, app_id)  # miss 2 (stale: not re-fetched)
+    _poll(client, app_id)  # miss 3 -> unlink
+    assert 1 not in tv.episodefile_calls  # both grace polls skipped series 1
+    assert not os.path.exists(pilot_dst)
+    assert os.path.exists(second_dst)
+
+
+def test_delta_skip_still_detects_same_size_replacement(client, sonarr_media):
+    """A file swapped for a same-size payload (new inode) doesn't move the
+    series fingerprint, so the poll skips its /episodefile fetch and
+    rehydrates from the stored snapshot. The reconciler must still notice
+    the inode changed and re-point the hardlink -- it can't trust the
+    snapshot inode for a delta-skipped series."""
+    origin, tv = sonarr_media
+    app_id = _add_app(client, origin)
+    _make_rule(client, "cert", "tv-14", f"{tv.linked_dir}/tv-14")
+    _poll(client, app_id)
+    src = f"{tv.media_dir}/The Show/The Show - S01E01 - Pilot.mkv"
+    dst = f"{tv.linked_dir}/tv-14/The Show - S01E01 - Pilot.mkv"
+    assert _ino(dst) == _ino(src)
+    old_ino = _ino(src)
+
+    # replace the file with a *same-size* payload -> new inode, unchanged
+    # size-on-disk -> series fingerprint is identical -> delta-skip
+    size = os.path.getsize(src)
+    os.remove(src)
+    with open(src, "wb") as f:
+        f.write(b"Z" * size)
+    assert _ino(src) != old_ino
+
+    tv.episodefile_calls.clear()
+    _poll(client, app_id)
+    assert 1 not in tv.episodefile_calls  # series 1 was delta-skipped
+    assert _ino(dst) == _ino(src)  # link re-pointed at the new file anyway
+    assert _ino(dst) != old_ino

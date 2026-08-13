@@ -421,6 +421,30 @@ def test_instance_vocabulary_synced_after_poll(client, radarr):
     assert {row["value"] for row in languages} == {"English"}
 
 
+def test_instance_vocabulary_quality_sync_is_throttled(client, radarr):
+    """P2.1: the 2 adapter calls for quality/language vocab run at most every
+    INSTANCE_VOCAB_STALE_S, not every poll — a second immediate rescan must
+    leave the stored rows' imported_at untouched."""
+    app_id = _add_app(client, radarr)
+    db = client.app.state.db
+
+    client.post(f"/api/apps/{app_id}/rescan")
+    ts1 = db.query_one(
+        "SELECT MAX(imported_at) AS t FROM vocabulary WHERE category='quality' "
+        "AND app_id=? AND source='instance'",
+        (app_id,),
+    )["t"]
+    assert ts1 is not None
+
+    client.post(f"/api/apps/{app_id}/rescan")
+    ts2 = db.query_one(
+        "SELECT MAX(imported_at) AS t FROM vocabulary WHERE category='quality' "
+        "AND app_id=? AND source='instance'",
+        (app_id,),
+    )["t"]
+    assert ts2 == ts1  # not re-synced on the immediate second poll
+
+
 # ---------------------------------------------------------------------------
 # API: tag classification + vocabulary GET + TMDB masked settings
 # ---------------------------------------------------------------------------

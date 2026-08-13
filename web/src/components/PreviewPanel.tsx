@@ -5,6 +5,8 @@ import { api, type RuleInput } from '../lib/api'
 type PreviewData = {
   app_id: number
   app_name: string
+  source: 'snapshot' | 'live'
+  snapshot_at: number | null
   total: number
   sample: { item_title: string; src_path: string; dst_path: string }[]
   errors: { item_title: string; src_path: string; error: string }[]
@@ -27,12 +29,12 @@ export default function PreviewPanel({
   const [err, setErr] = useState<string | null>(null)
   const [stamp, setStamp] = useState(0)
 
-  async function run() {
+  async function run(forceLive = false) {
     if (appId === null) return
     setBusy(true)
     setErr(null)
     try {
-      const r = await api.previewRule(rule, appId)
+      const r = await api.previewRule(rule, appId, { live: forceLive })
       setData(r)
       setStamp(Date.now())
     } catch (e) {
@@ -60,7 +62,7 @@ export default function PreviewPanel({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => void run()}
           disabled={busy}
@@ -68,12 +70,27 @@ export default function PreviewPanel({
         >
           {busy ? t('previewPanel.previewing') : data ? t('previewPanel.rerun') : t('previewPanel.preview')}
         </button>
+        <button
+          onClick={() => void run(true)}
+          disabled={busy}
+          className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-900 disabled:opacity-50"
+        >
+          {busy ? t('previewPanel.refreshing') : t('previewPanel.refreshFromApp')}
+        </button>
         {data && (
           <span className="text-xs text-zinc-500">
             {t('previewPanel.filesWouldLink', {
               count: data.total,
               time: new Date(stamp).toLocaleTimeString(),
             })}
+            {' · '}
+            {data.source === 'snapshot'
+              ? t('previewPanel.fromSnapshot', {
+                  time: data.snapshot_at
+                    ? new Date(data.snapshot_at * 1000).toLocaleTimeString()
+                    : '—',
+                })
+              : t('previewPanel.fromLive')}
           </span>
         )}
       </div>

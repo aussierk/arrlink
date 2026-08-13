@@ -129,11 +129,11 @@ export default function Rules() {
 
   async function remove(r: RuleItem) {
     const links = await api
-      .listLinks({ rule_id: r.id, status: 'active' })
-      .catch(() => [] as { id: number }[])
+      .listLinks({ rule_id: r.id, status: 'active', limit: 1 })
+      .catch(() => ({ total: 0 }))
     const msg =
-      links.length > 0
-        ? t('rules.deleteConfirmWithLinks', { name: r.name, count: links.length })
+      links.total > 0
+        ? t('rules.deleteConfirmWithLinks', { name: r.name, count: links.total })
         : t('rules.deleteConfirm', { name: r.name })
     if (!confirm(msg)) return
     try {

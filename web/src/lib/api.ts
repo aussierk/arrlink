@@ -309,17 +309,22 @@ export const api = {
     ),
 
   listRules: () => req<RuleItem[]>('/api/rules'),
-  previewRule: (b: RuleInput, appId: number) =>
+  previewRule: (b: RuleInput, appId: number, opts?: { live?: boolean }) =>
     req<{
       app_id: number
       app_name: string
+      source: 'snapshot' | 'live'
+      snapshot_at: number | null
       total: number
       sample: { item_title: string; src_path: string; dst_path: string }[]
       errors: { item_title: string; src_path: string; error: string }[]
-    }>(`/api/rules/preview?app_id=${appId}`, {
-      method: 'POST',
-      body: JSON.stringify(b),
-    }),
+    }>(
+      `/api/rules/preview?app_id=${appId}${opts?.live ? '&live=true' : ''}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(b),
+      },
+    ),
   createRule: (b: RuleInput) =>
     req<RuleItem>('/api/rules', { method: 'POST', body: JSON.stringify(b) }),
   updateRule: (id: number, b: RuleInput) =>
@@ -387,13 +392,26 @@ export const api = {
       '/api/presets/apply',
       { method: 'POST', body: JSON.stringify(b) },
     ),
-  listLinks: (f?: { app_id?: number; rule_id?: number; status?: string }) => {
+  listLinks: (f?: {
+    app_id?: number
+    rule_id?: number
+    status?: string
+    limit?: number
+    offset?: number
+  }) => {
     const p = new URLSearchParams()
     if (f?.app_id) p.set('app_id', String(f.app_id))
     if (f?.rule_id) p.set('rule_id', String(f.rule_id))
     if (f?.status) p.set('status', f.status)
+    if (f?.limit != null) p.set('limit', String(f.limit))
+    if (f?.offset != null) p.set('offset', String(f.offset))
     const q = p.toString()
-    return req<LinkItem[]>(`/api/links${q ? `?${q}` : ''}`)
+    return req<{
+      items: LinkItem[]
+      total: number
+      limit: number
+      offset: number
+    }>(`/api/links${q ? `?${q}` : ''}`)
   },
   deleteLink: (id: number) =>
     req<void>(`/api/links/${id}`, { method: 'DELETE' }),

@@ -6,9 +6,13 @@ import { api, type AppItem, type LinkItem } from '../lib/api'
  * Links panel: browse, filter, remove, and repair the hardlinks ArrLink
  * maintains. Embedded on the Dashboard (not a standalone page).
  */
+const PAGE_SIZE = 100
+
 export default function LinksPanel() {
   const { t } = useTranslation()
   const [links, setLinks] = useState<LinkItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [apps, setApps] = useState<AppItem[]>([])
   const [appId, setAppId] = useState('')
   const [status, setStatus] = useState('active')
@@ -18,20 +22,26 @@ export default function LinksPanel() {
 
   const load = useCallback(async () => {
     try {
-      setLinks(
-        await api.listLinks({
-          app_id: appId ? Number(appId) : undefined,
-          status: status || undefined,
-        }),
-      )
+      const r = await api.listLinks({
+        app_id: appId ? Number(appId) : undefined,
+        status: status || undefined,
+        limit: PAGE_SIZE,
+        offset,
+      })
+      setLinks(r.items)
+      setTotal(r.total)
     } catch (e) {
       setErr(String(e))
     }
-  }, [appId, status])
+  }, [appId, status, offset])
 
   useEffect(() => {
     api.listApps().then(setApps).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    setOffset(0)
+  }, [appId, status])
 
   useEffect(() => {
     void load()
@@ -162,6 +172,34 @@ export default function LinksPanel() {
           </tbody>
         </table>
       </div>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between text-xs text-zinc-500">
+          <span>
+            {t('linksTable.showingRange', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total,
+            })}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+              disabled={offset === 0}
+              className="rounded border border-zinc-700 px-3 py-1 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
+            >
+              {t('common.prev')}
+            </button>
+            <button
+              onClick={() => setOffset(offset + PAGE_SIZE)}
+              disabled={offset + PAGE_SIZE >= total}
+              className="rounded border border-zinc-700 px-3 py-1 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
+            >
+              {t('common.next')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

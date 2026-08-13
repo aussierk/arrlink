@@ -203,7 +203,7 @@ def test_import_creates_hardlinks(client, radarr_media):
     assert _ino(dst_4k) == _ino(src_4k)
 
     # links table populated
-    links = client.get("/api/links?status=active").json()
+    links = client.get("/api/links?status=active").json()["items"]
     assert len(links) == 2
 
     # dashboard summary
@@ -267,7 +267,7 @@ def test_deleted_item_grace(client, radarr_media):
     # regression: the links row itself must survive as status='missing' for
     # the UI/repair flow, not get silently cascade-deleted the moment
     # app_items is (item_id/file_id both reference it ON DELETE CASCADE)
-    missing = client.get("/api/links?status=missing").json()
+    missing = client.get("/api/links?status=missing").json()["items"]
     assert any(l["dst_path"] == dst for l in missing)
 
     # regression: if the same item later reappears, the old 'missing' row
@@ -277,9 +277,9 @@ def test_deleted_item_grace(client, radarr_media):
     media.add("Kids Movie/Kids Movie.2019.mkv", "Kids Movie", 2019, ["kids"])
     _poll(client, app_id)
     assert os.path.exists(dst)
-    active = client.get("/api/links?status=active").json()
+    active = client.get("/api/links?status=active").json()["items"]
     assert any(l["dst_path"] == dst for l in active)
-    missing_after = client.get("/api/links?status=missing").json()
+    missing_after = client.get("/api/links?status=missing").json()["items"]
     assert not any(l["dst_path"] == dst for l in missing_after)
 
 
@@ -439,7 +439,7 @@ def test_collision_skips(client, radarr_media):
     with open(foreign) as f:
         assert f.read() == "someone else's file"
     # no active link recorded (it was skipped)
-    links = client.get("/api/links?status=active").json()
+    links = client.get("/api/links?status=active").json()["items"]
     assert not any(l["dst_path"] == foreign for l in links)
 
 
@@ -483,20 +483,20 @@ def test_links_api_and_sse(client, radarr_media):
     _make_rule(client, "kids", "kids", f"{media.linked_dir}/kids")
     _poll(client, app_id)
 
-    links = client.get("/api/links?status=active").json()
+    links = client.get("/api/links?status=active").json()["items"]
     assert len(links) == 1
     assert links[0]["rule_name"] == "kids"
 
     # delete via API
     r = client.delete(f"/api/links/{links[0]['id']}")
     assert r.status_code == 204
-    assert client.get("/api/links?status=active").json() == []
+    assert client.get("/api/links?status=active").json()["items"] == []
 
     # repair re-creates it
     r = client.post("/api/links/repair")
     assert r.status_code == 200
     assert r.json()["fixed"] >= 1
-    assert client.get("/api/links?status=active").json() != []
+    assert client.get("/api/links?status=active").json()["items"] != []
 
     # SSE stream yields initial events (bounded via limit= so it terminates)
     with client.stream("GET", "/api/logs/stream?limit=50") as stream:
@@ -507,3 +507,186 @@ def test_links_api_and_sse(client, radarr_media):
                 if len(got) >= 1:
                     break
         assert got
+
+
+# ---------------------------------------------------------------------------
+# P0: a no-change re-poll must not rewrite app_items / app_files rows
+# ---------------------------------------------------------------------------
+
+
+def test_repoll_no_changes_writes_nothing(client, radarr_media):
+    """The poller bulk-loads the snapshot and diffs in memory: a second poll
+    over identical data must issue zero INSERT/UPDATE/DELETE against
+    app_items or app_files (previously every item + file was UPDATEd every
+    poll, each item its own fsync)."""
+    origin, media = radarr_media
+    app_id = _add_app(client, origin)
+    _make_rule(client, "kids", "kids", f"{media.linked_dir}/kids")
+    _make_rule(client, "4k", "4k", f"{media.linked_dir}/4k")
+    _poll(client, app_id)
+
+    db = client.app.state.db
+    real_execute = db.execute
+    writes: list[str] = []
+
+    def spy(sql, params=()):
+        head = sql.lstrip().split(None, 1)[0].upper()
+        if head in ("INSERT", "UPDATE", "DELETE") and (
+            "app_items" in sql or "app_files" in sql
+        ):
+            writes.append(sql)
+        return real_execute(sql, params)
+
+    db.execute = spy
+    try:
+        _poll(client, app_id)
+    finally:
+        db.execute = real_execute
+
+    assert writes == [], writes
+
+
+def test_hot_path_indexes_present(client, radarr_media):
+    """the reconcile/poller lookup indexes must be present."""
+    db = client.app.state.db
+    link_idx = {r["name"] for r in db.query("PRAGMA index_list(links)")}
+    assert {"idx_links_app_status", "idx_links_file", "idx_links_item"} <= link_idx
+    file_idx = {r["name"] for r in db.query("PRAGMA index_list(app_files)")}
+    assert "idx_app_files_item_inode" in file_idx
+
+    plan = db.query(
+        "EXPLAIN QUERY PLAN SELECT * FROM links WHERE app_id=1 AND "
+        "status IN ('active','stale')"
+    )
+    assert any("idx_links_app_status" in (row["detail"] or "") for row in plan), plan
+
+
+def test_reconcile_commits_in_chunks(client, radarr_media, monkeypatch):
+    """Audit finding 1/2: reconcile must not hold the write lock for the
+    whole pass — with COMMIT_BATCH shrunk it commits mid-loop, releasing the
+    lock and bounding a mid-pass failure's rollback to one batch."""
+    import asyncio
+
+    from arrlink.arr.factory import get_adapter
+    from arrlink.core import linker
+
+    origin, media = radarr_media
+    media.add("Third.mkv", "Third", 2011, ["kids"])  # -> 3 links total
+    app_id = _add_app(client, origin)
+    _make_rule(client, "kids", "kids", f"{media.linked_dir}/kids")
+    _make_rule(client, "4k", "4k", f"{media.linked_dir}/4k")
+    _poll(client, app_id)
+
+    db = client.app.state.db
+    poller = client.app.state.poller
+    row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
+    items = asyncio.run(
+        get_adapter(row["type"], row["url"], row["api_key"]).fetch_items()
+    )
+    poller._store_items(app_id, items)  # backfill file ids
+
+    monkeypatch.setattr(linker, "COMMIT_BATCH", 1)
+    n = [0]
+    real = db.commit
+    monkeypatch.setattr(db, "commit", lambda: (n.__setitem__(0, n[0] + 1), real())[1])
+
+    poller._reconcile_app(app_id, row["name"], row["type"], items)
+
+    # pass 1 walks 3 existing link rows -> explicit db.commit() at i=1 and i=2
+    assert n[0] >= 2, n[0]
+
+
+# ---------------------------------------------------------------------------
+# P1: preview runs off the stored snapshot; ?live=true forces a fetch
+# ---------------------------------------------------------------------------
+
+
+def test_preview_uses_snapshot_after_poll(client, radarr_media):
+    origin, media = radarr_media
+    app_id = _add_app(client, origin)
+    _make_rule(client, "kids", "kids", f"{media.linked_dir}/kids")
+    _poll(client, app_id)
+
+    body = {
+        "name": "kids",
+        "conditions": [
+            {"category": "custom", "match_type": "exact",
+             "match_value": "kids", "join": None},
+        ],
+        "dir_template": f"{media.linked_dir}/kids",
+    }
+    r = client.post(f"/api/rules/preview?app_id={app_id}", json=body)
+    assert r.status_code == 200, r.text
+    assert r.json()["source"] == "snapshot"
+    assert r.json()["total"] == 1
+
+    r = client.post(f"/api/rules/preview?app_id={app_id}&live=true", json=body)
+    assert r.status_code == 200, r.text
+    assert r.json()["source"] == "live"
+    assert r.json()["total"] == 1
+
+
+def test_preview_falls_back_to_live_when_never_polled(client, radarr_media):
+    origin, media = radarr_media
+    app_id = _add_app(client, origin)
+    r = client.post(
+        f"/api/rules/preview?app_id={app_id}",
+        json={
+            "name": "kids",
+            "conditions": [
+                {"category": "custom", "match_type": "exact",
+                 "match_value": "kids", "join": None},
+            ],
+            "dir_template": f"{media.linked_dir}/kids",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["source"] == "live"
+
+
+# ---------------------------------------------------------------------------
+# P1: links list is a paged envelope
+# ---------------------------------------------------------------------------
+
+
+def test_links_list_pagination_envelope(client, radarr_media):
+    origin, media = radarr_media
+    app_id = _add_app(client, origin)
+    _make_rule(client, "kids", "kids", f"{media.linked_dir}/kids")
+    _make_rule(client, "4k", "4k", f"{media.linked_dir}/4k")
+    _poll(client, app_id)
+
+    r = client.get("/api/links?status=active&limit=1&offset=0").json()
+    assert r["total"] == 2
+    assert len(r["items"]) == 1
+    assert r["limit"] == 1 and r["offset"] == 0
+    first_id = r["items"][0]["id"]
+
+    r2 = client.get("/api/links?status=active&limit=1&offset=1").json()
+    assert len(r2["items"]) == 1
+    assert r2["items"][0]["id"] != first_id
+
+
+# ---------------------------------------------------------------------------
+# P2: the events table is capped by the background prune
+# ---------------------------------------------------------------------------
+
+
+def test_events_prune_caps_table(client, radarr_media):
+    db = client.app.state.db
+    db.set_setting("events_retention", 100)
+    for i in range(250):
+        db.execute(
+            "INSERT INTO events (ts, level, message) VALUES (?, 'info', ?)",
+            (float(i), f"event {i}"),
+        )
+    db.commit()
+
+    client.app.state.poller._prune_events()
+
+    n = db.query_one("SELECT COUNT(*) AS c FROM events")["c"]
+    assert n == 100
+    # the survivors are the newest rows
+    oldest = db.query_one("SELECT MIN(id) AS m FROM events")["m"]
+    newest = db.query_one("SELECT MAX(id) AS m FROM events")["m"]
+    assert newest - oldest == 99
