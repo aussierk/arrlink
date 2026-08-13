@@ -64,6 +64,35 @@ def test_backup_concurrent_writes_produce_valid_copy(tmp_path):
         conn.close()
 
 
+def test_backup_now_same_second_calls_get_distinct_files(tmp_path):
+    """Two backups landing in the same wall-clock second (a manual
+    POST /api/backup/run racing the nightly loop, or two rapid manual
+    triggers) must not both open the same destination path."""
+    db_path = tmp_path / "arrlink.db"
+    State(db_path)
+    backup_dir = tmp_path / "backups"
+
+    dest1 = backup_now(db_path, backup_dir)
+    dest2 = backup_now(db_path, backup_dir)
+
+    assert dest1 != dest2
+    assert dest1.exists() and dest2.exists()
+
+
+def test_prune_old_backups_clamps_negative_retention(tmp_path):
+    """A negative (or zero) retention_days must not move the cutoff into
+    the future and prune a backup created moments ago in the same cycle."""
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    fresh = backup_dir / "arrlink-20991231-000000.db"
+    fresh.write_text("fresh")
+
+    removed = prune_old_backups(backup_dir, retention_days=-5)
+
+    assert fresh.exists()
+    assert removed == []
+
+
 def test_prune_old_backups_only_removes_stale_arrlink_files(tmp_path):
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir()
@@ -158,4 +187,9 @@ def test_backup_endpoint_manual_trigger(tmp_path, monkeypatch):
 
         listed = c.get("/api/backup")
         assert listed.status_code == 200
-        assert len(listed.json()) == 1
+        # 2, not 1: the background loop's own staleness check already ran
+        # one backup at startup (a fresh install has no backups yet, so
+        # age is None -> immediately due), and this is a *second*, manual
+        # one on top of it -- both must survive as distinct files now that
+        # backup_now() no longer collides on same-second filenames.
+        assert len(listed.json()) == 2

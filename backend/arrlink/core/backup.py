@@ -4,12 +4,13 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+import uuid
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 BACKUP_SUBDIR = "backups"
-FILENAME_FMT = "arrlink-%Y%m%d-%H%M%S.db"
+STAMP_FMT = "arrlink-%Y%m%d-%H%M%S"
 FILENAME_GLOB = "arrlink-*.db"
 # How often the background loop checks whether a backup is due, and how
 # stale the newest backup has to be before one runs. A staleness check
@@ -25,7 +26,13 @@ def backup_now(db_path: Path, backup_dir: Path) -> Path:
     file's path. Raises on failure -- callers that want a non-raising,
     logged outcome should use `run_backup_cycle` instead."""
     backup_dir.mkdir(parents=True, exist_ok=True)
-    dest = backup_dir / time.strftime(FILENAME_FMT, time.localtime())
+    # A short random suffix, not just the second-resolution timestamp: two
+    # backups landing in the same second (a manual POST /api/backup/run
+    # racing the nightly loop, or two rapid manual triggers) would otherwise
+    # both open the *same* destination file with separate connections and
+    # step on each other's write.
+    stamp = time.strftime(STAMP_FMT, time.localtime())
+    dest = backup_dir / f"{stamp}-{uuid.uuid4().hex[:6]}.db"
     src_conn = sqlite3.connect(str(db_path))
     try:
         dst_conn = sqlite3.connect(str(dest))
@@ -44,7 +51,10 @@ def prune_old_backups(backup_dir: Path, retention_days: int) -> list[Path]:
     `retention_days`. Returns the paths removed."""
     if not backup_dir.is_dir():
         return []
-    cutoff = time.time() - retention_days * 86400
+    # Clamp instead of trusting the config value outright: a negative (or
+    # zero) retention_days would move the cutoff into the future and prune
+    # the backup that was just created in this same cycle.
+    cutoff = time.time() - max(1, retention_days) * 86400
     removed = []
     for p in backup_dir.glob(FILENAME_GLOB):
         try:

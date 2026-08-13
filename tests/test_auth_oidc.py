@@ -1182,6 +1182,44 @@ def test_password_lockout_after_threshold_failures(pw_client):
     assert r.json()["detail"] == "wrong username or password"
 
 
+def test_password_lockout_race_is_atomic(tmp_path, monkeypatch):
+    """Audit finding 1: record_failure used to SELECT then INSERT a Python-computed value, so N concurrent wrong-password requests."""
+    import arrlink.auth.lockout as lockout_mod
+    from arrlink.state import State
+
+    db = State(tmp_path / "arrlink.db")
+
+    real_row = lockout_mod._row
+
+    def slow_row(db_, username):
+        row = real_row(db_, username)
+        time.sleep(0.02)
+        return row
+
+    monkeypatch.setattr(lockout_mod, "_row", slow_row)
+
+    n = lockout_mod.THRESHOLD * 4
+    barrier = threading.Barrier(n)
+
+    def guess():
+        barrier.wait()
+        lockout_mod.record_failure(db, "admin")
+
+    threads = [threading.Thread(target=guess) for _ in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    row = db.query_one("SELECT * FROM login_attempts WHERE username='admin'")
+    assert row is not None
+    # Further concurrent attempts past the lockout transition are a no-op
+    # by design, so a correctly-serialized run lands on exactly THRESHOLD,
+    # not just ">= some number".
+    assert row["fail_count"] == lockout_mod.THRESHOLD, row["fail_count"]
+    assert row["locked_until"] is not None and row["locked_until"] > time.time()
+
+
 def test_password_lockout_persists_across_restart(pw_client, tmp_path, monkeypatch):
     from arrlink.auth.lockout import THRESHOLD
     from arrlink.main import create_app
@@ -1295,3 +1333,22 @@ def test_password_lockout_is_case_insensitive_single_bucket(pw_client):
     assert r.status_code == 401
     rows = pw_client.app.state.db.query("SELECT * FROM login_attempts")
     assert len(rows) == 1
+
+
+def test_password_login_with_no_password_configured_fails_clearly(tmp_path, monkeypatch):
+    """Audit finding 3: PUT /api/settings/auth refuses to enable password
+    login without a password, but AUTH_PASSWORD_ENABLED=true with no
+    UI_PASSWORD is a separate, env-only path that bypasses that check
+    entirely. login_password() must reject this with a clear error instead
+    of silently short-circuiting verify_password() and counting every
+    attempt against a lockout bucket for an account that can never log in."""
+    monkeypatch.setenv("AUTH_PASSWORD_ENABLED", "true")
+    monkeypatch.delenv("UI_PASSWORD", raising=False)
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        r = c.post(
+            "/api/auth/password", json={"username": "admin", "password": "anything"}
+        )
+        assert r.status_code == 500
+        assert c.app.state.db.query("SELECT * FROM login_attempts") == []

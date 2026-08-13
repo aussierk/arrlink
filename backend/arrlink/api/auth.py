@@ -255,11 +255,9 @@ def login_password(
         raise HTTPException(400, "password login is not enabled")
     expected_username = auth["ui_username"] or "admin"
     expected_password = auth["ui_password"] or ""
+    if not expected_password:
+        raise HTTPException(500, "password login is misconfigured (no password set)")
     lockout_key = expected_username.strip().lower()
-    # Keyed by the one *real* configured username, not whatever the caller
-    # submitted -- keying by the submitted value would let an attacker
-    # dodge the lockout entirely just by varying the username field on
-    # every guess, since it's otherwise always wrong anyway.
     st = lockout.status(db, lockout_key)
     username_ok = hmac.compare_digest(
         body.username.strip().lower(), expected_username.strip().lower()
@@ -268,9 +266,7 @@ def login_password(
     # response costs the same Argon2id time as a normal wrong-password one
     # -- skipping it would itself be a timing side channel revealing
     # lockout state.
-    password_ok = bool(expected_password) and verify_password(
-        body.password, expected_password
-    )
+    password_ok = verify_password(body.password, expected_password)
     # Deliberately vague about which field was wrong (no username
     # enumeration) -- and, for the same reason, a locked account gets the
     # exact same response as a wrong password, not a distinguishable one.

@@ -40,42 +40,46 @@ def status(db: State, username: str) -> LockoutStatus:
 
 
 def record_failure(db: State, username: str) -> LockoutStatus:
-    """Record one failed attempt. No-op on the counters while already
-    locked (doesn't extend the lockout window on repeated guesses against a
-    locked account)."""
-    now = time.time()
-    row = _row(db, username)
-    was_locked = bool(row and row["locked_until"] and row["locked_until"] > now)
+    """Record one failed attempt, atomically."""
+    conn = db.conn
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        now = time.time()
+        row = _row(db, username)
+        was_locked = bool(row and row["locked_until"] and row["locked_until"] > now)
 
-    if was_locked:
-        return LockoutStatus(True, row["locked_until"], row["fail_count"])
+        if was_locked:
+            conn.commit()
+            return LockoutStatus(True, row["locked_until"], row["fail_count"])
 
-    if row is None or not row["first_fail_at"] or now - row["first_fail_at"] > WINDOW_S:
-        # No row yet, or the previous window (or a since-expired lockout's
-        # window) has passed: start fresh.
-        fail_count = 1
-        first_fail_at = now
-    else:
-        fail_count = row["fail_count"] + 1
-        first_fail_at = row["first_fail_at"]
+        if row is None or not row["first_fail_at"] or now - row["first_fail_at"] > WINDOW_S:
+            # No row yet, or the previous window (or a since-expired lockout's
+            # window) has passed: start fresh.
+            fail_count = 1
+            first_fail_at = now
+        else:
+            fail_count = row["fail_count"] + 1
+            first_fail_at = row["first_fail_at"]
 
-    locked_until = now + LOCKOUT_S if fail_count >= THRESHOLD else None
+        locked_until = now + LOCKOUT_S if fail_count >= THRESHOLD else None
 
-    db.execute(
-        "INSERT INTO login_attempts (username, fail_count, first_fail_at, "
-        "last_fail_at, locked_until) VALUES (?,?,?,?,?) "
-        "ON CONFLICT(username) DO UPDATE SET fail_count=excluded.fail_count, "
-        "first_fail_at=excluded.first_fail_at, last_fail_at=excluded.last_fail_at, "
-        "locked_until=excluded.locked_until",
-        (username, fail_count, first_fail_at, now, locked_until),
-    )
-    db.commit()
+        conn.execute(
+            "INSERT INTO login_attempts (username, fail_count, first_fail_at, "
+            "last_fail_at, locked_until) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(username) DO UPDATE SET fail_count=excluded.fail_count, "
+            "first_fail_at=excluded.first_fail_at, last_fail_at=excluded.last_fail_at, "
+            "locked_until=excluded.locked_until",
+            (username, fail_count, first_fail_at, now, locked_until),
+        )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
 
     if locked_until is not None:
         # was_locked is already known False here, so any locked_until we
         # just set is a fresh transition -- log once, not on every
-        # subsequent attempt during the lockout (those hit the early
-        # return above instead).
+        # subsequent attempt during the lockout 
         db.log_event(
             "warn",
             f"password login locked for {LOCKOUT_S / 60:.0f} min after "
