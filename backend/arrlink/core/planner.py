@@ -54,10 +54,9 @@ def _fanout_variants(cr: ConditionsResult) -> list[tuple[str, list[ConditionMatc
 
 
 def _rule_conditions(rule: dict) -> list[dict]:
-    """Normalize a rule dict to its ordered condition list, tolerating three
-    shapes: pre-parsed `conditions` (preview()'s in-memory rule), a DB row's
-    `conditions_json` string, or a legacy flat match_type/match_value dict
-    (kept so any caller still passing the old shape doesn't break)."""
+    """Normalize a rule dict to its ordered condition list, tolerating both
+    shapes callers pass: pre-parsed `conditions` (preview()'s in-memory
+    rule) or a DB row's `conditions_json` string."""
     if rule.get("conditions"):
         return rule["conditions"]
     raw = rule.get("conditions_json")
@@ -65,15 +64,6 @@ def _rule_conditions(rule: dict) -> list[dict]:
         parsed = json.loads(raw) if isinstance(raw, str) else raw
         if parsed:
             return parsed
-    if rule.get("match_type") and rule.get("match_value"):
-        return [
-            {
-                "category": "legacy",
-                "match_type": rule["match_type"],
-                "match_value": rule["match_value"],
-                "join": None,
-            }
-        ]
     return []
 
 

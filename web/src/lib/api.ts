@@ -134,9 +134,6 @@ export type AppInput = {
 
 export const DEFAULT_POLL_INTERVAL_S = 300
 
-// 'legacy' is a reserved category produced only by the one-time migration of
-// pre-existing single-condition rules — never offered as a pickable category
-// in the UI, but must round-trip untouched when editing a migrated rule.
 export type ConditionCategory =
   | 'user' | 'genre' | 'language' | 'quality' | 'certification' | 'collection' | 'custom'
 
@@ -150,13 +147,12 @@ export const RICH_CATEGORIES: ConditionCategory[] = [
 export type ConditionSource = 'tag' | 'native'
 
 export type ConditionItem = {
-  category: ConditionCategory | 'legacy'
+  category: ConditionCategory
   match_type: 'exact' | 'list' | 'regex' | 'vocabulary'
   match_value: string
   join: 'AND' | 'OR' | null
-  // undefined/null == 'tag' (today's only behavior, and every already-
-  // migrated condition's implicit meaning). 'native' matches the item's
-  // real Radarr/Sonarr metadata instead of its arbitrary tags — only
+  // undefined/null == 'tag' (today's only behavior). 'native' matches the
+  // item's real Radarr/Sonarr metadata instead of its arbitrary tags — only
   // meaningful for RICH_CATEGORIES.
   source?: ConditionSource | null
 }

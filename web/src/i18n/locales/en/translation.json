@@ -190,8 +190,7 @@
       "quality": "Quality",
       "certification": "Cert",
       "collection": "Collection",
-      "custom": "Custom",
-      "legacy": "Legacy"
+      "custom": "Custom"
     }
   },
   "tags": {
@@ -360,9 +359,6 @@
     "matchTypeRegex": "Regex — pattern match",
     "matchTypeListOption": "List — match any selected",
     "matchTypeExactOption": "Exact — match one",
-    "matchTypeListShort": "List",
-    "matchTypeExactShort": "Exact",
-    "matchTypeRegexShort": "Regex",
     "matchTypeVocabulary": "Any known value",
     "matchSource": "Match against",
     "sourceTag": "Tag",
@@ -402,12 +398,9 @@
       "quality": "Quality Profile",
       "certification": "Certification",
       "collection": "Collections",
-      "custom": "Custom tags",
-      "legacy": "Legacy (imported)"
+      "custom": "Custom tags"
     },
-    "legacyHeading": "Legacy (imported) — from before per-category conditions existed",
     "value": "Value",
-    "legacyHint": "This condition can’t join an AND/OR chain — to build one, remove it and add fresh category-based conditions instead.",
     "selectServiceFirst": "Select a specific service above to configure conditions — tag suggestions depend on the service’s type.",
     "conditionNumber": "Condition {{number}}",
     "category": "Category",

@@ -109,25 +109,6 @@ def _migration_6(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE rules ADD COLUMN conditions_json TEXT NOT NULL DEFAULT '[]'"
         )
-    conn.executemany(
-        "UPDATE rules SET conditions_json=? WHERE id=?",
-        [
-            (
-                json.dumps(
-                    [
-                        {
-                            "category": "legacy",
-                            "match_type": r["match_type"],
-                            "match_value": r["match_value"],
-                            "join": None,
-                        }
-                    ]
-                ),
-                r["id"],
-            )
-            for r in conn.execute("SELECT id, match_type, match_value FROM rules")
-        ],
-    )
 
 
 def _migration_7(conn: sqlite3.Connection) -> None:

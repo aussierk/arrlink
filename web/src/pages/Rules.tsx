@@ -19,7 +19,6 @@ const CATEGORY_LABEL_KEY: Record<string, string> = {
   certification: 'rules.categoryLabel.certification',
   collection: 'rules.categoryLabel.collection',
   custom: 'rules.categoryLabel.custom',
-  legacy: 'rules.categoryLabel.legacy',
 }
 
 /** Render one condition readably: exact as-is, list as count+chips, regex as a

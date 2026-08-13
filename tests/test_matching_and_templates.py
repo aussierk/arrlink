@@ -28,10 +28,10 @@ from arrlink.core.template import (
 from arrlink.main import create_app
 
 
-def _legacy(tag: str, regex_match=None) -> list[ConditionMatch]:
-    """A single matched_conditions list for a legacy (pre-category) condition —
-    the shape build_context/resolve_destination expect."""
-    return [ConditionMatch(category="legacy", tag=tag, regex_match=regex_match)]
+def _matched(category: str, tag: str, regex_match=None) -> list[ConditionMatch]:
+    """A single matched_conditions list for one category — the shape
+    build_context/resolve_destination expect."""
+    return [ConditionMatch(category=category, tag=tag, regex_match=regex_match)]
 
 # ---------------------------------------------------------------------------
 # matching
@@ -68,8 +68,9 @@ def test_planner_multi_rule_and_file():
         {
             "id": 1,
             "name": "kids",
-            "match_type": "exact",
-            "match_value": "kids",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}
+            ],
             "dir_template": "/linked/movies/kids",
             "filename_template": None,
             "enabled": True,
@@ -79,8 +80,14 @@ def test_planner_multi_rule_and_file():
         {
             "id": 2,
             "name": "users",
-            "match_type": "regex",
-            "match_value": r"^##\s*-\s*(?P<user>.+)$",
+            "conditions": [
+                {
+                    "category": "user",
+                    "match_type": "regex",
+                    "match_value": r"^##\s*-\s*(?P<user>.+)$",
+                    "join": None,
+                }
+            ],
             "dir_template": "/linked/movies/users/{$user}",
             "filename_template": None,
             "enabled": True,
@@ -124,11 +131,13 @@ def test_planner_multi_rule_and_file():
 # ---------------------------------------------------------------------------
 
 
-def test_dir_template_named_group():
+def test_dir_template_regex_capture_group():
     import re as _re
 
+    # A condition's placeholder value is the regex's first captured group,
+    # not the whole matched tag, when the condition's match_type is regex.
     m = _re.match(r"^##\s*-\s*(?P<user>.+)$", "## - alice")
-    ctx = build_context(_legacy("## - alice", m), "Radarr", "Inception", 2010,
+    ctx = build_context(_matched("user", "## - alice", m), "Radarr", "Inception", 2010,
                         "/media/movies/Inception.2010.2160p.mkv")
     d, f = _resolve("/linked/movies/users/{$user}", None, ctx)
     assert d == "/linked/movies/users/alice"
@@ -158,14 +167,14 @@ def _resolve(dir_t, file_t, ctx):
 
 
 def test_placeholders():
-    ctx = build_context(_legacy("PG-13"), "Radarr", "Inception", 2010,
+    ctx = build_context(_matched("certification", "PG-13"), "Radarr", "Inception", 2010,
                         "/media/movies/Inception.2010.2160p.mkv")
-    d, _ = _resolve("/linked/{$app}/{$tag}/{$title} ({$year})", None, ctx)
+    d, _ = _resolve("/linked/{$app}/{$certification}/{$title} ({$year})", None, ctx)
     assert d == "/linked/Radarr/PG-13/Inception (2010)"
 
 
 def test_filename_template_stem_ext():
-    ctx = build_context(_legacy("kids"), "Radarr", "Inception", 2010,
+    ctx = build_context(_matched("custom", "kids"), "Radarr", "Inception", 2010,
                         "/media/movies/Inception.2010.2160p.mkv")
     d, f = _resolve("/linked/movies/kids", "{$stem}", ctx)
     assert f == "Inception.2010.2160p.mkv"  # ext re-attached
@@ -176,16 +185,16 @@ def test_filename_template_stem_ext():
 
 
 def test_sanitize_illegal_chars():
-    ctx = build_context(_legacy('a/b\\c:d*e"<>|'), "Radarr", "T", 2010,
+    ctx = build_context(_matched("custom", 'a/b\\c:d*e"<>|'), "Radarr", "T", 2010,
                         "/media/movies/T.mkv")
-    d, _ = _resolve("/linked/{$tag}", None, ctx)
+    d, _ = _resolve("/linked/{$custom}", None, ctx)
     # illegal chars → space, whitespace collapsed
     assert d == "/linked/a b c d e"
     assert "/" not in d.split("/linked/")[1]
 
 
 def test_jail_blocks_escape():
-    ctx = build_context(_legacy("x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
+    ctx = build_context(_matched("custom", "x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
 
     from arrlink.core.template import (
         resolve_template,
@@ -204,15 +213,9 @@ def test_jail_blocks_escape():
 
 
 def test_unknown_placeholder_raises():
-    ctx = build_context(_legacy("x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
+    ctx = build_context(_matched("custom", "x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
     with pytest.raises(TemplateError, match="unknown placeholder"):
         resolve_template("/linked/{$nope}", ctx)
-
-
-def test_missing_capture_group_raises():
-    ctx = build_context(_legacy("x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
-    with pytest.raises(TemplateError, match="capture group"):
-        resolve_template("/linked/{$1}", ctx)
 
 
 def test_planner_reports_template_errors():
@@ -220,9 +223,10 @@ def test_planner_reports_template_errors():
         {
             "id": 1,
             "name": "bad",
-            "match_type": "exact",
-            "match_value": "kids",
-            "dir_template": "/etc/evil/{$tag}",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}
+            ],
+            "dir_template": "/etc/evil/{$custom}",
             "filename_template": None,
             "enabled": True,
             "priority": 100,

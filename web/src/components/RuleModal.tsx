@@ -45,7 +45,6 @@ const CATEGORY_LABEL_KEY: Record<string, string> = {
   certification: 'ruleModal.categoryLabel.certification',
   collection: 'ruleModal.categoryLabel.collection',
   custom: 'ruleModal.categoryLabel.custom',
-  legacy: 'ruleModal.categoryLabel.legacy',
 }
 
 function categoryLabel(cat: string): string {
@@ -214,12 +213,7 @@ export default function RuleModal({
     return Array.from(new Set([...appTags, ...extra]))
   }, [tags, knownTags])
 
-  // renderConditionValue only ever calls these for the modern (non-legacy)
-  // condition blocks — a legacy-category condition renders via its own
-  // dedicated block above and never reaches here — but ConditionItem's
-  // category is typed to include 'legacy' for round-tripping, so these
-  // accept the wider type to stay assignable from c.category.
-  function optionsFor(category: ConditionCategory | 'legacy'): string[] {
+  function optionsFor(category: ConditionCategory): string[] {
     if (RICH.has(category)) {
       // Vocabulary values, plus any tag already manually classified into
       // this category (Tags page) — both count as known members.
@@ -228,10 +222,10 @@ export default function RuleModal({
       return Array.from(new Set([...fromVocab, ...fromClassifiedTags]))
     }
     if (category === 'custom') return customOptions
-    return [] // user, legacy
+    return [] // user
   }
 
-  function creatableFor(_category: ConditionCategory | 'legacy', matchType: ConditionItem['match_type']) {
+  function creatableFor(_category: ConditionCategory, matchType: ConditionItem['match_type']) {
     // "vocabulary" means "match anything currently known" — no free text to
     // enter. Every other match type stays creatable: vocabulary suggestions
     // may simply not be synced yet, and shouldn't block typing a value.
@@ -334,7 +328,6 @@ export default function RuleModal({
     }
   }
 
-  const isLegacyFirst = conditions[0]?.category === 'legacy'
   const usedCategories = new Set(conditions.map((c) => c.category))
   const allCategoriesUsed = CATEGORY_ORDER.every((cat) => usedCategories.has(cat))
   const previewRule: RuleInput = { ...form, conditions }
@@ -494,41 +487,7 @@ export default function RuleModal({
             </p>
           </div>
 
-          {isLegacyFirst ? (
-            <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-              <p className="mb-2 text-xs font-semibold text-zinc-400">
-                {t('ruleModal.legacyHeading')}
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={t('ruleModal.matchType')}>
-                  <select
-                    className={inputCls}
-                    value={conditions[0].match_type}
-                    onChange={(e) =>
-                      updateBlock(0, {
-                        match_type: e.target.value as ConditionItem['match_type'],
-                        match_value: '',
-                      })
-                    }
-                  >
-                    <option value="exact">{t('ruleModal.matchTypeExactShort')}</option>
-                    <option value="list">{t('ruleModal.matchTypeListShort')}</option>
-                    <option value="regex">{t('ruleModal.matchTypeRegexShort')}</option>
-                  </select>
-                </Field>
-                <Field label={t('ruleModal.value')}>
-                  <input
-                    className={inputCls}
-                    value={conditions[0].match_value}
-                    onChange={(e) => updateBlock(0, { match_value: e.target.value })}
-                  />
-                </Field>
-              </div>
-              <p className="mt-2 text-[11px] text-zinc-500">
-                {t('ruleModal.legacyHint')}
-              </p>
-            </div>
-          ) : form.app_scope === null && form.app_type_scope === null ? (
+          {form.app_scope === null && form.app_type_scope === null ? (
             <div className="rounded-md border border-dashed border-zinc-700 p-4 text-center text-sm text-zinc-500">
               {t('ruleModal.selectServiceFirst')}
             </div>

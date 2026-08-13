@@ -26,11 +26,9 @@ router = APIRouter(prefix="/api/rules", tags=["rules"])
 
 
 class ConditionIn(BaseModel):
-    # A permissive string (not a narrow Literal excluding "legacy") — an
-    # unmodified migrated condition must round-trip on PATCH without
-    # failing validation. The frontend is what restricts pickable
-    # categories to the 7 new ones; "legacy" is never offered there.
-    category: str = Field(min_length=1, max_length=30)
+    category: Literal[
+        "user", "genre", "language", "quality", "certification", "collection", "custom"
+    ]
     match_type: Literal["exact", "list", "regex", "vocabulary"]
     # min_length relaxed to 0: "vocabulary" intentionally carries an empty
     # match_value (it means "match the whole current vocabulary set for
