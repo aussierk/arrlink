@@ -12,6 +12,7 @@ from .base import (
     Item,
     MediaFile,
     Tag,
+    scandir_stats,
     translate_tag_labels,
 )
 
@@ -167,11 +168,15 @@ class SonarrAdapter(BaseAdapter):
                     for f in data
                     if isinstance(f, dict) and f.get("path")
                 ]
-                # os.stat per file, off the event loop
-                mfiles = await asyncio.to_thread(
-                    lambda: [self._stat_file(p, series_path, sz) for p, sz in specs]
-                )
-                return sid, mfiles
+
+                # One os.scandir per episode directory (season folder)
+                # instead of one os.stat per file, then build the MediaFiles
+                # -- all off the event loop.
+                def _build() -> list[MediaFile]:
+                    stats = scandir_stats([p for p, _ in specs])
+                    return [self._stat_file(p, series_path, sz, stats.get(p)) for p, sz in specs]
+
+                return sid, await asyncio.to_thread(_build)
 
         fetched = dict(await asyncio.gather(*(_files(sid) for sid in to_fetch)))
 
@@ -203,14 +208,11 @@ class SonarrAdapter(BaseAdapter):
         return items
 
     @staticmethod
-    def _stat_file(path: str, series_path: str, api_size) -> MediaFile:
-        """Build a MediaFile, statting the file for its real inode.
-
-        The container sees the same absolute paths as Sonarr, so `os.stat`
-        yields the inode the linker needs (Sonarr's API has no inode field).
-        """
+    def _stat_file(path: str, series_path: str, api_size, st=None) -> MediaFile:
+        """Build a MediaFile, statting the file for its real inode."""
         try:
-            st = os.stat(path)
+            if st is None:
+                st = os.stat(path)
             fsize, fmtime, finode = st.st_size, st.st_mtime, st.st_ino
         except OSError:
             try:

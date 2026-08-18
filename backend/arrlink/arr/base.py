@@ -4,11 +4,32 @@ from __future__ import annotations
 
 import abc
 import dataclasses
+import os
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import httpx
+
+
+def scandir_stats(paths: list[str]) -> dict[str, os.stat_result]:
+    """`{path: stat_result}` for the given files, using one `os.scandir()` per distinct parent directory instead of one `os.stat()` per file."""
+    by_dir: dict[str, set[str]] = {}
+    for p in paths:
+        by_dir.setdefault(os.path.dirname(p) or "/", set()).add(os.path.basename(p))
+    out: dict[str, os.stat_result] = {}
+    for directory, want in by_dir.items():
+        try:
+            with os.scandir(directory) as it:
+                for entry in it:
+                    if entry.name in want:
+                        try:
+                            out[os.path.join(directory, entry.name)] = entry.stat()
+                        except OSError:
+                            pass
+        except OSError:
+            pass
+    return out
 
 
 class AdapterError(Exception):

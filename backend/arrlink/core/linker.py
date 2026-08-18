@@ -1,13 +1,24 @@
 """The hardlink reconciler."""
+
 from __future__ import annotations
 
 import dataclasses
 import os
 import time
 
+from ..arr.base import scandir_stats
 from ..state import COMMIT_BATCH, State
 from .fsutil import create_link, ensure_dir, inode_of, remove_link
 from .planner import PlannedLink
+
+
+def _cached_ino(path: str, cache: dict) -> int | None:
+    """Inode from the pre-scanned ``scandir_stats`` cache when the file was
+    present at scan time; otherwise a live ``inode_of`` (the file is gone,
+    was replaced, or its directory couldn't be read)."""
+    st = cache.get(path)
+    return st.st_ino if st is not None else inode_of(path)
+
 
 DEFAULT_DELETE_AFTER = 3
 
@@ -66,6 +77,18 @@ def reconcile(
     # `SELECT * FROM rules WHERE id=?` per non-matching link inside _retire().
     rules_by_id = {r["id"]: r for r in db.query("SELECT * FROM rules")}
 
+    # Batch-stat every existing link's dst + src (and any planned src that
+    # lost its snapshot inode) with one os.scandir per directory. On a
+    # network mount this collapses the per-link stat round trips in
+    # _ensure_present / _retire -- the steady-state cost of a warm poll --
+    # to ~one per directory. Snapshot is taken before pass 1 mutates
+    # anything; each entry is consulted once, for its own (unique-dst) link.
+    stat_cache = scandir_stats(
+        [r["dst_path"] for r in rows]
+        + [r["src_path"] for r in rows]
+        + [p.src_path for p in planned.values() if p.src_inode is None]
+    )
+
     # Both passes interleave real os.link/os.unlink with their DB writes. The
     # transaction wrapper keeps each COMMIT_BATCH-sized chunk atomic while
     # still releasing the WAL writer lock between chunks (so a concurrent API
@@ -86,7 +109,7 @@ def reconcile(
             if key in planned:
                 p = planned.pop(key)
                 if p.dst_path == dst:
-                    _ensure_present(db, row, dst, p, res, fallback, now)
+                    _ensure_present(db, row, dst, p, res, fallback, now, stat_cache)
                 else:
                     # dst changed (file renamed/moved, or template edited) ->
                     # recreate under the new dst, drop the old
@@ -101,8 +124,20 @@ def reconcile(
                 continue
 
             # --- key not in plan: rule no longer matches / file deleted ---
-            _retire(db, row, src, dst, live_srcs, unlink_on_mismatch, res, now,
-                    delete_after, fallback, rules_by_id)
+            _retire(
+                db,
+                row,
+                src,
+                dst,
+                live_srcs,
+                unlink_on_mismatch,
+                res,
+                now,
+                delete_after,
+                fallback,
+                rules_by_id,
+                stat_cache,
+            )
 
     # --- pass 2: links that should exist but don't ------------------------
     with db.transaction():
@@ -116,11 +151,11 @@ def reconcile(
     return res
 
 
-def _ensure_present(db, row, dst, p, res, fallback, now) -> None:
+def _ensure_present(db, row, dst, p, res, fallback, now, stat_cache) -> None:
     """Keep an already-placed link valid (idempotent)."""
     src = p.src_path
-    src_ino = p.src_inode if p.src_inode is not None else inode_of(src)
-    dst_ino = inode_of(dst)
+    src_ino = p.src_inode if p.src_inode is not None else _cached_ino(src, stat_cache)
+    dst_ino = _cached_ino(dst, stat_cache)
     if dst_ino is None:
         # dst vanished on disk: re-create if the source still exists
         if src_ino is not None:
@@ -148,8 +183,7 @@ def _ensure_present(db, row, dst, p, res, fallback, now) -> None:
             if r2.ok:
                 res.moved += 1
                 db.execute(
-                    "UPDATE links SET inode=?, src_path=?, missing_strikes=0 "
-                    "WHERE id=?",
+                    "UPDATE links SET inode=?, src_path=?, missing_strikes=0 WHERE id=?",
                     (inode_of(dst), src, row["id"]),
                 )
             else:
@@ -165,12 +199,24 @@ def _ensure_present(db, row, dst, p, res, fallback, now) -> None:
         )
 
 
-def _retire(db, row, src, dst, live_srcs, unlink_on_mismatch, res, now,
-            delete_after, fallback, rules_by_id) -> None:
+def _retire(
+    db,
+    row,
+    src,
+    dst,
+    live_srcs,
+    unlink_on_mismatch,
+    res,
+    now,
+    delete_after,
+    fallback,
+    rules_by_id,
+    stat_cache,
+) -> None:
     """Remove (or defer) a link that is no longer planned."""
     rule = rules_by_id.get(row["rule_id"])
     rule_unlink = bool(rule["unlink_on_mismatch"]) if rule else unlink_on_mismatch
-    src_exists = src in live_srcs and inode_of(src) is not None
+    src_exists = src in live_srcs and _cached_ino(src, stat_cache) is not None
 
     if not src_exists:
         # source gone: grace period before we treat it as deleted
@@ -226,8 +272,17 @@ def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
             "dst_path=excluded.dst_path, src_path=excluded.src_path, "
             "inode=excluded.inode, status='active', created_at=excluded.created_at, "
             "missing_strikes=0",
-            (p.rule_id, app_id, p.item_id, p.file_id, p.src_path, p.dst_path,
-             inode_of(p.dst_path), now, p.match_key),
+            (
+                p.rule_id,
+                app_id,
+                p.item_id,
+                p.file_id,
+                p.src_path,
+                p.dst_path,
+                inode_of(p.dst_path),
+                now,
+                p.match_key,
+            ),
         )
     else:
         res.skipped += 1

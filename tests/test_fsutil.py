@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 
+from arrlink.arr.base import scandir_stats
 from arrlink.core.fsutil import create_link, inode_of, remove_link
 
 
@@ -103,3 +104,28 @@ def test_remove_link_refuses_symlink(tmp_path):
 def test_remove_link_already_gone_is_ok(tmp_path):
     r = remove_link(str(tmp_path / "nonexistent.txt"))
     assert r.ok is True
+
+
+def test_scandir_stats_batches_by_dir_and_matches_os_stat(tmp_path, monkeypatch):
+    d1 = tmp_path / "Show" / "Season 01"
+    d2 = tmp_path / "Movie (2020)"
+    d1.mkdir(parents=True)
+    d2.mkdir()
+    files = [d1 / "E01.mkv", d1 / "E02.mkv", d1 / "E03.mkv", d2 / "movie.mkv"]
+    for i, f in enumerate(files):
+        f.write_bytes(b"x" * (i + 1))
+    missing = str(tmp_path / "gone" / "nope.mkv")
+
+    scandirs: list[str] = []
+    real = os.scandir
+    monkeypatch.setattr(os, "scandir", lambda p=".": scandirs.append(str(p)) or real(p))
+
+    got = scandir_stats([str(f) for f in files] + [missing])
+
+    # one os.scandir per distinct parent dir (Season 01, Movie, gone) --
+    # 3, not one os.stat per path (5); the gone dir's scandir fails quietly
+    assert len(scandirs) == 3
+    assert set(got) == {str(f) for f in files}  # missing path simply absent
+    for f in files:
+        assert got[str(f)].st_ino == os.stat(f).st_ino
+        assert got[str(f)].st_size == f.stat().st_size
