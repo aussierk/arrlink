@@ -81,19 +81,23 @@ class SonarrAdapter(BaseAdapter):
         if r.status_code not in (200, 201):
             raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'", status=r.status_code)
 
-    async def fetch_items(self, known_fingerprints=None) -> list[Item]:
+    async def fetch_items(self, known_fingerprints=None, tags=None) -> list[Item]:
         known = known_fingerprints or {}
-        tags = await self.fetch_tags()
-        # Quality profile names aren't on the series payload itself (only
-        # qualityProfileId) — resolve via one extra call, same id->label
-        # translation shape as the tag vocabulary above.
-        try:
-            profiles = await self.fetch_quality_profiles()
-            profile_by_id = {p.id: p.name for p in profiles}
-        except AdapterError:
-            profile_by_id = {}
+        # One pooled connection for the tag + qualityprofile + series calls
+        # and the whole per-series /episodefile fan-out below.
+        async with self._session():
+            return await self._fetch_items(known, tags)
 
-        series_data = await self._get_json("/api/v3/series")
+    async def _fetch_items(self, known: dict, tags=None) -> list[Item]:
+        # Independent preamble calls -- series list, quality-profile names,
+        # and (unless the caller supplied it) the tag vocabulary -- run
+        # concurrently. profile names aren't on the series rows, only the id.
+        series = self._get_json("/api/v3/series")
+        qp = self.quality_profile_names()
+        if tags is None:
+            series_data, profile_by_id, tags = await asyncio.gather(series, qp, self.fetch_tags())
+        else:
+            series_data, profile_by_id = await asyncio.gather(series, qp)
         if not isinstance(series_data, list):
             raise AdapterError("unexpected series payload")
 
