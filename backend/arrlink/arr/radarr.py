@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 from .base import (
@@ -66,20 +67,18 @@ class RadarrAdapter(BaseAdapter):
         if r.status_code not in (200, 201):
             raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'", status=r.status_code)
 
-    async def fetch_items(self, known_fingerprints=None) -> list[Item]:
-        # Radarr's item list is a single /movie call, so there's nothing to
-        # skip -- known_fingerprints is accepted for interface parity and
-        # ignored.
-        vocabulary = await self.fetch_tags()
-        # Quality profile names aren't on the movie payload itself (only
-        # qualityProfileId) — resolve via one extra call, same id->label
-        # translation shape as the tag vocabulary above.
-        try:
-            profiles = await self.fetch_quality_profiles()
-            profile_by_id = {p.id: p.name for p in profiles}
-        except AdapterError:
-            profile_by_id = {}
-        data = await self._get_json("/api/v3/movie")
+    async def fetch_items(self, known_fingerprints=None, tags=None) -> list[Item]:
+        # known_fingerprints is accepted for interface parity and ignored:
+        # Radarr's item list is a single /movie call. One pooled connection;
+        # the independent preamble calls run concurrently.
+        async with self._session():
+            movie = self._get_json("/api/v3/movie")
+            qp = self.quality_profile_names()
+            if tags is None:
+                data, profile_by_id, vocabulary = await asyncio.gather(movie, qp, self.fetch_tags())
+            else:
+                data, profile_by_id = await asyncio.gather(movie, qp)
+                vocabulary = tags
         if not isinstance(data, list):
             raise AdapterError("unexpected movie payload")
         items: list[Item] = []

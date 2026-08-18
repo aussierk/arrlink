@@ -12,6 +12,7 @@ from .base import (
     Item,
     MediaFile,
     Tag,
+    scandir_stats,
     translate_tag_labels,
 )
 
@@ -81,19 +82,23 @@ class SonarrAdapter(BaseAdapter):
         if r.status_code not in (200, 201):
             raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'", status=r.status_code)
 
-    async def fetch_items(self, known_fingerprints=None) -> list[Item]:
+    async def fetch_items(self, known_fingerprints=None, tags=None) -> list[Item]:
         known = known_fingerprints or {}
-        tags = await self.fetch_tags()
-        # Quality profile names aren't on the series payload itself (only
-        # qualityProfileId) — resolve via one extra call, same id->label
-        # translation shape as the tag vocabulary above.
-        try:
-            profiles = await self.fetch_quality_profiles()
-            profile_by_id = {p.id: p.name for p in profiles}
-        except AdapterError:
-            profile_by_id = {}
+        # One pooled connection for the tag + qualityprofile + series calls
+        # and the whole per-series /episodefile fan-out below.
+        async with self._session():
+            return await self._fetch_items(known, tags)
 
-        series_data = await self._get_json("/api/v3/series")
+    async def _fetch_items(self, known: dict, tags=None) -> list[Item]:
+        # Independent preamble calls -- series list, quality-profile names,
+        # and (unless the caller supplied it) the tag vocabulary -- run
+        # concurrently. profile names aren't on the series rows, only the id.
+        series = self._get_json("/api/v3/series")
+        qp = self.quality_profile_names()
+        if tags is None:
+            series_data, profile_by_id, tags = await asyncio.gather(series, qp, self.fetch_tags())
+        else:
+            series_data, profile_by_id = await asyncio.gather(series, qp)
         if not isinstance(series_data, list):
             raise AdapterError("unexpected series payload")
 
@@ -163,11 +168,15 @@ class SonarrAdapter(BaseAdapter):
                     for f in data
                     if isinstance(f, dict) and f.get("path")
                 ]
-                # os.stat per file, off the event loop
-                mfiles = await asyncio.to_thread(
-                    lambda: [self._stat_file(p, series_path, sz) for p, sz in specs]
-                )
-                return sid, mfiles
+
+                # One os.scandir per episode directory (season folder)
+                # instead of one os.stat per file, then build the MediaFiles
+                # -- all off the event loop.
+                def _build() -> list[MediaFile]:
+                    stats = scandir_stats([p for p, _ in specs])
+                    return [self._stat_file(p, series_path, sz, stats.get(p)) for p, sz in specs]
+
+                return sid, await asyncio.to_thread(_build)
 
         fetched = dict(await asyncio.gather(*(_files(sid) for sid in to_fetch)))
 
@@ -199,14 +208,11 @@ class SonarrAdapter(BaseAdapter):
         return items
 
     @staticmethod
-    def _stat_file(path: str, series_path: str, api_size) -> MediaFile:
-        """Build a MediaFile, statting the file for its real inode.
-
-        The container sees the same absolute paths as Sonarr, so `os.stat`
-        yields the inode the linker needs (Sonarr's API has no inode field).
-        """
+    def _stat_file(path: str, series_path: str, api_size, st=None) -> MediaFile:
+        """Build a MediaFile, statting the file for its real inode."""
         try:
-            st = os.stat(path)
+            if st is None:
+                st = os.stat(path)
             fsize, fmtime, finode = st.st_size, st.st_mtime, st.st_ino
         except OSError:
             try:

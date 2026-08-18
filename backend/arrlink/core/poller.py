@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import random
 import time
 
@@ -202,7 +201,8 @@ class Poller:
             )
             self.db.sync_vocabulary(
                 "language", app_type, app_id,
-                [(l.name, str(l.id)) for l in languages if l.name], "instance",
+                [(lg.name, str(lg.id)) for lg in languages if lg.name],
+                "instance",
             )
         except Exception as e:  # noqa: BLE001 - best-effort, suggestion data only
             log.warning("instance vocabulary sync failed for app %s: %s", app_id, e)
@@ -226,8 +226,9 @@ class Poller:
         }
         try:
             adapter: BaseAdapter = get_adapter(app["type"], app["url"], app["api_key"])
-            items = asyncio.run(adapter.fetch_items(known_fps))
-            tags = asyncio.run(adapter.fetch_tags())
+            # One event loop, one pooled connection, and /v3/tag fetched once
+            # (not once here + once inside fetch_items).
+            items, tags = asyncio.run(adapter.fetch_snapshot(known_fps))
         except (ValueError, AdapterError, RuntimeError) as e:
             detail = getattr(e, "detail", None) or str(e)
             self.db.execute(
@@ -269,7 +270,7 @@ class Poller:
 
     def _store_items_locked(self, app_id: int, items, now: float) -> None:
         # --- bulk-load the current snapshot (2 queries, not 2N) -----------
-        item_rows: dict[int, "object"] = {
+        item_rows: dict[int, object] = {
             r["item_id"]: r
             for r in self.db.query(
                 "SELECT * FROM app_items WHERE app_id=?", (app_id,)
