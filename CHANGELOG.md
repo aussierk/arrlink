@@ -58,3 +58,12 @@ release forward — not retroactive.
 - Per-instance quality-profile / language vocabulary is refreshed at most
   every 6 hours rather than on every poll; observed-collection vocabulary
   is only rewritten when it actually changes.
+- **Database schema collapsed to a single v1 baseline.** The 18-version
+  migration chain existed to protect in-place upgrades of real deployments,
+  which don't exist yet — it's now one consolidated schema creation.
+  `rules.match_type`/`match_value` (unused since multi-condition rules,
+  kept only to satisfy an old CHECK constraint) are dropped along with the
+  translation shim that worked around them. No API-visible change (these
+  columns were already stripped from every response). There is no
+  supported upgrade path from a pre-collapse database — delete
+  `arrlink.db` and let it recreate.

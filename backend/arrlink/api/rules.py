@@ -102,13 +102,6 @@ class RuleIn(BaseModel):
         return self
 
 
-def _vestigial_match_type(match_type: str) -> str:
-    """The rules.match_type column's CHECK predates 'vocabulary' and is
-    never read for matching anymore (see _migration_6's docstring) — just
-    needs *some* value satisfying its own constraint."""
-    return "list" if match_type == "vocabulary" else match_type
-
-
 def _resolve_app_type(app_scope: int | None, app_type_scope: str | None, db: State) -> str | None:
     """The app_type a rule's conditions should be checked/expanded against,
     or None if the rule is unscoped (applies to any app) — vocabulary
@@ -154,8 +147,6 @@ def _rule_out(row) -> dict:
     d["enabled"] = bool(d["enabled"])
     d["unlink_on_mismatch"] = bool(d["unlink_on_mismatch"])
     d["conditions"] = json.loads(d.pop("conditions_json"))
-    d.pop("match_type", None)
-    d.pop("match_value", None)
     return d
 
 
@@ -185,17 +176,14 @@ def create_rule(body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)) -
         "SELECT id FROM apps WHERE id=?", (body.app_scope,)
     ):
         raise HTTPException(422, "app_scope references unknown app")
-    first = body.conditions[0]
     cur = db.execute(
-        "INSERT INTO rules (name, app_scope, app_type_scope, match_type, match_value, "
+        "INSERT INTO rules (name, app_scope, app_type_scope, "
         "conditions_json, dir_template, filename_template, enabled, unlink_on_mismatch, "
-        "priority) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "priority) VALUES (?,?,?,?,?,?,?,?,?)",
         (
             body.name,
             body.app_scope,
             body.app_type_scope,
-            _vestigial_match_type(first.match_type),
-            first.match_value,
             json.dumps([c.model_dump() for c in body.conditions]),
             body.dir_template,
             body.filename_template,
@@ -224,17 +212,14 @@ def update_rule(
         "SELECT id FROM apps WHERE id=?", (body.app_scope,)
     ):
         raise HTTPException(422, "app_scope references unknown app")
-    first = body.conditions[0]
     db.execute(
-        "UPDATE rules SET name=?, app_scope=?, app_type_scope=?, match_type=?, "
-        "match_value=?, conditions_json=?, dir_template=?, filename_template=?, "
+        "UPDATE rules SET name=?, app_scope=?, app_type_scope=?, "
+        "conditions_json=?, dir_template=?, filename_template=?, "
         "enabled=?, unlink_on_mismatch=?, priority=? WHERE id=?",
         (
             body.name,
             body.app_scope,
             body.app_type_scope,
-            _vestigial_match_type(first.match_type),
-            first.match_value,
             json.dumps([c.model_dump() for c in body.conditions]),
             body.dir_template,
             body.filename_template,

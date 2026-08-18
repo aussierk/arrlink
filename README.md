@@ -105,8 +105,7 @@ reacting to new imports and tag changes.
     roots, plus an **Access control** section for OIDC allow-lists. Backed by
     `GET /api/settings/effective` (the resolved runtime values).
 - FastAPI JSON API + SSE live log stream
-- SQLite (WAL) with versioned forward-only migrations (v1 core, v2 OIDC,
-  v4 tag repository); thread-local connections
+- SQLite (WAL), single versioned schema baseline; thread-local connections
 - **Path mirroring**: the container must see the *arr apps' media at the same
   absolute paths (mount them read-only). The link root defaults to `/media`
   (mount a writable pool at `/media`, on the same pool as the sources so
@@ -120,7 +119,7 @@ backend/arrlink/     FastAPI app
   arr/               base.py (contract), radarr.py, sonarr.py, factory.py
   core/              matching, template, planner, presets, poller, linker, fsutil
   auth/              oidc.py (discovery/PKCE/refresh), sessions.py (sweep)
-  state.py           SQLite (WAL) + migrations
+  state.py           SQLite (WAL) + schema
   config.py          env settings (pydantic-settings)
   main.py            app factory + auth-sweep lifespan + SPA static serving
 web/                 Vite + React + TS SPA

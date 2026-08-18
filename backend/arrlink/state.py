@@ -1,4 +1,4 @@
-"""SQLite state (WAL mode) with versioned, forward-only migrations.
+"""SQLite state (WAL mode).
 
 Thread-local connections (FastAPI runs sync endpoints in a threadpool).
 """
@@ -23,197 +23,13 @@ log = logging.getLogger(__name__)
 COMMIT_BATCH = 500
 
 # Migration version numbers must only ever increase — never reuse or reorder
-# one that has already shipped, even during active development, since an
-# already-running instance's `schema_version` row would just skip a
-# lower/equal-numbered migration as "already applied". Versions 8, 9, 14,
-# and 16 are retired/unused — do not reuse them.
-SCHEMA_VERSION = 18
-
-
-def _migration_2(conn: sqlite3.Connection) -> None:
-    """M1: OIDC login states (PKCE) + refresh tokens on sessions."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}
-    if "refresh_token" not in cols:
-        conn.execute("ALTER TABLE sessions ADD COLUMN refresh_token TEXT")
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS oidc_logins (
-            state TEXT PRIMARY KEY,
-            verifier TEXT NOT NULL,
-            nonce TEXT NOT NULL,
-            next_path TEXT,
-            created_at REAL NOT NULL
-        );
-        """
-    )
-
-
-def _migration_4(conn: sqlite3.Connection) -> None:
-    """M7-prep: tag repository — a user-curated tag list to push to apps."""
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS tag_repository (
-            id INTEGER PRIMARY KEY,
-            label TEXT NOT NULL UNIQUE
-        );
-        """
-    )
-
-
-def _migration_5(conn: sqlite3.Connection) -> None:
-    """M7-prep: silent fix for the /linked -> /media default-root change."""
-    row = conn.execute("SELECT value_json FROM settings WHERE key='allowed_roots'").fetchone()
-    if row is not None:
-        return  # user-managed roots: never touch their rules
-    from .core.template import DEFAULT_ROOTS
-
-    conn.executemany(
-        "UPDATE rules SET dir_template=? WHERE id=?",
-        [
-            (r["dir_template"].replace("/linked", list(DEFAULT_ROOTS)[0], 1), r["id"])
-            for r in conn.execute("SELECT id, dir_template FROM rules")
-            if r["dir_template"].startswith("/linked")
-        ],
-    )
-    conn.executemany(
-        "UPDATE rules SET filename_template=? WHERE id=?",
-        [
-            (
-                r["filename_template"].replace("/linked", list(DEFAULT_ROOTS)[0], 1),
-                r["id"],
-            )
-            for r in conn.execute("SELECT id, filename_template FROM rules")
-            if r["filename_template"] and r["filename_template"].startswith("/linked")
-        ],
-    )
-
-
-def _migration_3(conn: sqlite3.Connection) -> None:
-    """M4: track file inodes/strikes for the poller's diff + link grace."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(app_files)")}
-    if "missing_strikes" not in cols:
-        conn.execute("ALTER TABLE app_files ADD COLUMN missing_strikes INTEGER NOT NULL DEFAULT 0")
-    lcols = {r["name"] for r in conn.execute("PRAGMA table_info(links)")}
-    if "missing_strikes" not in lcols:
-        conn.execute("ALTER TABLE links ADD COLUMN missing_strikes INTEGER NOT NULL DEFAULT 0")
-
-
-def _migration_6(conn: sqlite3.Connection) -> None:
-    """M8: multi-condition AND/OR rule chains."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(rules)")}
-    if "conditions_json" not in cols:
-        conn.execute("ALTER TABLE rules ADD COLUMN conditions_json TEXT NOT NULL DEFAULT '[]'")
-
-
-def _migration_7(conn: sqlite3.Connection) -> None:
-    """M9: type-wide rule scope ("All Radarr" / "All Sonarr")."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(rules)")}
-    if "app_type_scope" not in cols:
-        conn.execute("ALTER TABLE rules ADD COLUMN app_type_scope TEXT")
-
-
-def _migration_10(conn: sqlite3.Connection) -> None:
-    """M10: sessions.kind ('oidc' | 'password') — dual-mode auth means both a password session and an OIDC session can be alive at once."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}
-    if "kind" not in cols:
-        conn.execute("ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'oidc'")
-
-
-def _migration_11(conn: sqlite3.Connection) -> None:
-    """M11: vocabulary — known values per condition category, at one of two scopes encoded by app_id:"""
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS vocabulary (
-            id INTEGER PRIMARY KEY,
-            category TEXT NOT NULL CHECK (category IN
-                ('genre','certification','collection','quality','language')),
-            app_type TEXT NOT NULL CHECK (app_type IN ('radarr','sonarr')),
-            app_id INTEGER REFERENCES apps(id) ON DELETE CASCADE,
-            value TEXT NOT NULL,
-            external_id TEXT,
-            source TEXT NOT NULL CHECK (source IN
-                ('tmdb','trash','instance','observed')),
-            imported_at REAL NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_vocabulary_lookup
-            ON vocabulary(category, app_type, app_id);
-        """
-    )
-    # A plain UNIQUE(category, app_type, app_id, value) would not dedupe two
-    # shared-scope (app_id IS NULL) rows, since SQLite treats NULL as
-    # distinct from itself in unique indexes — COALESCE to a sentinel fixes
-    # this.
-    conn.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_vocabulary_unique ON "
-        "vocabulary(category, app_type, COALESCE(app_id, -1), value)"
-    )
-
-
-def _migration_12(conn: sqlite3.Connection) -> None:
-    """M12: manual tag->category classification, so tag-based matching in a rich category."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(tags)")}
-    if "category" not in cols:
-        conn.execute(
-            "ALTER TABLE tags ADD COLUMN category TEXT CHECK (category IS NULL "
-            "OR category IN ('genre','certification','collection','quality',"
-            "'language','user','custom'))"
-        )
-
-
-def _migration_17(conn: sqlite3.Connection) -> None:
-    """M17: indexes for the poller/reconciler hot paths."""
-    conn.executescript(
-        """
-        CREATE INDEX IF NOT EXISTS idx_links_app_status ON links(app_id, status);
-        CREATE INDEX IF NOT EXISTS idx_links_file ON links(file_id);
-        CREATE INDEX IF NOT EXISTS idx_links_item ON links(item_id);
-        CREATE INDEX IF NOT EXISTS idx_links_status ON links(status);
-        CREATE INDEX IF NOT EXISTS idx_app_files_item_inode
-            ON app_files(item_id, inode);
-        """
-    )
-
-
-def _migration_15(conn: sqlite3.Connection) -> None:
-    """M15: persisted password-login lockout, keyed by username.
-
-    A DB row (not an in-memory counter) so a lockout survives a process
-    restart -- this is a security control, not just a nicety.
-    """
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS login_attempts (
-            username TEXT PRIMARY KEY,
-            fail_count INTEGER NOT NULL DEFAULT 0,
-            first_fail_at REAL,
-            last_fail_at REAL,
-            locked_until REAL
-        );
-        """
-    )
-
-
-def _migration_18(conn: sqlite3.Connection) -> None:
-    """M18: app_items.stats_fingerprint — a cheap per-item "did the file set change" marker."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(app_items)")}
-    if "stats_fingerprint" not in cols:
-        conn.execute("ALTER TABLE app_items ADD COLUMN stats_fingerprint TEXT")
-
-
-def _migration_13(conn: sqlite3.Connection) -> None:
-    """M13: native *arr per-item metadata (genres/certification/collection/ quality profile/original language)."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(app_items)")}
-    adds = {
-        "genres_json": "TEXT NOT NULL DEFAULT '[]'",
-        "certification": "TEXT",
-        "collection": "TEXT",
-        "quality_profile_id": "INTEGER",
-        "quality_profile_name": "TEXT",
-        "original_language": "TEXT",
-    }
-    for name, ddl in adds.items():
-        if name not in cols:
-            conn.execute(f"ALTER TABLE app_items ADD COLUMN {name} {ddl}")
+# one that has already shipped, since an already-running instance's
+# `schema_version` row would just skip a lower/equal-numbered migration as
+# "already applied". Collapsed to a single v1 baseline (this project has no
+# production deployments yet, so there is no installed base to preserve
+# compatibility for); once that's no longer true, add new migrations here
+# rather than editing v1 in place.
+SCHEMA_VERSION = 1
 
 
 _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
@@ -240,6 +56,8 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             label TEXT NOT NULL,
             count INTEGER NOT NULL DEFAULT 0,
             imported_at REAL NOT NULL,
+            category TEXT CHECK (category IS NULL OR category IN
+                ('genre','certification','collection','quality','language','user','custom')),
             UNIQUE (app_id, label)
         );
 
@@ -247,8 +65,8 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             app_scope INTEGER REFERENCES apps(id) ON DELETE SET NULL,
-            match_type TEXT NOT NULL CHECK (match_type IN ('exact','list','regex')),
-            match_value TEXT NOT NULL,
+            app_type_scope TEXT,
+            conditions_json TEXT NOT NULL DEFAULT '[]',
             dir_template TEXT NOT NULL,
             filename_template TEXT,
             enabled INTEGER NOT NULL DEFAULT 1,
@@ -269,6 +87,13 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             first_seen REAL NOT NULL,
             last_seen REAL NOT NULL,
             missing_strikes INTEGER NOT NULL DEFAULT 0,
+            genres_json TEXT NOT NULL DEFAULT '[]',
+            certification TEXT,
+            collection TEXT,
+            quality_profile_id INTEGER,
+            quality_profile_name TEXT,
+            original_language TEXT,
+            stats_fingerprint TEXT,
             UNIQUE (app_id, item_id)
         );
 
@@ -280,6 +105,7 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             size INTEGER,
             mtime REAL,
             inode INTEGER,
+            missing_strikes INTEGER NOT NULL DEFAULT 0,
             UNIQUE (item_id, rel_path)
         );
 
@@ -295,6 +121,7 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             status TEXT NOT NULL DEFAULT 'active',
             created_at REAL NOT NULL,
             match_key TEXT NOT NULL DEFAULT '',
+            missing_strikes INTEGER NOT NULL DEFAULT 0,
             UNIQUE (rule_id, item_id, file_id, match_key)
         );
 
@@ -304,6 +131,7 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             name TEXT,
             groups_json TEXT NOT NULL DEFAULT '[]',
             refresh_token TEXT,
+            kind TEXT NOT NULL DEFAULT 'oidc',
             created_at REAL NOT NULL,
             expires_at REAL NOT NULL
         );
@@ -322,25 +150,59 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             message TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS oidc_logins (
+            state TEXT PRIMARY KEY,
+            verifier TEXT NOT NULL,
+            nonce TEXT NOT NULL,
+            next_path TEXT,
+            created_at REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS tag_repository (
+            id INTEGER PRIMARY KEY,
+            label TEXT NOT NULL UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS vocabulary (
+            id INTEGER PRIMARY KEY,
+            category TEXT NOT NULL CHECK (category IN
+                ('genre','certification','collection','quality','language')),
+            app_type TEXT NOT NULL CHECK (app_type IN ('radarr','sonarr')),
+            app_id INTEGER REFERENCES apps(id) ON DELETE CASCADE,
+            value TEXT NOT NULL,
+            external_id TEXT,
+            source TEXT NOT NULL CHECK (source IN
+                ('tmdb','trash','instance','observed')),
+            imported_at REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            username TEXT PRIMARY KEY,
+            fail_count INTEGER NOT NULL DEFAULT 0,
+            first_fail_at REAL,
+            last_fail_at REAL,
+            locked_until REAL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
         CREATE INDEX IF NOT EXISTS idx_links_dst ON links(dst_path);
         CREATE INDEX IF NOT EXISTS idx_app_files_item ON app_files(item_id);
+        CREATE INDEX IF NOT EXISTS idx_links_app_status ON links(app_id, status);
+        CREATE INDEX IF NOT EXISTS idx_links_file ON links(file_id);
+        CREATE INDEX IF NOT EXISTS idx_links_item ON links(item_id);
+        CREATE INDEX IF NOT EXISTS idx_links_status ON links(status);
+        CREATE INDEX IF NOT EXISTS idx_app_files_item_inode
+            ON app_files(item_id, inode);
+        CREATE INDEX IF NOT EXISTS idx_vocabulary_lookup
+            ON vocabulary(category, app_type, app_id);
+        -- A plain UNIQUE(category, app_type, app_id, value) would not dedupe
+        -- two shared-scope (app_id IS NULL) rows, since SQLite treats NULL
+        -- as distinct from itself in unique indexes -- COALESCE to a
+        -- sentinel fixes this.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_vocabulary_unique ON
+            vocabulary(category, app_type, COALESCE(app_id, -1), value);
         """,
     ),
-    (2, _migration_2),
-    (3, _migration_3),
-    (4, _migration_4),
-    (5, _migration_5),
-    (6, _migration_6),
-    (7, _migration_7),
-    # 8 and 9 are retired — do not reuse (see SCHEMA_VERSION comment above).
-    (10, _migration_10),
-    (11, _migration_11),
-    (12, _migration_12),
-    (13, _migration_13),
-    (15, _migration_15),
-    (17, _migration_17),
-    (18, _migration_18),
 ]
 
 

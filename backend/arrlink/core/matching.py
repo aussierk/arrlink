@@ -76,15 +76,6 @@ def match_rule_all(match_type: str, match_value: str, item_tags: list[str]) -> l
     return []
 
 
-def rule_matches(rule, item_tags: list[str]) -> RuleMatch | None:
-    """Convenience wrapper that reads matcher fields off a rule row/object."""
-    return match_rule(
-        rule["match_type"] if isinstance(rule, dict) else rule.match_type,
-        rule["match_value"] if isinstance(rule, dict) else rule.match_value,
-        item_tags,
-    )
-
-
 @dataclasses.dataclass
 class ConditionMatch:
     """One condition (identified by its category) that was evaluated and

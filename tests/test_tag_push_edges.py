@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import socket
-import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -20,7 +18,6 @@ from fastapi.testclient import TestClient
 from arrlink.arr.base import AdapterError
 from arrlink.arr.radarr import RadarrAdapter
 from arrlink.main import create_app
-from arrlink.state import State, _MIGRATIONS
 
 API_KEY = "m7-key"
 VERSION = "5.16.0.1"
@@ -248,145 +245,7 @@ def test_push_tag_success_clears_last_error(tag_app, client):
 
 
 # ---------------------------------------------------------------------------
-# 2. in-place v3 -> v4 migration on a pre-existing database
-# ---------------------------------------------------------------------------
-
-
-def _build_legacy_db(
-    path: Path,
-    version: int,
-    rules: list[tuple[int, str, str, str | None]],
-    allowed_roots: list[str] | None = None,
-) -> None:
-    """Create a database at a given schema version with seed data, as a real
-    deployment would have left it, WITHOUT running the newer migrations."""
-    conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
-    for v, step in _MIGRATIONS:
-        if v > version:
-            break
-        if callable(step):
-            step(conn)
-        else:
-            conn.executescript(step)
-        conn.execute("DELETE FROM schema_version")
-        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (v,))
-        conn.commit()
-
-    ts = time.time()
-    conn.execute(
-        "INSERT INTO apps (id, name, type, url, api_key, enabled, poll_interval_s, created_at) "
-        "VALUES (1, 'Legacy Radarr', 'radarr', 'http://radarr:7878', 'k', 1, 30, ?)",
-        (ts,),
-    )
-    conn.execute(
-        "INSERT INTO tags (app_id, label, count, imported_at) VALUES (1, 'kids', 2, ?)",
-        (ts,),
-    )
-    for rule_id, name, dir_template, filename_template in rules:
-        conn.execute(
-            "INSERT INTO rules (id, name, match_type, match_value, dir_template, "
-            "filename_template) VALUES (?, ?, 'exact', 'kids', ?, ?)",
-            (rule_id, name, dir_template, filename_template),
-        )
-    if allowed_roots is not None:
-        conn.execute(
-            "INSERT INTO settings (key, value_json) VALUES ('allowed_roots', ?)",
-            (json.dumps(allowed_roots),),
-        )
-    conn.commit()
-    conn.close()
-
-
-def test_upgrade_v3_to_v5_in_place(tmp_path):
-    db_path = tmp_path / "v3.db"
-    # a legacy DB whose rules live under the old default root /linked
-    _build_legacy_db(
-        db_path,
-        version=3,
-        rules=[
-            (1, "legacy rule", "/linked/kids", None),
-            (2, "legacy file template", "/linked/movies/{$tag}", "/linked/f/{$stem}"),
-        ],
-    )
-
-    # Opening with the current State must apply migrations 4, 5, 6, and 7, and keep data.
-    s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 18
-
-    # the new table exists and is usable
-    assert s.query_one("SELECT name FROM sqlite_master WHERE name='tag_repository'")
-    s.execute("INSERT INTO tag_repository (label) VALUES (?)", ("4k",))
-    s.commit()
-    assert s.query_one("SELECT label FROM tag_repository WHERE label='4k'")
-
-    # pre-existing seed data survived the upgrade intact
-    app = s.query_one("SELECT * FROM apps WHERE id=1")
-    assert app is not None and app["name"] == "Legacy Radarr"
-    assert s.query_one("SELECT label FROM tags WHERE app_id=1")["label"] == "kids"
-    assert s.query_one("SELECT name FROM rules WHERE id=1")["name"] == "legacy rule"
-
-    # migration 5: legacy /linked templates silently rewritten to /media
-    assert s.query_one("SELECT dir_template FROM rules WHERE id=1")["dir_template"] == \
-        "/media/kids"
-    assert s.query_one("SELECT dir_template FROM rules WHERE id=2")["dir_template"] == \
-        "/media/movies/{$tag}"
-    assert s.query_one("SELECT filename_template FROM rules WHERE id=2")[
-        "filename_template"] == "/media/f/{$stem}"
-
-    # reopening is a no-op at version 7
-    s2 = State(db_path)
-    assert s2.query_one("SELECT version FROM schema_version")["version"] == 18
-    assert s2.query_one("SELECT name FROM apps WHERE id=1")["name"] == "Legacy Radarr"
-
-
-def test_upgrade_rewrites_legacy_linked_rules_only(tmp_path):
-    """Only templates that START with /linked are rewritten; anything else
-    (already-/media, other roots) is untouched."""
-    db_path = tmp_path / "v4.db"
-    _build_legacy_db(
-        db_path,
-        version=4,
-        rules=[
-            (1, "legacy rule", "/linked/kids", None),
-            (2, "already migrated", "/media/movies/{$tag}", None),
-            (3, "other root", "/videos/tv", None),
-            (4, "linked mid-path", "/media/linked/old", None),  # /linked not at start
-        ],
-    )
-    s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 18
-    by_id = {r["id"]: r["dir_template"] for r in s.query("SELECT id, dir_template FROM rules")}
-    assert by_id[1] == "/media/kids"          # rewritten
-    assert by_id[2] == "/media/movies/{$tag}"  # untouched
-    assert by_id[3] == "/videos/tv"           # untouched
-    assert by_id[4] == "/media/linked/old"    # /linked mid-path untouched
-
-
-def test_upgrade_skips_rewrite_when_allowed_roots_customized(tmp_path):
-    """If the user opted into their own root layout, their rules intentionally
-    live there -- migration 5 must not touch them."""
-    db_path = tmp_path / "v4-custom.db"
-    _build_legacy_db(
-        db_path,
-        version=4,
-        rules=[
-            (1, "legacy rule", "/linked/kids", None),
-            (2, "other root", "/videos/tv", None),
-        ],
-        allowed_roots=["/videos"],
-    )
-    s = State(db_path)
-    assert s.query_one("SELECT version FROM schema_version")["version"] == 18
-    by_id = {r["id"]: r["dir_template"] for r in s.query("SELECT id, dir_template FROM rules")}
-    assert by_id[1] == "/linked/kids"   # left alone: user manages their roots
-    assert by_id[2] == "/videos/tv"
-
-
-# ---------------------------------------------------------------------------
-# 3. the default jail root is /media (not the old /linked)
+# 2. the default jail root is /media (not the old /linked)
 # ---------------------------------------------------------------------------
 
 
@@ -424,7 +283,7 @@ def test_apply_preset_arbitrary_outside_root_jailed(client):
 
 
 # ---------------------------------------------------------------------------
-# 4. update_app on a missing id -> 404 (no AttributeError on row["api_key"])
+# 3. update_app on a missing id -> 404 (no AttributeError on row["api_key"])
 # ---------------------------------------------------------------------------
 
 
@@ -437,7 +296,7 @@ def test_update_missing_app_404(client):
 
 
 # ---------------------------------------------------------------------------
-# 5. create_tag adapter edges
+# 4. create_tag adapter edges
 # ---------------------------------------------------------------------------
 
 
@@ -508,7 +367,7 @@ def test_create_tag_500_reports_http_status(create_tag_fail_app):
 
 
 # ---------------------------------------------------------------------------
-# 6. push_tags: duplicate app_ids are not pushed twice
+# 5. push_tags: duplicate app_ids are not pushed twice
 # ---------------------------------------------------------------------------
 
 
@@ -563,7 +422,7 @@ def test_push_tag_duplicate_app_ids_pushed_once(tag_app, client):
 
 
 # ---------------------------------------------------------------------------
-# 6b. push re-import is a full replace (per-app vocabulary)
+# 5b. push re-import is a full replace (per-app vocabulary)
 # ---------------------------------------------------------------------------
 
 
@@ -605,7 +464,7 @@ def test_manual_import_full_replaces_stale_tags(tag_app, client):
 
 
 # ---------------------------------------------------------------------------
-# 6c. type swap (radarr <-> sonarr) on update
+# 5c. type swap (radarr <-> sonarr) on update
 # ---------------------------------------------------------------------------
 
 
@@ -709,7 +568,7 @@ def test_update_app_same_type_still_works(client, files_app):
 
 
 # ---------------------------------------------------------------------------
-# 7. preset base_folder with a trailing slash
+# 6. preset base_folder with a trailing slash
 # ---------------------------------------------------------------------------
 
 
@@ -733,7 +592,7 @@ def test_list_presets_base_folder_trailing_slash(client, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 8. auth settings: runtime mode switch, masked secrets, lockout validation
+# 7. auth settings: runtime mode switch, masked secrets, lockout validation
 # ---------------------------------------------------------------------------
 
 

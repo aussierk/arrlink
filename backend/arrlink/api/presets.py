@@ -82,10 +82,10 @@ def apply_preset(
         ]
     )
     cur = db.execute(
-        "INSERT INTO rules (name, app_scope, match_type, match_value, conditions_json, "
+        "INSERT INTO rules (name, app_scope, conditions_json, "
         "dir_template, filename_template, enabled, unlink_on_mismatch, priority) "
-        "VALUES (?,?,?,?,?,?, NULL, 1, 1, 100)",
-        (name, body.app_scope, match_type, match_value, conditions_json, rendered["dir_template"]),
+        "VALUES (?,?,?,?, NULL, 1, 1, 100)",
+        (name, body.app_scope, conditions_json, rendered["dir_template"]),
     )
     db.commit()
     db.log_event(
@@ -106,6 +106,4 @@ def _rule_out(row) -> dict:
     d["enabled"] = bool(d["enabled"])
     d["unlink_on_mismatch"] = bool(d["unlink_on_mismatch"])
     d["conditions"] = json.loads(d.pop("conditions_json"))
-    d.pop("match_type", None)
-    d.pop("match_value", None)
     return d
