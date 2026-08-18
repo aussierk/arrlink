@@ -18,7 +18,6 @@ export default function Logs() {
     }
   }, [level])
 
-  // Live SSE feed
   useEffect(() => {
     if (!live) return
     const es = new EventSource('/api/logs/stream')

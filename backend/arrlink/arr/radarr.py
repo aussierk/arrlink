@@ -1,4 +1,5 @@
 """Radarr adapter (v3 API)."""
+
 from __future__ import annotations
 
 import os
@@ -63,8 +64,7 @@ class RadarrAdapter(BaseAdapter):
         if r.status_code == 401 or r.status_code == 403:
             raise AdapterError("bad API key (401)", status=401)
         if r.status_code not in (200, 201):
-            raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'",
-                              status=r.status_code)
+            raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'", status=r.status_code)
 
     async def fetch_items(self, known_fingerprints=None) -> list[Item]:
         # Radarr's item list is a single /movie call, so there's nothing to
@@ -112,9 +112,7 @@ class RadarrAdapter(BaseAdapter):
             qp_name = profile_by_id.get(qp_id) if qp_id is not None else None
             lang_obj = row.get("originalLanguage")
             original_language = (
-                (lang_obj.get("name") or "").strip() or None
-                if isinstance(lang_obj, dict)
-                else None
+                (lang_obj.get("name") or "").strip() or None if isinstance(lang_obj, dict) else None
             )
             size = movie_file.get("size")
             try:

@@ -1,4 +1,5 @@
 """Rules CRUD: storage, validation, matching, templates, and preview."""
+
 from __future__ import annotations
 
 import asyncio
@@ -30,19 +31,15 @@ class ConditionIn(BaseModel):
         "user", "genre", "language", "quality", "certification", "collection", "custom"
     ]
     match_type: Literal["exact", "list", "regex", "vocabulary"]
-    # min_length relaxed to 0: "vocabulary" intentionally carries an empty
-    # match_value (it means "match the whole current vocabulary set for
-    # this category" — see core/vocabulary.expand_vocabulary_conditions).
+    # min_length relaxed to 0: "vocabulary" intentionally carries an empty match_value
     match_value: str = Field(min_length=0, max_length=2000)
     join: Literal["AND", "OR"] | None = None
-    # None/absent == "tag" (today's only behavior) — absorbs every already-
-    # migrated condition (no "source" key in its stored JSON) with zero
-    # data change. "native" matches the item's real Radarr/Sonarr metadata
+    # None/absent == "tag" . "native" matches the item's real Radarr/Sonarr metadata
     # instead of its arbitrary tags; only offered for the 5 rich categories.
     source: Literal["tag", "native"] | None = None
 
     @model_validator(mode="after")
-    def _validate(self) -> "ConditionIn":
+    def _validate(self) -> ConditionIn:
         if self.source == "native" and self.category not in RICH_CATEGORIES:
             raise ValueError(
                 f"condition '{self.category}': native-metadata matching is only "
@@ -56,8 +53,7 @@ class ConditionIn(BaseModel):
         elif self.match_type == "list":
             if not [x for x in (s.strip() for s in self.match_value.split(",")) if x]:
                 raise ValueError(
-                    f"condition '{self.category}': list requires at least one "
-                    "comma-separated tag"
+                    f"condition '{self.category}': list requires at least one comma-separated tag"
                 )
         elif self.match_type == "exact":
             if not self.match_value.strip():
@@ -79,7 +75,7 @@ class RuleIn(BaseModel):
     priority: int = Field(default=100, ge=1, le=1000)
 
     @model_validator(mode="after")
-    def _validate(self) -> "RuleIn":
+    def _validate(self) -> RuleIn:
         if self.app_scope is not None and self.app_type_scope is not None:
             raise ValueError(
                 "app_scope and app_type_scope are mutually exclusive — pick a "
@@ -100,10 +96,7 @@ class RuleIn(BaseModel):
         if "\\" in self.dir_template:
             raise ValueError("dir_template must not contain backslashes")
         if not self.dir_template.startswith("/"):
-            raise ValueError(
-                "dir_template must be an absolute path "
-                "(e.g. /media/movies/{$user})"
-            )
+            raise ValueError("dir_template must be an absolute path (e.g. /media/movies/{$user})")
         if self.filename_template is not None and "\\" in self.filename_template:
             raise ValueError("filename_template must not contain backslashes")
         return self
@@ -129,7 +122,9 @@ def _resolve_app_type(app_scope: int | None, app_type_scope: str | None, db: Sta
     return None
 
 
-def _representative_app_id(app_scope: int | None, app_type_scope: str | None, db: State) -> int | None:
+def _representative_app_id(
+    app_scope: int | None, app_type_scope: str | None, db: State
+) -> int | None:
     """One concrete app id to check instance-scoped vocabulary against, when
     the rule isn't pinned to a specific app (app_type_scope) — picks any
     enabled app of that type, same "representative" idea RuleModal already
@@ -145,14 +140,12 @@ def _representative_app_id(app_scope: int | None, app_type_scope: str | None, db
     return None
 
 
-def _vocabulary_warnings(body: "RuleIn", db: State) -> list[str]:
+def _vocabulary_warnings(body: RuleIn, db: State) -> list[str]:
     app_type = _resolve_app_type(body.app_scope, body.app_type_scope, db)
     app_id = _representative_app_id(body.app_scope, body.app_type_scope, db)
     warnings: list[str] = []
     for c in body.conditions:
-        warnings.extend(
-            validate_condition_values(c.model_dump(), db, app_type, app_id)
-        )
+        warnings.extend(validate_condition_values(c.model_dump(), db, app_type, app_id))
     return warnings
 
 
@@ -179,9 +172,7 @@ def list_rules(_user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
 
 
 @router.get("/{rule_id}")
-def get_rule(
-    rule_id: int, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def get_rule(rule_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     row = db.query_one("SELECT * FROM rules WHERE id=?", (rule_id,))
     if not row:
         raise HTTPException(404, "rule not found")
@@ -189,9 +180,7 @@ def get_rule(
 
 
 @router.post("", status_code=201)
-def create_rule(
-    body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def create_rule(body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     if body.app_scope is not None and not db.query_one(
         "SELECT id FROM apps WHERE id=?", (body.app_scope,)
     ):
@@ -262,9 +251,7 @@ def update_rule(
 
 
 @router.delete("/{rule_id}", status_code=204)
-def delete_rule(
-    rule_id: int, _user: CurrentUser, db: State = Depends(get_db)
-) -> None:
+def delete_rule(rule_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> None:
     cur = db.execute("DELETE FROM rules WHERE id=?", (rule_id,))
     db.commit()
     if cur.rowcount == 0:
@@ -273,9 +260,7 @@ def delete_rule(
 
 
 @router.post("/vocabulary-check")
-def vocabulary_check(
-    body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def vocabulary_check(body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     """Dry-run vocabulary-membership validation with no persistence, so the
     rule editor can show warnings live while the user is still typing —
     mirrors how /preview already dry-runs plan_links without saving."""
@@ -330,9 +315,7 @@ def preview(
     }
     roots = db.get_setting("allowed_roots") or list(DEFAULT_ROOTS)
     rules = expand_vocabulary_conditions([rule], db, app_id, row["type"])
-    planned, errors = plan_links(
-        rules, items, row["name"], app_id, roots, app_type=row["type"]
-    )
+    planned, errors = plan_links(rules, items, row["name"], app_id, roots, app_type=row["type"])
 
     return {
         "app_id": app_id,

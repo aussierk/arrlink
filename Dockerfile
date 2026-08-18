@@ -26,18 +26,12 @@ COPY backend/arrlink ./arrlink
 COPY --from=web /build/dist ./web/dist
 COPY entrypoint.sh /entrypoint.sh
 
-# NOTE: no USER directive on purpose. The image starts as root so the
-# entrypoint can chown the bind-mounted volumes, then drop to PUID:PGID via
-# gosu (the standard homelab pattern). gosu needs to run as root to switch.
 RUN chmod +x /entrypoint.sh \
     && useradd --uid 1000 --create-home appuser \
     && mkdir -p /config /linked
 
 EXPOSE 8270
 
-# Reads $PORT at check time (not baked in at build time) so a custom
-# PORT set via .env/compose.yaml's environment: doesn't leave the
-# container permanently reporting unhealthy despite working correctly.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import os,sys,urllib.request; p=os.environ.get('PORT','8270'); r=urllib.request.urlopen(f'http://127.0.0.1:{p}/api/health',timeout=3); sys.exit(0 if r.status==200 else 1)"
 

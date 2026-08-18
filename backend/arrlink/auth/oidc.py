@@ -1,4 +1,5 @@
 """Minimal generic OIDC client: discovery, PKCE code exchange, refresh, userinfo."""
+
 from __future__ import annotations
 
 import base64
@@ -94,9 +95,7 @@ class OidcClient:
         except Exception as e:  # noqa: BLE001
             raise OidcError(502, "token endpoint returned non-JSON") from e
 
-    def exchange_code(
-        self, code: str, code_verifier: str, redirect_uri: str
-    ) -> dict[str, Any]:
+    def exchange_code(self, code: str, code_verifier: str, redirect_uri: str) -> dict[str, Any]:
         return self.token_request(
             grant_type="authorization_code",
             code=code,

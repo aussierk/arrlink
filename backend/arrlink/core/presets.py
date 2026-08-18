@@ -1,4 +1,5 @@
 """Rule presets: one-click, editable rules for common tagging conventions."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -17,8 +18,6 @@ class Preset:
     key: str
     name: str
     description: str
-    # which condition category this preset fills (see core/matching.py's
-    # category-keyed captures — each preset maps onto exactly one category)
     category: str
     # app_type -> (match_type, match_value)
     matchers: dict

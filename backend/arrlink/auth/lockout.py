@@ -1,4 +1,5 @@
 """Password-login lockout: a flat lockout after too many failed attempts."""
+
 from __future__ import annotations
 
 import time
@@ -6,11 +7,8 @@ from typing import NamedTuple
 
 from ..state import State
 
-# Flat lockout, not exponential backoff -- a single-account model doesn't
-# benefit from that complexity. 5 failures within a 15-minute window locks
-# the account for 15 minutes. Hardcoded, not Settings-editable: anyone who
-# can already reach PUT /api/settings shouldn't be able to raise or disable
-# the very control meant to slow down a credential-guessing client hitting
+# Flat lockout, not exponential backoff - 5 failures within a 15-minute window locks
+# the account for 15 minutes. Hardcoded, not Settings-editable.
 # POST /api/auth/password.
 THRESHOLD = 5
 WINDOW_S = 15 * 60.0
@@ -24,9 +22,7 @@ class LockoutStatus(NamedTuple):
 
 
 def _row(db: State, username: str) -> dict | None:
-    row = db.query_one(
-        "SELECT * FROM login_attempts WHERE username=?", (username,)
-    )
+    row = db.query_one("SELECT * FROM login_attempts WHERE username=?", (username,))
     return dict(row) if row else None
 
 
@@ -79,7 +75,7 @@ def record_failure(db: State, username: str) -> LockoutStatus:
     if locked_until is not None:
         # was_locked is already known False here, so any locked_until we
         # just set is a fresh transition -- log once, not on every
-        # subsequent attempt during the lockout 
+        # subsequent attempt during the lockout
         db.log_event(
             "warn",
             f"password login locked for {LOCKOUT_S / 60:.0f} min after "

@@ -1,4 +1,3 @@
-"""UI-password hashing (M10: dual password + OIDC login)."""
 from __future__ import annotations
 
 from argon2 import PasswordHasher

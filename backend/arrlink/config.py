@@ -1,4 +1,5 @@
 """Application settings (env-driven) and logging setup."""
+
 from __future__ import annotations
 
 import logging
@@ -43,9 +44,6 @@ def effective_auth(db, env) -> dict:
         "oidc_enabled": oidc_enabled,
         "auto_login": auto_login,
         "ui_username": get("auth_username") or env.ui_username or "admin",
-        # Always an Argon2id hash (or "") — never plaintext. A Setting-stored
-        # password is hashed at write time (api/settings.py); an env-seeded
-        # UI_PASSWORD is hashed once here (env.ui_password_hash is cached).
         "ui_password": get("auth_password") or env.ui_password_hash or "",
         "oidc_issuer": get("oidc_issuer") or env.oidc_issuer or "",
         "oidc_client_id": get("oidc_client_id") or env.oidc_client_id or "",
@@ -56,18 +54,11 @@ def effective_auth(db, env) -> dict:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     port: int = 8270
-    # Defaults to ./config for local dev; the container entrypoint sets
-    # CONFIG_DIR=/config.
     config_dir: Path = Path("config")
     log_level: str = "info"
-    # Default for the cross-filesystem fallback (skip | copy | symlink). A
-    # runtime value can be set via the `fs_fallback` Setting (Settings page);
-    # it takes precedence over this env value and is normalized on use.
     fs_fallback: str = "skip"
 
     # Auth: password and OIDC login are independent — either, both, or
@@ -83,19 +74,13 @@ class Settings(BaseSettings):
     oidc_redirect_uri: str | None = None  # default: <origin>/api/auth/oidc/callback
     session_ttl_h: int = 12
     # Comma-separated hostnames this app is allowed to think it's being
-    # reached as (e.g. "arrlink.example.com,192.168.1.50"). Unset (default)
-    # = no restriction, same as before this existed. When OIDC is enabled
-    # and oidc_redirect_uri isn't pinned, the redirect_uri sent to the
-    # provider is derived from the request's own Host header -- setting
+    # reached as (e.g. "arrlink.example.com,192.168.1.50"). When OIDC is
+    # enabled and oidc_redirect_uri isn't pinned, the redirect_uri sent to
+    # the provider is derived from the request's own Host header -- setting
     # this closes that off from a spoofed Host on a directly-exposed
     # deployment (see main.py, which adds TrustedHostMiddleware only when
     # this is set).
     trusted_hosts: str | None = None
-    # Deployment-time knobs, not a runtime Setting: someone already doing
-    # volume-level snapshots of config_dir should be able to opt out at
-    # deploy time, but there's no legitimate reason for an authenticated
-    # caller to disable their own backups at runtime the way e.g.
-    # fs_fallback is meant to be tunable.
     backup_enabled: bool = True
     backup_retention_days: int = 7
 

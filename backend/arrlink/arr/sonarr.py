@@ -1,4 +1,5 @@
 """Sonarr adapter (v3 API)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -78,8 +79,7 @@ class SonarrAdapter(BaseAdapter):
         if r.status_code == 401 or r.status_code == 403:
             raise AdapterError("bad API key (401)", status=401)
         if r.status_code not in (200, 201):
-            raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'",
-                              status=r.status_code)
+            raise AdapterError(f"HTTP {r.status_code} creating tag '{label}'", status=r.status_code)
 
     async def fetch_items(self, known_fingerprints=None) -> list[Item]:
         known = known_fingerprints or {}
@@ -119,9 +119,7 @@ class SonarrAdapter(BaseAdapter):
             qp_name = profile_by_id.get(qp_id) if qp_id is not None else None
             lang_obj = s.get("originalLanguage")
             original_language = (
-                (lang_obj.get("name") or "").strip() or None
-                if isinstance(lang_obj, dict)
-                else None
+                (lang_obj.get("name") or "").strip() or None if isinstance(lang_obj, dict) else None
             )
             meta[int(sid)] = {
                 "title": str(s.get("title") or ""),
@@ -145,9 +143,9 @@ class SonarrAdapter(BaseAdapter):
         # changed (or that we have no fingerprint for). Unchanged series are
         # returned with files_stale=True and the poller reuses stored rows.
         to_fetch = [
-            sid for sid, m in meta.items()
-            if m["stats_fingerprint"] is None
-            or known.get(sid) != m["stats_fingerprint"]
+            sid
+            for sid, m in meta.items()
+            if m["stats_fingerprint"] is None or known.get(sid) != m["stats_fingerprint"]
         ]
 
         # Fetch each changed series' episode files in parallel (bounded). Any
@@ -165,11 +163,9 @@ class SonarrAdapter(BaseAdapter):
                     for f in data
                     if isinstance(f, dict) and f.get("path")
                 ]
-                # os.stat per file, off the event loop 
+                # os.stat per file, off the event loop
                 mfiles = await asyncio.to_thread(
-                    lambda: [
-                        self._stat_file(p, series_path, sz) for p, sz in specs
-                    ]
+                    lambda: [self._stat_file(p, series_path, sz) for p, sz in specs]
                 )
                 return sid, mfiles
 

@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, fmtTime, type AppItem, type ConditionCategory, type TagItem } from '../lib/api'
+import {
+  api,
+  fmtTime,
+  type AppItem,
+  type ConditionCategory,
+  type TagItem,
+} from '../lib/api'
 
 const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
-  'genre', 'certification', 'collection', 'quality', 'language', 'user', 'custom',
+  'genre',
+  'certification',
+  'collection',
+  'quality',
+  'language',
+  'user',
+  'custom',
 ]
 
 /**
@@ -21,7 +33,6 @@ export default function Tags() {
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  // repository
   const [repo, setRepo] = useState<{ id: number; label: string }[]>([])
   const [newTag, setNewTag] = useState('')
   const [pushTargets, setPushTargets] = useState<Set<number>>(new Set())
@@ -301,9 +312,7 @@ export default function Tags() {
             )}
             {tags.map((tag) => (
               <tr key={tag.id} className="bg-zinc-950/40">
-                <td className="px-3 py-2 font-mono text-xs text-zinc-200">
-                  {tag.label}
-                </td>
+                <td className="px-3 py-2 font-mono text-xs text-zinc-200">{tag.label}</td>
                 <td className="px-3 py-2">
                   <select
                     className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200"

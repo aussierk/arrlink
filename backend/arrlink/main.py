@@ -1,4 +1,5 @@
 """ArrLink FastAPI app: JSON API + built SPA (Vite/React/TS)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -66,16 +67,14 @@ async def _auth_sweep(db: State, settings) -> None:
             continue
         try:
 
-            def _factory():
+            def _factory(auth=auth):
                 return OidcClient(
                     auth["oidc_issuer"],
                     auth["oidc_client_id"],
                     auth["oidc_client_secret"] or "",
                 )
 
-            stats = await asyncio.to_thread(
-                sess_mod.run_sweep, db, _factory, auth["session_ttl_h"]
-            )
+            stats = await asyncio.to_thread(sess_mod.run_sweep, db, _factory, auth["session_ttl_h"])
             if stats["failed"]:
                 db.log_event(
                     "warn",
@@ -95,8 +94,11 @@ async def _backup_loop(db: State, settings) -> None:
             age = backup_core.newest_backup_age_s(settings.backup_dir)
             if age is None or age > backup_core.STALE_S:
                 await asyncio.to_thread(
-                    backup_core.run_backup_cycle, db, settings.db_path,
-                    settings.backup_dir, settings.backup_retention_days,
+                    backup_core.run_backup_cycle,
+                    db,
+                    settings.db_path,
+                    settings.backup_dir,
+                    settings.backup_retention_days,
                 )
         except Exception as e:  # noqa: BLE001 - never crash the app
             log.warning("backup loop error: %s", e)
@@ -109,11 +111,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     setup_logging(settings.log_level)
     resolved_db_path = db_path or settings.db_path
     # Acquired before State() so the migration step itself is also
-    # protected from a concurrent racer, and so a conflict fails as
-    # early/loudly as possible. This can only log to stdout/stderr (no
-    # State/db.log_event exists yet) -- the correct channel anyway: an
-    # admin debugging "container won't start" reads `docker logs`, not the
-    # in-app Logs page (which needs a running instance to view).
+    # protected from a concurrent racer, and so a conflict fails as early/loudly as possible.
     try:
         lock_path = acquire_instance_lock(resolved_db_path.parent)
     except InstanceLockError:
@@ -123,15 +121,10 @@ def create_app(db_path: Path | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Always run the sweep: the auth mode can be switched to oidc at
-        # runtime, and it self-dormants when oidc is not active.
         task = asyncio.create_task(_auth_sweep(db, settings))
         task_backup = asyncio.create_task(_backup_loop(db, settings))
         poller = Poller(db, settings)
         app.state.poller = poller
-        # Legacy-root audit: enabled rules whose dir template escapes the
-        # allowed roots (e.g. /linked/... after a root-default change) would
-        # otherwise fail silently per-item. Warn loudly at startup.
         bad_rules = audit_rule_roots(db)
         if bad_rules:
             db.log_event(
@@ -155,18 +148,8 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.state.db = db
 
     # Opt-in Host-header allow-list (TRUSTED_HOSTS env) -- unset by default,
-    # matching every deployment's behavior before this existed. When OIDC is
-    # enabled without an explicitly pinned oidc_redirect_uri, that URL is
-    # derived from the request's own Host header (see api/auth.py); setting
-    # this closes off a spoofed Host on a directly-exposed deployment.
     if settings.trusted_hosts:
         hosts = [h.strip() for h in settings.trusted_hosts.split(",") if h.strip()]
-        # Always keep the container's own loopback trusted regardless of
-        # what's configured -- the Dockerfile HEALTHCHECK always probes
-        # 127.0.0.1, so a TRUSTED_HOSTS value that (reasonably) only lists
-        # the app's real external hostname would otherwise 400 the
-        # container's own healthcheck and leave it permanently "unhealthy"
-        # despite serving real traffic correctly.
         for loopback in ("127.0.0.1", "localhost", "::1"):
             if loopback not in hosts:
                 hosts.append(loopback)

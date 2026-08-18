@@ -1,4 +1,7 @@
-"""Auth endpoints: OIDC auto-login (PKCE, confidential client), password mode, session cookie management."""
+"""Auth endpoints: OIDC auto-login (PKCE, confidential client), password mode,
+session cookie management.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,19 +11,16 @@ import time
 from typing import Annotated, Any
 from urllib.parse import quote, urlsplit
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-import httpx
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
-
-from ..deps import get_db
-from ..state import State
+from ..auth import lockout, sessions as sess
 from ..auth.oidc import OidcClient, OidcError, b64url_encode, decode_jwt_payload
-from ..auth import lockout
-from ..auth import sessions as sess
 from ..auth.passwords import verify_password
 from ..config import Settings, effective_auth
+from ..deps import get_db
+from ..state import State
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -74,11 +74,7 @@ def _client(auth: dict) -> OidcClient:
 def _redirect_uri(request: Request, db: State, auth: dict) -> str:
     if auth["oidc_redirect_uri"]:
         return auth["oidc_redirect_uri"]
-    # Not pinned: derived from the request's Host header, which is only as
-    # trustworthy as whatever sits in front of this app (nothing, by
-    # default — see compose.yaml, which publishes the port directly). A
-    # spoofed Host would poison the redirect_uri sent to the provider, so
-    # this is logged every time it happens rather than silently trusted.
+    # Not pinned: derived from the request's Host header
     db.log_event(
         "warn",
         "OIDC redirect_uri not configured — derived from the request Host "
@@ -213,9 +209,7 @@ CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
 
 
 @router.get("/me")
-def me(
-    request: Request, db: Annotated[State, Depends(get_db)]
-) -> dict[str, Any]:
+def me(request: Request, db: Annotated[State, Depends(get_db)]) -> dict[str, Any]:
     """Never 401s — the SPA uses this to decide whether to redirect to login."""
     settings: Settings = request.app.state.settings
     auth = effective_auth(db, settings)
@@ -275,7 +269,12 @@ def login_password(
         raise HTTPException(401, "wrong username or password")
     lockout.reset(db, lockout_key)
     token, _created, _expires = sess.create_session(
-        db, expected_username, expected_username, [], None, auth["session_ttl_h"],
+        db,
+        expected_username,
+        expected_username,
+        [],
+        None,
+        auth["session_ttl_h"],
         kind="password",
     )
     response = RedirectResponse("/", status_code=302)
@@ -343,16 +342,16 @@ def login(
         "response_type": "code",
         "client_id": client.client_id,
         "redirect_uri": _redirect_uri(request, db, auth),
-        # offline_access: ask the provider for a refresh token so silent
-        # session refresh works with real providers.
         "scope": "openid profile email offline_access",
         "state": state,
         "nonce": nonce,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
     }
-    url = d["authorization_endpoint"] + "?" + "&".join(
-        f"{k}={quote(str(v), safe='')}" for k, v in params.items()
+    url = (
+        d["authorization_endpoint"]
+        + "?"
+        + "&".join(f"{k}={quote(str(v), safe='')}" for k, v in params.items())
     )
     return RedirectResponse(url, status_code=302)
 
@@ -379,31 +378,20 @@ def oidc_callback(
         db.log_event("warn", f"OIDC callback error: {error or 'missing code/state'}")
         response = RedirectResponse("/", status_code=302)
         response.set_cookie(
-            "arrlink_auth_error", _sanitize_error_code(error or "missing_code"),
+            "arrlink_auth_error",
+            _sanitize_error_code(error or "missing_code"),
             max_age=60,
         )
         return response
 
-    # Claim-and-consume atomically (DELETE ... RETURNING, not a separate
-    # SELECT then DELETE) so two concurrent callbacks for the same state
-    # (a double-fired redirect, or a replayed callback URL) can't both see
-    # the row as still present and both proceed with the same code -- not
-    # exploitable against a spec-compliant IdP (authorization codes are
-    # single-use there, RFC 6749 SS4.1.2), but there's no reason for our own
-    # anti-replay check to have a race window a non-compliant IdP could
-    # slip through.
-    row = db.query_one(
-        "DELETE FROM oidc_logins WHERE state=? RETURNING *", (state,)
-    )
+    row = db.query_one("DELETE FROM oidc_logins WHERE state=? RETURNING *", (state,))
     db.commit()
     if row is None or row["created_at"] < time.time() - OIDC_LOGIN_TTL_S:
         raise HTTPException(400, "unknown or expired login state")
 
     client = _client(auth)
     try:
-        tok = client.exchange_code(
-            code, row["verifier"], _redirect_uri(request, db, auth)
-        )
+        tok = client.exchange_code(code, row["verifier"], _redirect_uri(request, db, auth))
     except OidcError as e:
         db.log_event("warn", f"OIDC code exchange failed: {e.detail}")
         raise HTTPException(502, f"OIDC exchange failed: {e.detail}") from e
@@ -452,28 +440,23 @@ def oidc_callback(
 
     refresh_token = tok.get("refresh_token")
     token, _created, expires = sess.create_session(
-        db, email, info.get("name"), list(groups), refresh_token, auth["session_ttl_h"],
+        db,
+        email,
+        info.get("name"),
+        list(groups),
+        refresh_token,
+        auth["session_ttl_h"],
         kind="oidc",
     )
     db.log_event("info", f"OIDC login: {email}")
-
-    # Sanitized again here (not just at storage time in login()) as
-    # defense in depth -- this is the value that actually goes into the
-    # redirect a browser follows.
     next_path = _sanitize_next(row["next_path"])
     response = RedirectResponse(next_path, status_code=302)
-    _set_auth_cookies(
-        response, request, token, refresh_token, int(expires - time.time())
-    )
+    _set_auth_cookies(response, request, token, refresh_token, int(expires - time.time()))
     return response
 
 
 @router.post("/logout")
-def logout(
-    request: Request, db: Annotated[State, Depends(get_db)]
-) -> RedirectResponse:
-    # Both an OIDC session and a password session may be active at once
-    # (they're independent), so revoke whichever cookies are present.
+def logout(request: Request, db: Annotated[State, Depends(get_db)]) -> RedirectResponse:
     for cookie_name in (SESSION_COOKIE, PASSWORD_COOKIE):
         token = request.cookies.get(cookie_name, "")
         if token:

@@ -2,6 +2,7 @@
 
 Thread-local connections (FastAPI runs sync endpoints in a threadpool).
 """
+
 from __future__ import annotations
 
 import json
@@ -9,9 +10,10 @@ import logging
 import sqlite3
 import threading
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -60,9 +62,7 @@ def _migration_4(conn: sqlite3.Connection) -> None:
 
 def _migration_5(conn: sqlite3.Connection) -> None:
     """M7-prep: silent fix for the /linked -> /media default-root change."""
-    row = conn.execute(
-        "SELECT value_json FROM settings WHERE key='allowed_roots'"
-    ).fetchone()
+    row = conn.execute("SELECT value_json FROM settings WHERE key='allowed_roots'").fetchone()
     if row is not None:
         return  # user-managed roots: never touch their rules
     from .core.template import DEFAULT_ROOTS
@@ -92,23 +92,17 @@ def _migration_3(conn: sqlite3.Connection) -> None:
     """M4: track file inodes/strikes for the poller's diff + link grace."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(app_files)")}
     if "missing_strikes" not in cols:
-        conn.execute(
-            "ALTER TABLE app_files ADD COLUMN missing_strikes INTEGER NOT NULL DEFAULT 0"
-        )
+        conn.execute("ALTER TABLE app_files ADD COLUMN missing_strikes INTEGER NOT NULL DEFAULT 0")
     lcols = {r["name"] for r in conn.execute("PRAGMA table_info(links)")}
     if "missing_strikes" not in lcols:
-        conn.execute(
-            "ALTER TABLE links ADD COLUMN missing_strikes INTEGER NOT NULL DEFAULT 0"
-        )
+        conn.execute("ALTER TABLE links ADD COLUMN missing_strikes INTEGER NOT NULL DEFAULT 0")
 
 
 def _migration_6(conn: sqlite3.Connection) -> None:
     """M8: multi-condition AND/OR rule chains."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(rules)")}
     if "conditions_json" not in cols:
-        conn.execute(
-            "ALTER TABLE rules ADD COLUMN conditions_json TEXT NOT NULL DEFAULT '[]'"
-        )
+        conn.execute("ALTER TABLE rules ADD COLUMN conditions_json TEXT NOT NULL DEFAULT '[]'")
 
 
 def _migration_7(conn: sqlite3.Connection) -> None:
@@ -122,9 +116,7 @@ def _migration_10(conn: sqlite3.Connection) -> None:
     """M10: sessions.kind ('oidc' | 'password') — dual-mode auth means both a password session and an OIDC session can be alive at once."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}
     if "kind" not in cols:
-        conn.execute(
-            "ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'oidc'"
-        )
+        conn.execute("ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'oidc'")
 
 
 def _migration_11(conn: sqlite3.Connection) -> None:
@@ -150,9 +142,7 @@ def _migration_11(conn: sqlite3.Connection) -> None:
     # A plain UNIQUE(category, app_type, app_id, value) would not dedupe two
     # shared-scope (app_id IS NULL) rows, since SQLite treats NULL as
     # distinct from itself in unique indexes — COALESCE to a sentinel fixes
-    # this. Expression indexes aren't supported by executescript on all
-    # SQLite builds uniformly with IF NOT EXISTS + CREATE TABLE in one go,
-    # so create it as a separate statement.
+    # this.
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_vocabulary_unique ON "
         "vocabulary(category, app_type, COALESCE(app_id, -1), value)"
@@ -226,7 +216,7 @@ def _migration_13(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE app_items ADD COLUMN {name} {ddl}")
 
 
-_MIGRATIONS: list[tuple[int, "str | Callable[[sqlite3.Connection], None]"]] = [
+_MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
     (
         1,
         """
@@ -390,9 +380,7 @@ class State:
         return conn
 
     def _migrate(self, conn: sqlite3.Connection) -> None:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
-        )
+        conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         current = row["version"] if row else 0
         for version, step in _MIGRATIONS:
@@ -402,9 +390,7 @@ class State:
                 else:
                     conn.executescript(step)
                 conn.execute("DELETE FROM schema_version")
-                conn.execute(
-                    "INSERT INTO schema_version (version) VALUES (?)", (version,)
-                )
+                conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
                 conn.commit()
                 log.info("applied schema migration %d", version)
 
@@ -464,8 +450,7 @@ class State:
         self.execute("DELETE FROM tags WHERE app_id=?", (app_id,))
         for tag in tags:
             self.execute(
-                "INSERT INTO tags (app_id, label, count, imported_at) VALUES "
-                "(?,?,?,?)",
+                "INSERT INTO tags (app_id, label, count, imported_at) VALUES (?,?,?,?)",
                 (app_id, tag.label, tag.count, ts),
             )
         self.commit()
@@ -489,8 +474,7 @@ class State:
         """
         ts = now()
         self.execute(
-            "DELETE FROM vocabulary WHERE category=? AND app_type=? AND "
-            "app_id IS ?",
+            "DELETE FROM vocabulary WHERE category=? AND app_type=? AND app_id IS ?",
             (category, app_type, app_id),
         )
         for value, external_id in entries:
@@ -520,8 +504,8 @@ class State:
         self.execute("DELETE FROM settings WHERE key=?", (key,))
         self.conn.commit()
 
-    # Sensitive Settings must never be returned by GET /api/settings (which
-    # dumps every key). They are read directly where needed and exposed only
+    # Sensitive Settings must never be returned by GET /api/settings.
+    # They are read directly where needed and exposed only
     # through the masked GET /api/settings/auth endpoint.
     SENSITIVE_SETTING_KEYS = frozenset(
         {

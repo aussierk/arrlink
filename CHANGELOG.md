@@ -27,6 +27,13 @@ release forward — not retroactive.
   at 500 rows.
 - `events_retention` setting (default 5000) — the event log is now capped
   by a background prune instead of growing without bound.
+- Prettier for the frontend (`npm run format` / `format:check`), configured
+  to match the codebase's existing style (no semicolons, single quotes).
+  ESLint setup is deferred — `typescript-eslint` doesn't support TS 7 yet
+  ([tracking issue](https://github.com/typescript-eslint/typescript-eslint/issues/10940)).
+- Ruff for the backend (lint + format, `line-length = 100`), configured
+  with `extend-immutable-calls` so FastAPI's `Depends(...)`-as-default
+  pattern doesn't trip the bugbear B008 false positive.
 
 ### Changed
 - **Poller rewritten to scale with changes, not library size.** A no-change

@@ -1,15 +1,16 @@
 """OIDC sessions: creation, lookup, revocation, and *silent refresh*."""
+
 from __future__ import annotations
 
 import json
 import secrets
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ..state import State
 
 REFRESH_TOKEN_COOKIE = "arrlink_rt"
-# Refresh a little before local expiry so we never sit on an expired token.
 REFRESH_LEEWAY_S = 60.0
 SWEEP_INTERVAL_S = 30.0
 
@@ -86,8 +87,7 @@ def refresh_due(db: State) -> list[dict[str, Any]]:
     return [
         dict(r)
         for r in db.query(
-            "SELECT * FROM sessions WHERE refresh_token IS NOT NULL "
-            "AND expires_at <= ?",
+            "SELECT * FROM sessions WHERE refresh_token IS NOT NULL AND expires_at <= ?",
             (cutoff,),
         )
     ]
@@ -104,9 +104,7 @@ def run_sweep(db: State, client_factory: Callable[[], Any], ttl_h: float) -> dic
         try:
             if client is None:
                 client = client_factory()
-            expires = _silent_refresh(
-                db, s["token"], s["refresh_token"], client, ttl_h
-            )
+            expires = _silent_refresh(db, s["token"], s["refresh_token"], client, ttl_h)
             if expires is None:
                 stats["failed"] += 1
                 db.log_event(
@@ -119,9 +117,7 @@ def run_sweep(db: State, client_factory: Callable[[], Any], ttl_h: float) -> dic
         except Exception as e:  # noqa: BLE001 - keep sweeping other sessions
             db.log_event("error", f"session refresh error: {e}")
     # Expired sessions without a refresh token (or after failed refresh): purge.
-    cur = db.execute(
-        "DELETE FROM sessions WHERE expires_at < ?", (time.time() - 1,)
-    )
+    cur = db.execute("DELETE FROM sessions WHERE expires_at < ?", (time.time() - 1,))
     stats["purged"] = cur.rowcount
     db.commit()
     return stats

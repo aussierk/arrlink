@@ -1,4 +1,5 @@
 """Vocabulary: known values per rule-condition category."""
+
 from __future__ import annotations
 
 import copy
@@ -10,25 +11,10 @@ from ..state import State
 
 TMDB_BASE = "https://api.themoviedb.org/3"
 
-# TMDB genre/certification lists never need auth beyond an API key, and the
-# US certification scheme is used for both radarr/sonarr suggestion lists
-# today (matches the pre-existing hardcoded G/PG/PG-13/R/NC-17 and
-# TV-Y.../TV-MA lists) — not configurable per-country yet, v1 simplification.
+# TMDB genre/certification lists the US certification scheme is used for
+# both radarr/sonarr suggestion lists today not configurable per-country yet, v1 simplification.
 TMDB_CERTIFICATION_COUNTRY = "US"
-
-# ArrLink cannot ship a working TMDB key of its own (that requires
-# registering an application with TMDB under its terms, on someone's
-# account) the way Jellyseerr bundles one it registered for itself. Instead:
-# an operator who wants zero-config genre/certification sync sets this once
-# via the TMDB_API_KEY env var (e.g. in compose.yaml/.env) at deploy time;
-# absent that, a per-instance override is always available from Settings
-# ("tmdb_api_key"). Either way nothing else in ArrLink depends on this being
-# set — the sync loop simply no-ops (logged, not fatal) until a key exists.
 DEFAULT_TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
-
-# TRaSH Guides publishes its quality-profile naming data as public JSON in
-# its GitHub repo, no key required. Kept as a named constant (not inlined
-# into the fetch call) so a repo reorg is a one-line fix here.
 TRASH_QUALITY_URL = (
     "https://raw.githubusercontent.com/TRaSH-Guides/Guides/master/"
     "docs/json/radarr/quality-size/movie.json"
@@ -75,9 +61,7 @@ async def sync_tmdb_vocabulary(db: State) -> dict[str, int]:
             for g in (genres or [])
             if isinstance(g, dict) and g.get("name")
         ]
-        counts[f"genre:{app_type}"] = db.sync_vocabulary(
-            "genre", app_type, None, entries, "tmdb"
-        )
+        counts[f"genre:{app_type}"] = db.sync_vocabulary("genre", app_type, None, entries, "tmdb")
 
     cert_paths = {"radarr": "/certification/movie/list", "sonarr": "/certification/tv/list"}
     for app_type, path in cert_paths.items():

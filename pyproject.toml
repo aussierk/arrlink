@@ -17,3 +17,24 @@ where = ["backend"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["backend"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+# Without this, ruff's isort splits a single multi-name import into a
+# separate `from x import (...)` statement per aliased name -- ugly, and
+# not how this codebase's imports were written.
+combine-as-imports = true
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection pattern *is* a call in an argument default
+# (Depends(...)/Query(...)/Path(...)) -- B008 exists to catch a real Python
+# footgun (a mutable default evaluated once at def time) that doesn't apply
+# here, since FastAPI itself calls these specially per-request.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
+

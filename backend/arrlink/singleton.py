@@ -1,4 +1,5 @@
 """Cross-process single-instance guard."""
+
 from __future__ import annotations
 
 import fcntl

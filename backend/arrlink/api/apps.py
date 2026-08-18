@@ -1,4 +1,5 @@
 """Apps CRUD: storage, connection tests, and tag import."""
+
 from __future__ import annotations
 
 import asyncio
@@ -66,9 +67,7 @@ def summary(_user: CurrentUser, db: State = Depends(get_db)) -> dict:
 
 
 @router.get("/{app_id}")
-def get_app(
-    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def get_app(app_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
     if not row:
         raise HTTPException(404, "app not found")
@@ -76,9 +75,7 @@ def get_app(
 
 
 @router.post("", status_code=201)
-def create_app(
-    body: AppIn, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def create_app(body: AppIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     if not body.api_key.strip():
         raise HTTPException(422, "api_key is required to create an app")
     cur = db.execute(
@@ -100,22 +97,18 @@ def create_app(
 
 
 @router.patch("/{app_id}")
-def update_app(
-    app_id: int, body: AppIn, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def update_app(app_id: int, body: AppIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
     if not row:
         raise HTTPException(404, "app not found")
     # Changing the app type (radarr <-> sonarr) would make the poller treat
     # this as a brand-new app on the next rescan: every existing item stops
     # matching, and after the deletion grace period all of its hardlinks are
-    # unlinked from disk. The UI keeps the type fixed on edit; enforce the
-    # same here. Allow it only when nothing is linked yet (a harmless config
-    # fix, e.g. an app that was added with the wrong type and has no links).
+    # unlinked from disk.
+
     if body.type != row["type"]:
         linked = db.query_one(
-            "SELECT COUNT(*) c FROM links WHERE app_id=? "
-            "AND status IN ('active','stale')",
+            "SELECT COUNT(*) c FROM links WHERE app_id=? AND status IN ('active','stale')",
             (app_id,),
         )
         if linked and linked["c"] > 0:
@@ -129,8 +122,7 @@ def update_app(
     # blank api_key = keep the existing one (the UI can't recover the real key)
     api_key = body.api_key.strip() or row["api_key"]
     db.execute(
-        "UPDATE apps SET name=?, type=?, url=?, api_key=?, enabled=?, "
-        "poll_interval_s=? WHERE id=?",
+        "UPDATE apps SET name=?, type=?, url=?, api_key=?, enabled=?, poll_interval_s=? WHERE id=?",
         (
             body.name,
             body.type,
@@ -147,9 +139,7 @@ def update_app(
 
 
 @router.delete("/{app_id}", status_code=204)
-def delete_app(
-    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
-) -> None:
+def delete_app(app_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> None:
     cur = db.execute("DELETE FROM apps WHERE id=?", (app_id,))
     db.commit()
     if cur.rowcount == 0:
@@ -172,9 +162,7 @@ def test_app(body: AppIn, _user: CurrentUser, db: State = Depends(get_db)) -> di
 
 
 @router.post("/{app_id}/test")
-def test_app_id(
-    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def test_app_id(app_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     """Re-test an existing app (used by the apps table)."""
     row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
     if not row:
