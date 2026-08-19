@@ -121,7 +121,7 @@ def test_rules_crud_and_validation(client: TestClient):
                 {"category": "user", "match_type": "regex",
                  "match_value": r"^##\s*-\s*(?P<user>.+)$", "join": None},
             ],
-            "dir_template": "/linked/movies/users/{$user}",
+            "dir_template": "/media/movies/users/{$user}",
             "filename_template": "{$stem}",
         },
     )
@@ -176,6 +176,89 @@ def test_rules_crud_and_validation(client: TestClient):
 
     assert client.delete(f"/api/rules/{rule['id']}").status_code == 204
     assert client.get("/api/rules").json() == []
+
+
+def test_rule_rejects_unknown_placeholder(client: TestClient):
+    # "genrre" (typo) isn't a fixed name or a category this rule has a
+    # condition for -- must be rejected at save time, not silently accepted.
+    r = client.post(
+        "/api/rules",
+        json={
+            "name": "bad",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
+            "dir_template": "/media/{$genrre}",
+        },
+    )
+    assert r.status_code == 422
+    assert "unknown placeholder" in r.text
+
+    # a category this rule DOES have a condition for is fine
+    r = client.post(
+        "/api/rules",
+        json={
+            "name": "ok",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
+            "dir_template": "/media/{$custom}",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    # a fixed name (not tied to any condition) is always fine
+    r = client.post(
+        "/api/rules",
+        json={
+            "name": "ok2",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
+            "dir_template": "/media/{$app}/{$title}",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+
+def test_rule_rejects_dir_template_outside_jail(client: TestClient):
+    r = client.post(
+        "/api/rules",
+        json={
+            "name": "bad",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
+            "dir_template": "/etc/evil",
+        },
+    )
+    assert r.status_code == 422
+    assert "outside the allowed root" in r.text
+
+    # update_rule enforces the same check
+    ok = client.post(
+        "/api/rules",
+        json={
+            "name": "ok",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
+            "dir_template": "/media/movies/kids",
+        },
+    )
+    assert ok.status_code == 201, ok.text
+    r = client.patch(
+        f"/api/rules/{ok.json()['id']}",
+        json={
+            "name": "ok",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
+            "dir_template": "/etc/evil",
+        },
+    )
+    assert r.status_code == 422
+    assert "outside the allowed root" in r.text
 
 
 def test_preview_requires_app(client: TestClient):

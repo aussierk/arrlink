@@ -19,7 +19,9 @@ DEFAULT_ROOTS = ["/media"]
 _ILLEGAL = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _WS = re.compile(r"\s+")
 _PLACEHOLDER = re.compile(r"\{\$([A-Za-z0-9_]+)\}")
-_FIXED = {"app", "title", "year", "basename", "stem", "ext"}
+# Placeholder names that don't depend on a rule's own conditions -- always
+# valid regardless of which categories a given rule matches on.
+FIXED_PLACEHOLDERS = {"app", "title", "year", "basename", "stem", "ext"}
 
 
 class TemplateError(Exception):
@@ -69,7 +71,7 @@ def _resolve_token(name: str, ctx: TemplateContext) -> str:
     # category-keyed capture (e.g. {$genre}, {$user}, ...)
     if name in ctx.categories:
         return _clean(ctx.categories[name].value)
-    raise TemplateError(f"unknown placeholder {{$name}}")
+    raise TemplateError(f"unknown placeholder {{${name}}}")
 
 
 def find_placeholders(template: str) -> list[str]:

@@ -13,7 +13,14 @@ from pydantic import BaseModel, Field, model_validator
 from ..arr.base import AdapterError
 from ..arr.factory import get_adapter
 from ..core.planner import plan_links
-from ..core.template import DEFAULT_ROOTS
+from ..core.template import (
+    DEFAULT_ROOTS,
+    FIXED_PLACEHOLDERS,
+    TemplateError,
+    check_jail,
+    find_placeholders,
+    static_prefix,
+)
 from ..core.vocabulary import (
     RICH_CATEGORIES,
     expand_vocabulary_conditions,
@@ -99,6 +106,22 @@ class RuleIn(BaseModel):
             raise ValueError("dir_template must be an absolute path (e.g. /media/movies/{$user})")
         if self.filename_template is not None and "\\" in self.filename_template:
             raise ValueError("filename_template must not contain backslashes")
+        # A placeholder is only ever resolvable if it's one of the fixed
+        # names or a category this rule actually has a condition for --
+        # anything else (a typo, or a category this rule doesn't reference)
+        # would otherwise save silently and only fail later, per-item, at
+        # match time (a vague "unknown placeholder" buried in the poll log).
+        known = FIXED_PLACEHOLDERS | seen
+        for field_name, tmpl in (
+            ("dir_template", self.dir_template),
+            ("filename_template", self.filename_template),
+        ):
+            for name in find_placeholders(tmpl):
+                if name not in known:
+                    raise ValueError(
+                        f"{field_name}: unknown placeholder {{${name}}} -- must be "
+                        f"one of {', '.join(sorted(known))}"
+                    )
         return self
 
 
@@ -150,6 +173,19 @@ def _rule_out(row) -> dict:
     return d
 
 
+def _check_dir_template_jail(db: State, dir_template: str) -> None:
+    """Reject a dir_template whose static (non-placeholder) part already
+    escapes the allowed roots -- the same conservative check /preview and
+    /presets/apply already do, applied here too so a rule can't be saved
+    pointing outside the jail in the first place (previously this only
+    ever surfaced later, per-item, when the poller tried to actually link)."""
+    roots = db.get_setting("allowed_roots") or list(DEFAULT_ROOTS)
+    try:
+        check_jail(static_prefix(dir_template), roots)
+    except TemplateError as e:
+        raise HTTPException(422, str(e)) from e
+
+
 @router.get("")
 def list_rules(_user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
     rows = db.query(
@@ -176,6 +212,7 @@ def create_rule(body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)) -
         "SELECT id FROM apps WHERE id=?", (body.app_scope,)
     ):
         raise HTTPException(422, "app_scope references unknown app")
+    _check_dir_template_jail(db, body.dir_template)
     cur = db.execute(
         "INSERT INTO rules (name, app_scope, app_type_scope, "
         "conditions_json, dir_template, filename_template, enabled, unlink_on_mismatch, "
@@ -212,6 +249,7 @@ def update_rule(
         "SELECT id FROM apps WHERE id=?", (body.app_scope,)
     ):
         raise HTTPException(422, "app_scope references unknown app")
+    _check_dir_template_jail(db, body.dir_template)
     db.execute(
         "UPDATE rules SET name=?, app_scope=?, app_type_scope=?, "
         "conditions_json=?, dir_template=?, filename_template=?, "
