@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   api,
@@ -7,6 +7,7 @@ import {
   type ConditionCategory,
   type TagItem,
 } from '../lib/api'
+import { registerBeforeUnload, registerUnsavedGuard } from '../lib/unsavedGuard'
 
 const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
   'genre',
@@ -38,6 +39,18 @@ export default function Tags() {
   const [pushTargets, setPushTargets] = useState<Set<number>>(new Set())
   const [pushMsg, setPushMsg] = useState<string | null>(null)
 
+  // Category edits are staged here, not saved on select — the row's
+  // dropdown shows the pending value if there is one, else the saved
+  // tag.category. Cleared on save, discard, or a full tag-list reload.
+  const [pendingEdits, setPendingEdits] = useState<
+    Record<number, ConditionCategory | null>
+  >({})
+  const [saving, setSaving] = useState(false)
+  const pendingEditsRef = useRef(pendingEdits)
+  pendingEditsRef.current = pendingEdits
+  const appIdRef = useRef(appId)
+  appIdRef.current = appId
+
   const loadApps = useCallback(async () => {
     try {
       const a = await api.listApps()
@@ -62,6 +75,7 @@ export default function Tags() {
     if (appId === null) return
     try {
       setTags(await api.listTags(appId))
+      setPendingEdits({})
     } catch (e) {
       setErr(String(e))
     }
@@ -77,14 +91,68 @@ export default function Tags() {
     void loadTags()
   }, [loadTags])
 
-  async function setTagCategory(tagId: number, category: ConditionCategory | null) {
-    if (appId === null) return
+  const saveTagEdits = useCallback(async (): Promise<boolean> => {
+    const edits = pendingEditsRef.current
+    const ids = Object.keys(edits).map(Number)
+    const curAppId = appIdRef.current
+    if (ids.length === 0 || curAppId === null) return true
+    setSaving(true)
     try {
-      const updated = await api.setTagCategory(appId, tagId, category)
-      setTags((prev) => prev.map((tg) => (tg.id === tagId ? updated : tg)))
+      const results = await Promise.all(
+        ids.map((id) => api.setTagCategory(curAppId, id, edits[id])),
+      )
+      const byId = new Map(results.map((r) => [r.id, r]))
+      setTags((prev) => prev.map((tg) => byId.get(tg.id) ?? tg))
+      setPendingEdits({})
+      return true
     } catch (e) {
       setErr(String(e))
+      return false
+    } finally {
+      setSaving(false)
     }
+  }, [])
+
+  // Registered once for the lifetime of this page — the guard functions
+  // read pendingEditsRef live, so they don't need re-registering on every
+  // edit. See lib/unsavedGuard.ts for what this actually covers (sidebar
+  // nav + tab close, not the browser back button).
+  useEffect(() => {
+    const hasUnsaved = () => Object.keys(pendingEditsRef.current).length > 0
+    const unregisterNav = registerUnsavedGuard(hasUnsaved, saveTagEdits)
+    const unregisterUnload = registerBeforeUnload(hasUnsaved)
+    return () => {
+      unregisterNav()
+      unregisterUnload()
+    }
+  }, [saveTagEdits])
+
+  function stageTagCategory(tagId: number, category: ConditionCategory | null) {
+    const tag = tags.find((tg) => tg.id === tagId)
+    setPendingEdits((prev) => {
+      const next = { ...prev }
+      if (tag && category === tag.category) {
+        delete next[tagId] // back to the saved value -> no longer pending
+      } else {
+        next[tagId] = category
+      }
+      return next
+    })
+  }
+
+  async function switchApp(nextId: number) {
+    if (Object.keys(pendingEdits).length > 0) {
+      const shouldSave = window.confirm(
+        'You have unsaved tag classification changes. Save them before switching services?',
+      )
+      if (shouldSave) {
+        const ok = await saveTagEdits()
+        if (!ok) return // stay put so the error (and the edits) are still visible
+      } else {
+        setPendingEdits({})
+      }
+    }
+    setAppId(nextId)
   }
 
   async function doImport() {
@@ -265,7 +333,7 @@ export default function Tags() {
           <select
             className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200"
             value={appId ?? ''}
-            onChange={(e) => setAppId(Number(e.target.value))}
+            onChange={(e) => void switchApp(Number(e.target.value))}
           >
             {apps.map((a) => (
               <option key={a.id} value={a.id}>
@@ -280,6 +348,15 @@ export default function Tags() {
           className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         >
           {busy ? t('tags.appTags.importing') : t('tags.appTags.importTags')}
+        </button>
+        <button
+          onClick={() => void saveTagEdits()}
+          disabled={Object.keys(pendingEdits).length === 0 || saving}
+          className="ml-auto rounded-md border border-amber-500/50 px-4 py-1.5 text-sm font-medium text-amber-300 hover:bg-amber-950/40 disabled:opacity-40"
+        >
+          {saving
+            ? t('tags.appTags.saving')
+            : t('tags.appTags.saveChanges', { count: Object.keys(pendingEdits).length })}
         </button>
       </div>
 
@@ -310,39 +387,52 @@ export default function Tags() {
                 </td>
               </tr>
             )}
-            {tags.map((tag) => (
-              <tr key={tag.id} className="bg-zinc-950/40">
-                <td className="px-3 py-2 font-mono text-xs text-zinc-200">{tag.label}</td>
-                <td className="px-3 py-2">
-                  <select
-                    className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200"
-                    value={tag.category ?? ''}
-                    onChange={(e) =>
-                      void setTagCategory(
-                        tag.id,
-                        (e.target.value || null) as ConditionCategory | null,
-                      )
-                    }
-                  >
-                    <option value="">{t('tags.appTags.unclassified')}</option>
-                    {CLASSIFIABLE_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {t(`ruleModal.categoryLabel.${cat}`)}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-3 py-2 text-zinc-400">{tag.count}</td>
-                <td className="px-3 py-2 text-zinc-400">
-                  {tag.rule_count > 0 ? (
-                    <span className="text-indigo-300">{tag.rule_count}</span>
-                  ) : (
-                    <span className="text-zinc-600">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-zinc-500">{fmtTime(tag.imported_at)}</td>
-              </tr>
-            ))}
+            {tags.map((tag) => {
+              const isPending = tag.id in pendingEdits
+              const shown = isPending ? pendingEdits[tag.id] : tag.category
+              return (
+                <tr key={tag.id} className="bg-zinc-950/40">
+                  <td className="px-3 py-2 font-mono text-xs text-zinc-200">
+                    {tag.label}
+                  </td>
+                  <td className="px-3 py-2">
+                    <select
+                      className={`rounded-md border bg-zinc-950 px-2 py-1 text-xs text-zinc-200 ${
+                        isPending ? 'border-amber-500' : 'border-zinc-700'
+                      }`}
+                      value={shown ?? ''}
+                      onChange={(e) =>
+                        stageTagCategory(
+                          tag.id,
+                          (e.target.value || null) as ConditionCategory | null,
+                        )
+                      }
+                    >
+                      <option value="">{t('tags.appTags.unclassified')}</option>
+                      {CLASSIFIABLE_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {t(`ruleModal.categoryLabel.${cat}`)}
+                        </option>
+                      ))}
+                    </select>
+                    {isPending && (
+                      <span className="ml-1.5 text-[11px] text-amber-400">
+                        {t('tags.appTags.unsaved')}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-zinc-400">{tag.count}</td>
+                  <td className="px-3 py-2 text-zinc-400">
+                    {tag.rule_count > 0 ? (
+                      <span className="text-indigo-300">{tag.rule_count}</span>
+                    ) : (
+                      <span className="text-zinc-600">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-zinc-500">{fmtTime(tag.imported_at)}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

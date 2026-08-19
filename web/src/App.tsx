@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import RequireAuth from './components/RequireAuth'
 import { api, type Me } from './lib/api'
+import { confirmNavigation } from './lib/unsavedGuard'
 import Dashboard from './pages/Dashboard'
 import LoginPage from './pages/LoginPage'
 import Logs from './pages/Logs'
@@ -44,6 +45,7 @@ export default function App() {
 
 function Shell() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [me, setMe] = useState<Me | null>(null)
 
   useEffect(() => {
@@ -65,6 +67,16 @@ function Shell() {
               key={i.to}
               to={i.to}
               end={i.end}
+              onClick={(e) => {
+                // Sidebar nav is the only in-app navigation this app has
+                // guarded (see lib/unsavedGuard.ts) — intercept it here so
+                // a page like Tags with unsaved edits gets a chance to save
+                // first, then navigate ourselves once that's settled.
+                e.preventDefault()
+                void confirmNavigation().then((proceed) => {
+                  if (proceed) navigate(i.to)
+                })
+              }}
               className={({ isActive }) =>
                 `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
                   isActive

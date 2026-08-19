@@ -203,7 +203,10 @@
       "colRules": "Rules",
       "colImported": "Imported",
       "connectFirst": "Connect an app first.",
-      "emptyImport": "No tags imported yet — click Import tags."
+      "emptyImport": "No tags imported yet — click Import tags.",
+      "unsaved": "unsaved",
+      "saving": "Saving…",
+      "saveChanges": "Save changes ({{count}})"
     }
   },
   "settings": {
