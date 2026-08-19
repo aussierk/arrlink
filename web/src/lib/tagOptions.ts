@@ -60,8 +60,3 @@ export function parseList(value: string): string[] {
 export function joinList(tags: string[]): string {
   return [...new Set(tags)].join(',')
 }
-
-/** Is this match_value one of the known regex picks? (returns the pattern or '') */
-export function matchRegexPick(value: string): string {
-  return REGEX_PICKS.find((p) => p.pattern === value)?.pattern ?? ''
-}

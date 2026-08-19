@@ -9,7 +9,6 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-BACKUP_SUBDIR = "backups"
 STAMP_FMT = "arrlink-%Y%m%d-%H%M%S"
 FILENAME_GLOB = "arrlink-*.db"
 # How often the background loop checks whether a backup is due, and how

@@ -206,6 +206,15 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
 ]
 
 
+# Catches SCHEMA_VERSION drifting from the actual last-registered migration
+# (e.g. a new migration added without bumping the constant, or vice versa) —
+# at import time, not silently at some later runtime moment.
+assert _MIGRATIONS[-1][0] == SCHEMA_VERSION, (
+    f"SCHEMA_VERSION ({SCHEMA_VERSION}) doesn't match the last migration "
+    f"registered in _MIGRATIONS ({_MIGRATIONS[-1][0]})"
+)
+
+
 def now() -> float:
     return time.time()
 

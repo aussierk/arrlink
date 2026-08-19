@@ -80,10 +80,6 @@
     "remove": "remove",
     "showingRange": "Showing {{from}}–{{to}} of {{total}}"
   },
-  "links": {
-    "title": "Links",
-    "subtitle": "Hardlinks created by the poller. Repair re-creates missing ones whose source file still exists."
-  },
   "previewPanel": {
     "pickApp": "Pick an app to preview this rule.",
     "previewing": "Previewing…",
@@ -139,22 +135,6 @@
     "colLevel": "Level",
     "colMessage": "Message",
     "empty": "No events yet."
-  },
-  "presets": {
-    "title": "Presets",
-    "subtitle": "One-click rules for common tagging conventions. Each preset creates an editable rule — adjust it on the Rules page afterwards.",
-    "appType": "App type",
-    "baseFolder": "Base folder",
-    "baseFolderHint": "(presets link under this)",
-    "baseFolderPlaceholder": "/linked/movies",
-    "ruleScope": "Rule scope",
-    "anyApp": "any app",
-    "applying": "Applying…",
-    "apply": "Apply",
-    "matchLabel": "match ",
-    "dirLabel": "dir ",
-    "viewRules": "view rules",
-    "baseFolderFooter": "Base folder: <0>{{folder}}</0> · destinations must stay under an allowed root (Settings → Linking)."
   },
   "rules": {
     "title": "Rules",

@@ -55,13 +55,6 @@ def revoke_session(db: State, token: str) -> None:
     db.commit()
 
 
-def touch_expiry(db: State, token: str, ttl_h: float) -> float:
-    expires = time.time() + ttl_h * 3600
-    db.execute("UPDATE sessions SET expires_at=? WHERE token=?", (expires, token))
-    db.commit()
-    return expires
-
-
 def _silent_refresh(
     db: State, token: str, refresh_token: str | None, client: Any, ttl_h: float
 ) -> float | None:

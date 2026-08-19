@@ -56,7 +56,6 @@ def effective_auth(db, env) -> dict:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    port: int = 8270
     config_dir: Path = Path("config")
     log_level: str = "info"
     fs_fallback: str = "skip"

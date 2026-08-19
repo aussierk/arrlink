@@ -28,7 +28,6 @@ class ReconcileResult:
     created: int = 0
     removed: int = 0
     moved: int = 0
-    skipped: int = 0
     errors: list[str] = dataclasses.field(default_factory=list)
 
 
@@ -118,8 +117,6 @@ def reconcile(
                         res.errors.append(f"old link {dst}: {r.error}")
                     if p.file_id is not None:
                         _create(db, p, app_id, res, fallback, now)
-                    else:
-                        res.skipped += 1
                     res.moved += 1
                 continue
 
@@ -168,7 +165,6 @@ def _ensure_present(db, row, dst, p, res, fallback, now, stat_cache) -> None:
                     (inode_of(dst), src, now, row["id"]),
                 )
             else:
-                res.skipped += 1
                 res.errors.append(f"{dst}: {r.error}")
         else:
             db.execute("UPDATE links SET status='stale' WHERE id=?", (row["id"],))
@@ -187,7 +183,6 @@ def _ensure_present(db, row, dst, p, res, fallback, now, stat_cache) -> None:
                     (inode_of(dst), src, row["id"]),
                 )
             else:
-                res.skipped += 1
                 res.errors.append(f"{dst}: {r2.error}")
         return
 
@@ -245,7 +240,6 @@ def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
     """Create one planned link (idempotent)."""
     parent = os.path.dirname(p.dst_path)
     if not ensure_dir(parent):
-        res.skipped += 1
         res.errors.append(f"{p.dst_path}: cannot create parent dir {parent}")
         return
     r = create_link(p.src_path, p.dst_path, fallback)
@@ -285,5 +279,4 @@ def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
             ),
         )
     else:
-        res.skipped += 1
         res.errors.append(f"{p.dst_path}: {r.error}")

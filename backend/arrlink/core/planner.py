@@ -24,8 +24,6 @@ class PlannedLink:
     item_title: str
     src_path: str
     dst_path: str
-    dst_dir: str
-    dst_filename: str
     file_id: int | None = None
     # The current source file's inode, as stat'd by the adapter when it built
     # the snapshot. Lets the reconciler skip re-stat'ing the source on every
@@ -183,8 +181,6 @@ def plan_links(
                             item_id=item_id,
                             item_title=title,
                             src_path=src,
-                            dst_dir=dst_dir,
-                            dst_filename=dst_name,
                             dst_path=dst_path,
                             file_id=fid,
                             src_inode=src_inode,

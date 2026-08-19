@@ -377,17 +377,6 @@ export const api = {
         baseFolder ? `&base_folder=${encodeURIComponent(baseFolder)}` : ''
       }`,
     ),
-  applyPreset: (b: {
-    preset_key: string
-    app_type: string
-    app_scope?: number | null
-    base_folder?: string | null
-    name?: string | null
-  }) =>
-    req<{ preset_key: string; rule: RuleItem; message: string }>(
-      '/api/presets/apply',
-      { method: 'POST', body: JSON.stringify(b) },
-    ),
   listLinks: (f?: {
     app_id?: number
     rule_id?: number
