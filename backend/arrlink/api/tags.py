@@ -70,22 +70,8 @@ def _rule_matches_label(rule, label: str) -> bool:
     )
 
 
-@router.get("/apps/{app_id}/tags")
-def list_tags(
-    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
-) -> list[dict]:
-    app = db.query_one("SELECT type FROM apps WHERE id=?", (app_id,))
-    if not app:
-        raise HTTPException(404, "app not found")
-    tags = db.query("SELECT * FROM tags WHERE app_id=? ORDER BY label", (app_id,))
-    # "In use" = how many of this app's already-imported items actually carry
-    # the tag, computed from ArrLink's own stored data (app_items.tags_json).
-    # The *arr tag list endpoint itself never reports a usage count (its
-    # response is just {id, label}), so the tags.count column populated at
-    # import time is always 0 — this recomputes the real number instead.
-    # If the app has no imported items yet (tags-only import, or the
-    # manual/offline import path used in tests), there's nothing to count
-    # from — fall back to the stored column rather than reporting a false 0.
+def _enrich_tags(db: State, app_id: int, app_type: str, tags) -> list[dict]:
+    """Attach the live-computed "in use" count and rule_count to raw tags-table rows."""
     has_items = db.query_one(
         "SELECT 1 FROM app_items WHERE app_id=? LIMIT 1", (app_id,)
     )
@@ -102,7 +88,7 @@ def list_tags(
         else None
     )
     all_rules = [dict(r) for r in db.query("SELECT * FROM rules WHERE enabled=1")]
-    rules = [r for r in all_rules if _rule_applies_to_app(r, app_id, app["type"])]
+    rules = [r for r in all_rules if _rule_applies_to_app(r, app_id, app_type)]
     out = []
     for t in tags:
         d = dict(t)
@@ -110,6 +96,17 @@ def list_tags(
         d["rule_count"] = sum(1 for r in rules if _rule_matches_label(r, t["label"]))
         out.append(d)
     return out
+
+
+@router.get("/apps/{app_id}/tags")
+def list_tags(
+    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
+) -> list[dict]:
+    app = db.query_one("SELECT type FROM apps WHERE id=?", (app_id,))
+    if not app:
+        raise HTTPException(404, "app not found")
+    tags = db.query("SELECT * FROM tags WHERE app_id=? ORDER BY label", (app_id,))
+    return _enrich_tags(db, app_id, app["type"], tags)
 
 
 @router.patch("/apps/{app_id}/tags/{tag_id}/category")
@@ -124,12 +121,16 @@ def set_tag_category(
     tag-based rule matching in that category can be trusted (or vocabulary-
     validated) even when the tag's literal text isn't itself a recognized
     vocabulary value — see core/vocabulary.py."""
+    app = db.query_one("SELECT type FROM apps WHERE id=?", (app_id,))
+    if not app:
+        raise HTTPException(404, "app not found")
     row = db.query_one("SELECT id FROM tags WHERE id=? AND app_id=?", (tag_id, app_id))
     if not row:
         raise HTTPException(404, "tag not found")
     db.execute("UPDATE tags SET category=? WHERE id=?", (body.category, tag_id))
     db.commit()
-    return dict(db.query_one("SELECT * FROM tags WHERE id=?", (tag_id,)))
+    tag = db.query_one("SELECT * FROM tags WHERE id=?", (tag_id,))
+    return _enrich_tags(db, app_id, app["type"], [tag])[0]
 
 
 @router.post("/apps/{app_id}/tags/import", status_code=201)

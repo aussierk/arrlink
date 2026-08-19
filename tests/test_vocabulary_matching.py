@@ -474,6 +474,37 @@ def test_tag_category_classification(client, radarr):
     assert r3.json()["category"] is None
 
 
+def test_tag_category_classification_preserves_in_use_count(client, radarr):
+    """Regression: PATCH .../category used to return the raw tags.count
+    column (always 0/stale -- see _enrich_tags) instead of the live-computed
+    "in use" count list_tags shows, so classifying a tag made its count
+    visibly drop to 0 in the UI even though nothing about usage changed."""
+    import json
+
+    app_id = _add_app(client, radarr)
+    client.post(
+        f"/api/apps/{app_id}/tags/import-manual",
+        json={"labels": ["scifi"], "counts": {"scifi": 0}},
+    )
+    db = client.app.state.db
+    db.execute(
+        "INSERT INTO app_items (app_id, item_id, title, tags_json, first_seen, last_seen) "
+        "VALUES (?, 1, 'Movie', ?, 0, 0)",
+        (app_id, json.dumps(["scifi"])),
+    )
+    db.commit()
+
+    tags = client.get(f"/api/apps/{app_id}/tags").json()
+    tag_id = tags[0]["id"]
+    assert tags[0]["count"] == 1
+
+    r = client.patch(f"/api/apps/{app_id}/tags/{tag_id}/category", json={"category": "genre"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["count"] == 1
+    assert body["rule_count"] == 0
+
+
 def test_vocabulary_get_endpoint_scopes(client):
     db = client.app.state.db
     db.execute("INSERT INTO apps (name, type, url, api_key, created_at) VALUES ('r','radarr','http://x','k',0)")
