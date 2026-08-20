@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from ..auth import lockout, sessions as sess
 from ..auth.oidc import OidcClient, OidcError, b64url_encode, decode_jwt_payload
 from ..auth.passwords import verify_password
-from ..config import Settings, effective_auth
+from ..config import Settings, effective_app_url, effective_auth
 from ..deps import get_db
 from ..state import State
 
@@ -85,8 +85,9 @@ def _redirect_uri(request: Request, db: State) -> str:
     """The absolute ``redirect_uri`` handed to the OIDC provider."""
     settings: Settings = request.app.state.settings
 
-    if settings.app_url:
-        return f"{settings.app_url.rstrip('/')}{_CALLBACK_PATH}"
+    app_url = effective_app_url(db, settings)
+    if app_url:
+        return f"{app_url.rstrip('/')}{_CALLBACK_PATH}"
 
     for raw in (settings.trusted_hosts or "").split(","):
         host = raw.strip()
@@ -236,6 +237,11 @@ def me(request: Request, db: Annotated[State, Depends(get_db)]) -> dict[str, Any
         "password_enabled": auth["password_enabled"],
         "oidc_enabled": auth["oidc_enabled"],
         "auto_login": bool(auth["auto_login"]),
+        # Both readable pre-auth (this endpoint never 401s) so the login
+        # screen -- which can't call the authed /api/settings/effective --
+        # can still show the configured title and render times consistently.
+        "app_title": db.get_setting("app_title") or "ArrLink",
+        "display_timezone": db.get_setting("display_timezone") or "UTC",
     }
 
     if not auth["password_enabled"] and not auth["oidc_enabled"]:

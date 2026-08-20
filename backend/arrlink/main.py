@@ -30,7 +30,13 @@ from .api import (
 )
 from .auth import sessions as sess_mod
 from .auth.oidc import OidcClient
-from .config import effective_auth, get_settings, setup_logging
+from .config import (
+    apply_logging_settings,
+    effective_auth,
+    effective_logging_settings,
+    get_settings,
+    setup_logging,
+)
 from .core import backup as backup_core
 from .core.poller import Poller
 from .core.template import audit_rule_roots
@@ -86,20 +92,22 @@ async def _auth_sweep(db: State, settings) -> None:
 
 
 async def _backup_loop(db: State, settings) -> None:
-    """Background loop: nightly DB backup with retention (PLAN.md SS7/SS11)."""
-    if not settings.backup_enabled:
-        return
+    """Background loop: periodic DB backup with retention."""
     while True:
         try:
-            age = backup_core.newest_backup_age_s(settings.backup_dir)
-            if age is None or age > backup_core.STALE_S:
-                await asyncio.to_thread(
-                    backup_core.run_backup_cycle,
-                    db,
-                    settings.db_path,
-                    settings.backup_dir,
-                    settings.backup_retention_days,
-                )
+            enabled, retention_days, interval_hours = backup_core.effective_backup_settings(
+                db, settings
+            )
+            if enabled:
+                age = backup_core.newest_backup_age_s(settings.backup_dir)
+                if age is None or age > interval_hours * 3600:
+                    await asyncio.to_thread(
+                        backup_core.run_backup_cycle,
+                        db,
+                        settings.db_path,
+                        settings.backup_dir,
+                        retention_days,
+                    )
         except Exception as e:  # noqa: BLE001 - never crash the app
             log.warning("backup loop error: %s", e)
         await asyncio.sleep(backup_core.CHECK_INTERVAL_S)
@@ -118,6 +126,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         log.error("startup aborted: instance lock already held")
         raise
     db = State(resolved_db_path)
+    apply_logging_settings(*effective_logging_settings(db, settings), settings.log_path)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

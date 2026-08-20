@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import logging.handlers
 from functools import cached_property
 from pathlib import Path
 
@@ -52,6 +53,16 @@ def effective_auth(db, env) -> dict:
     }
 
 
+def effective_app_url(db, env) -> str:
+    """`app_url`, a runtime Setting overriding the env value (same pattern
+    as the fields in effective_auth) -- lets Settings > General edit the
+    deployment's external base URL without a redeploy. Used by
+    api/auth.py's _redirect_uri() to build the OIDC redirect_uri."""
+    s = db if db is not None else None
+    db_url = s.get_setting("app_url") if s is not None else None
+    return db_url or env.app_url or ""
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -87,6 +98,14 @@ class Settings(BaseSettings):
     trusted_hosts: str | None = None
     backup_enabled: bool = True
     backup_retention_days: int = 7
+    # Read-only display in Settings > General only -- entrypoint.sh reads
+    # $PORT itself (before this Python process even starts) to build the
+    # uvicorn --port arg, so changing this field has no live effect; it just
+    # lets the running process show the admin what port it's actually on.
+    port: int = 8270
+    # Env-seed default for the rotating log file's size cap -- a runtime
+    # Setting can override this live, see effective_logging_settings().
+    log_size_limit_mb: int = 10
 
     @cached_property
     def ui_password_hash(self) -> str:
@@ -102,13 +121,72 @@ class Settings(BaseSettings):
     def backup_dir(self) -> Path:
         return self.config_dir / "backups"
 
+    @property
+    def log_dir(self) -> Path:
+        return self.config_dir / "logs"
+
+    @property
+    def log_path(self) -> Path:
+        return self.log_dir / "arrlink.log"
+
 
 def get_settings() -> Settings:
     return Settings()
 
 
 def setup_logging(level: str) -> None:
+    """Stdout-only bootstrap, called first (before the DB exists) so Docker
+    log visibility is guaranteed even if DB/file-logging setup fails later.
+    See apply_logging_settings() for the additive rotating-file handler."""
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
     )
+
+
+def effective_logging_settings(db, env) -> tuple[str, int]:
+    """(log_level, log_size_limit_mb) -- a runtime Setting overrides the env
+    default, same pattern as effective_auth/effective_backup_settings."""
+    level = db.get_setting("log_level") or env.log_level
+    db_size = db.get_setting("log_size_limit_mb")
+    size_mb = int(db_size) if db_size is not None else env.log_size_limit_mb
+    return level, size_mb
+
+
+# Fixed, not user-configurable -- only the level and max size are exposed in
+# Settings. Keeping up to 3 rotated-out files alongside the active one caps
+# total on-disk log usage at 4x the size limit.
+_LOG_BACKUP_COUNT = 3
+
+# Module-level so apply_logging_settings() can reconfigure the same handler
+# instance in place on a live PUT instead of adding a duplicate one.
+_file_handler: logging.handlers.RotatingFileHandler | None = None
+
+
+def apply_logging_settings(level: str, max_size_mb: int, log_path: Path | None = None) -> None:
+    """Set the root logger's level and add/reconfigure its rotating file handler's size cap."""
+    global _file_handler
+    root = logging.getLogger()
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    root.setLevel(lvl)
+
+    needs_new_handler = log_path is not None and (
+        _file_handler is None or Path(_file_handler.baseFilename) != log_path
+    )
+    if needs_new_handler:
+        if _file_handler is not None:
+            root.removeHandler(_file_handler)
+            _file_handler.close()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        _file_handler = logging.handlers.RotatingFileHandler(
+            log_path, maxBytes=max_size_mb * 1024 * 1024, backupCount=_LOG_BACKUP_COUNT
+        )
+        _file_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+        )
+        root.addHandler(_file_handler)
+    elif _file_handler is None:
+        raise ValueError("log_path is required the first time apply_logging_settings runs")
+    else:
+        _file_handler.maxBytes = max_size_mb * 1024 * 1024
+    _file_handler.setLevel(lvl)

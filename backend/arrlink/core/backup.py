@@ -1,4 +1,5 @@
 """Nightly DB backup with retention."""
+
 from __future__ import annotations
 
 import logging
@@ -87,6 +88,27 @@ def list_backups(backup_dir: Path) -> list[dict]:
             continue
         out.append({"name": p.name, "size": st.st_size, "created_at": st.st_mtime})
     return out
+
+
+# Default interval between automatic backups, hours -- matches STALE_S's
+# historical value (24h) from before backup_interval_hours was a Setting.
+DEFAULT_INTERVAL_HOURS = int(STALE_S // 3600)
+
+
+def effective_backup_settings(db, settings) -> tuple[bool, int, int]:
+    """(enabled, retention_days, interval_hours) -- a runtime Setting
+    overrides the env default (same pattern as config.effective_auth), so
+    the Settings UI can edit these without a redeploy. `db` is a State
+    instance; `settings` the process-level Settings object."""
+    db_enabled = db.get_setting("backup_enabled")
+    enabled = bool(db_enabled) if db_enabled is not None else settings.backup_enabled
+    db_retention = db.get_setting("backup_retention_days")
+    retention_days = (
+        int(db_retention) if db_retention is not None else settings.backup_retention_days
+    )
+    db_interval = db.get_setting("backup_interval_hours")
+    interval_hours = int(db_interval) if db_interval is not None else DEFAULT_INTERVAL_HOURS
+    return enabled, retention_days, interval_hours
 
 
 def run_backup_cycle(db, db_path: Path, backup_dir: Path, retention_days: int) -> dict:

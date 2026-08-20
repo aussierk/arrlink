@@ -11,8 +11,9 @@ from ..state import State
 
 TMDB_BASE = "https://api.themoviedb.org/3"
 
-# TMDB genre/certification lists the US certification scheme is used for
-# both radarr/sonarr suggestion lists today not configurable per-country yet, v1 simplification.
+# Fallback certification country when no `tmdb_certification_country`
+# Setting is configured (Settings > General > Region). Determines which
+# country's certification scheme (e.g. PG-13 vs 12A/15/18) is fetched.
 TMDB_CERTIFICATION_COUNTRY = "US"
 DEFAULT_TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TRASH_QUALITY_URL = (
@@ -67,7 +68,8 @@ async def sync_tmdb_vocabulary(db: State) -> dict[str, int]:
     for app_type, path in cert_paths.items():
         data = await _tmdb_get(path, key)
         by_country = data.get("certifications") if isinstance(data, dict) else None
-        rows = (by_country or {}).get(TMDB_CERTIFICATION_COUNTRY) or []
+        country = db.get_setting("tmdb_certification_country") or TMDB_CERTIFICATION_COUNTRY
+        rows = (by_country or {}).get(country) or []
         entries = [
             (str(c["certification"]).strip(), None)
             for c in rows
