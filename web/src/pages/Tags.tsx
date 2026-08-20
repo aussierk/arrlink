@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useBlocker } from 'react-router-dom'
 import {
   api,
   fmtTime,
@@ -7,7 +8,7 @@ import {
   type ConditionCategory,
   type TagItem,
 } from '../lib/api'
-import { registerBeforeUnload, registerUnsavedGuard } from '../lib/unsavedGuard'
+import { useBeforeUnloadGuard } from '../lib/unsavedGuard'
 
 const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
   'genre',
@@ -46,10 +47,7 @@ export default function Tags() {
     Record<number, ConditionCategory | null>
   >({})
   const [saving, setSaving] = useState(false)
-  const pendingEditsRef = useRef(pendingEdits)
-  pendingEditsRef.current = pendingEdits
-  const appIdRef = useRef(appId)
-  appIdRef.current = appId
+  const hasPending = Object.keys(pendingEdits).length > 0
 
   const loadApps = useCallback(async () => {
     try {
@@ -92,14 +90,12 @@ export default function Tags() {
   }, [loadTags])
 
   const saveTagEdits = useCallback(async (): Promise<boolean> => {
-    const edits = pendingEditsRef.current
-    const ids = Object.keys(edits).map(Number)
-    const curAppId = appIdRef.current
-    if (ids.length === 0 || curAppId === null) return true
+    const ids = Object.keys(pendingEdits).map(Number)
+    if (ids.length === 0 || appId === null) return true
     setSaving(true)
     try {
       const results = await Promise.all(
-        ids.map((id) => api.setTagCategory(curAppId, id, edits[id])),
+        ids.map((id) => api.setTagCategory(appId, id, pendingEdits[id])),
       )
       const byId = new Map(results.map((r) => [r.id, r]))
       setTags((prev) => prev.map((tg) => byId.get(tg.id) ?? tg))
@@ -111,21 +107,29 @@ export default function Tags() {
     } finally {
       setSaving(false)
     }
-  }, [])
+  }, [pendingEdits, appId])
 
-  // Registered once for the lifetime of this page — the guard functions
-  // read pendingEditsRef live, so they don't need re-registering on every
-  // edit. See lib/unsavedGuard.ts for what this actually covers (sidebar
-  // nav + tab close, not the browser back button).
+  // Blocks any in-app navigation away from this page (sidebar, SettingsNav,
+  // browser back/forward) while there's something unsaved — react-router's
+  // own mechanism, works for every nav surface with no per-surface wiring.
+  // beforeunload (tab close/refresh/URL bar) isn't a router navigation, so
+  // it needs the separate hook below.
+  const blocker = useBlocker(hasPending)
   useEffect(() => {
-    const hasUnsaved = () => Object.keys(pendingEditsRef.current).length > 0
-    const unregisterNav = registerUnsavedGuard(hasUnsaved, saveTagEdits)
-    const unregisterUnload = registerBeforeUnload(hasUnsaved)
-    return () => {
-      unregisterNav()
-      unregisterUnload()
+    if (blocker.state !== 'blocked') return
+    const shouldSave = window.confirm(
+      'You have unsaved tag classification changes. Save them before leaving this page?',
+    )
+    if (!shouldSave) {
+      blocker.proceed()
+      return
     }
-  }, [saveTagEdits])
+    void saveTagEdits().then((ok) => {
+      if (ok) blocker.proceed()
+      else blocker.reset() // save failed -- stay so the error is visible
+    })
+  }, [blocker, saveTagEdits])
+  useBeforeUnloadGuard(hasPending)
 
   function stageTagCategory(tagId: number, category: ConditionCategory | null) {
     const tag = tags.find((tg) => tg.id === tagId)
@@ -141,7 +145,7 @@ export default function Tags() {
   }
 
   async function switchApp(nextId: number) {
-    if (Object.keys(pendingEdits).length > 0) {
+    if (hasPending) {
       const shouldSave = window.confirm(
         'You have unsaved tag classification changes. Save them before switching services?',
       )
@@ -351,7 +355,7 @@ export default function Tags() {
         </button>
         <button
           onClick={() => void saveTagEdits()}
-          disabled={Object.keys(pendingEdits).length === 0 || saving}
+          disabled={!hasPending || saving}
           className="ml-auto rounded-md border border-amber-500/50 px-4 py-1.5 text-sm font-medium text-amber-300 hover:bg-amber-950/40 disabled:opacity-40"
         >
           {saving

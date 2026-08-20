@@ -1,13 +1,9 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import SettingsNav from './settings/SettingsNav'
-import GeneralSection from './settings/GeneralSection'
-import ServicesSection from './settings/ServicesSection'
-import AuthenticationSection from './settings/AuthenticationSection'
-import AccessControlSection from './settings/AccessControlSection'
-import VocabularySection from './settings/VocabularySection'
 
-/** Settings shell: header, sub-nav, and the routed section content. */
+/** Settings shell: header, sub-nav, and the routed section content (see
+ * router.tsx for the settings/* children this renders via Outlet). */
 export default function Settings() {
   const { t } = useTranslation()
   return (
@@ -20,14 +16,7 @@ export default function Settings() {
       <div className="flex gap-8">
         <SettingsNav />
         <div className="min-w-0 flex-1">
-          <Routes>
-            <Route index element={<Navigate to="general" replace />} />
-            <Route path="general" element={<GeneralSection />} />
-            <Route path="services" element={<ServicesSection />} />
-            <Route path="authentication" element={<AuthenticationSection />} />
-            <Route path="access" element={<AccessControlSection />} />
-            <Route path="vocabulary" element={<VocabularySection />} />
-          </Routes>
+          <Outlet />
         </div>
       </div>
     </div>

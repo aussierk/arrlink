@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard,
@@ -8,15 +8,7 @@ import {
   Settings as SettingsIcon,
   Tags as TagsIcon,
 } from 'lucide-react'
-import RequireAuth from './components/RequireAuth'
 import { api, type Me } from './lib/api'
-import { confirmNavigation } from './lib/unsavedGuard'
-import Dashboard from './pages/Dashboard'
-import LoginPage from './pages/LoginPage'
-import Logs from './pages/Logs'
-import Rules from './pages/Rules'
-import Settings from './pages/Settings'
-import Tags from './pages/Tags'
 
 // Links live on the Dashboard (not a standalone tab). Apps live under Settings → Services.
 const nav = [
@@ -27,29 +19,20 @@ const nav = [
   { to: '/settings', labelKey: 'nav.settings', end: false, icon: SettingsIcon },
 ] as const
 
-export default function App() {
-  return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route
-        path="/*"
-        element={
-          <RequireAuth>
-            <Shell />
-          </RequireAuth>
-        }
-      />
-    </Routes>
-  )
-}
-
-function Shell() {
+/** Layout for everything behind RequireAuth: sidebar + routed content. Nav
+ * clicks are plain <NavLink>s — a page with unsaved edits (e.g. Tags) blocks
+ * navigation away from itself via react-router's useBlocker, which applies
+ * regardless of which nav surface (this sidebar, SettingsNav, the browser
+ * back button) triggered it. See pages/Tags.tsx. */
+export default function Shell() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [me, setMe] = useState<Me | null>(null)
 
   useEffect(() => {
-    api.me().then(setMe).catch(() => {})
+    api
+      .me()
+      .then(setMe)
+      .catch(() => {})
   }, [])
 
   return (
@@ -67,16 +50,6 @@ function Shell() {
               key={i.to}
               to={i.to}
               end={i.end}
-              onClick={(e) => {
-                // Sidebar nav is the only in-app navigation this app has
-                // guarded (see lib/unsavedGuard.ts) — intercept it here so
-                // a page like Tags with unsaved edits gets a chance to save
-                // first, then navigate ourselves once that's settled.
-                e.preventDefault()
-                void confirmNavigation().then((proceed) => {
-                  if (proceed) navigate(i.to)
-                })
-              }}
               className={({ isActive }) =>
                 `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
                   isActive
@@ -105,14 +78,7 @@ function Shell() {
         )}
       </aside>
       <main className="flex-1 p-8">
-        <Routes>
-          <Route index element={<Dashboard />} />
-          <Route path="apps" element={<Navigate to="/settings/services" replace />} />
-          <Route path="tags" element={<Tags />} />
-          <Route path="rules" element={<Rules />} />
-          <Route path="logs" element={<Logs />} />
-          <Route path="settings/*" element={<Settings />} />
-        </Routes>
+        <Outlet />
       </main>
     </div>
   )
