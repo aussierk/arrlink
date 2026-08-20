@@ -34,7 +34,6 @@ _PROTECTED_SETTING_KEYS = frozenset(
         "oidc_issuer",
         "oidc_client_id",
         "oidc_client_secret",
-        "oidc_redirect_uri",
         "tmdb_api_key",
     }
 )
@@ -85,7 +84,6 @@ class AuthSettingsIn(BaseModel):
     oidc_issuer: str = ""
     oidc_client_id: str = ""
     oidc_client_secret: str = ""
-    oidc_redirect_uri: str | None = None  # None = unchanged; "" = clear (auto)
 
 
 def _auth_view(db: State, env) -> dict:
@@ -103,7 +101,6 @@ def _auth_view(db: State, env) -> dict:
         "oidc_issuer": auth["oidc_issuer"] or "",
         "oidc_client_id": auth["oidc_client_id"] or "",
         "oidc_client_secret_set": bool(auth["oidc_client_secret"]),
-        "oidc_redirect_uri": auth["oidc_redirect_uri"] or "",
     }
 
 
@@ -156,11 +153,6 @@ def put_auth(
         db.set_setting("oidc_client_id", body.oidc_client_id)
     if body.oidc_client_secret:
         db.set_setting("oidc_client_secret", body.oidc_client_secret)
-    if body.oidc_redirect_uri is not None:
-        if body.oidc_redirect_uri:
-            db.set_setting("oidc_redirect_uri", body.oidc_redirect_uri)
-        else:
-            db.delete_setting("oidc_redirect_uri")
     db.log_event(
         "info",
         f"auth settings updated (password={body.password_enabled}, "

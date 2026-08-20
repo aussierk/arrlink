@@ -182,7 +182,8 @@ itself.
    **provider** (OpenID Connect). In the application settings use the
    **client** tab to get the **client id** and **client secret**
    (confidential client).
-2. Redirect URI: `http(s)://<host>:8270/api/auth/oidc/callback`
+2. Redirect URI: `http(s)://<host>:8270/auth/oidc/callback` (the host/port/
+   scheme come from `APP_URL` if set, else `TRUSTED_HOSTS`, else the request)
 3. Set `AUTH_OIDC_ENABLED=true`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
    `OIDC_CLIENT_SECRET` in the compose file.
 4. (Optional) restrict access: Settings → Access control → allowed groups
@@ -215,13 +216,21 @@ same as you would for Radarr/Sonarr themselves.
   this IP/CIDR (default: localhost only). Set it to your reverse proxy's
   address if you have one, so it isn't trusting forwarded headers from
   arbitrary clients.
+- `APP_URL`: external base URL ArrLink is reached at — scheme + host +
+  optional port + optional sub-path (e.g. `https://arrlink.example.com` or
+  `https://apps.example.com/arrlink`). The OIDC redirect URI sent to your
+  provider is `APP_URL` + `/auth/oidc/callback`. Set it whenever OIDC is
+  enabled without a host-checking proxy in front, or when the outside-world
+  scheme/port/path differs from what ArrLink sees. A sub-path assumes the
+  proxy strips it before ArrLink.
 - `TRUSTED_HOSTS`: comma-separated hostname allow-list for the `Host`
   header (default: unrestricted). Recommended if OIDC is enabled without
-  `OIDC_REDIRECT_URI` pinned and there's no host-checking proxy in front of
-  ArrLink — otherwise the redirect URI sent to your provider is derived
-  from whatever `Host` header the request carries. `127.0.0.1`/`localhost`
-  stay implicitly trusted regardless (the container's own healthcheck
-  needs them).
+  `APP_URL` set and there's no host-checking proxy in front of ArrLink —
+  otherwise the redirect URI sent to your provider is derived from whatever
+  `Host` header the request carries. Its first non-loopback entry is used
+  as the redirect URI host (https) when `APP_URL` is unset.
+  `127.0.0.1`/`localhost` stay implicitly trusted regardless (the
+  container's own healthcheck needs them).
 - Password login is rate-limited (see above); there's no rate limiting on
   other endpoints, matching the LAN-first assumption. If you're exposing
   ArrLink beyond your LAN, OIDC is the recommended login method.

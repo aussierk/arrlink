@@ -294,9 +294,6 @@
     "clientSecret": "Client secret",
     "clientSecretPlaceholderSet": "••••",
     "clientSecretPlaceholderUnset": "client secret",
-    "redirectUri": "Redirect URI",
-    "redirectUriHint": " (blank = auto)",
-    "redirectUriPlaceholder": "(auto) {origin}/api/auth/oidc/callback",
     "save": "Save authentication"
   },
   "settingsVocab": {

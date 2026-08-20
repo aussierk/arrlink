@@ -36,6 +36,15 @@ release forward — not retroactive.
   pattern doesn't trip the bugbear B008 false positive.
 
 ### Changed
+- **OIDC redirect URI: `APP_URL` replaces `OIDC_REDIRECT_URI`, callback
+  moved to `/auth/oidc/callback`.** The redirect URI sent to the provider
+  is now `APP_URL` (the deployment's external base URL, sub-path allowed) +
+  `/auth/oidc/callback`; when `APP_URL` is unset it derives from the first
+  non-loopback `TRUSTED_HOSTS` entry (https), then the request `Host`
+  header. `OIDC_REDIRECT_URI` and the Settings-page "Redirect URI" field
+  are gone. **Action required if you use OIDC:** register the new
+  `/auth/oidc/callback` path with your provider and set `APP_URL` (or
+  `TRUSTED_HOSTS`) if you previously pinned `OIDC_REDIRECT_URI`.
 - **Poller rewritten to scale with changes, not library size.** A no-change
   poll of a large library now issues a single transaction and zero row
   writes, versus one `UPDATE` + `fsync` per item + per file before. On a

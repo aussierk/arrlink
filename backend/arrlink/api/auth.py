@@ -23,6 +23,12 @@ from ..deps import get_db
 from ..state import State
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+# The OIDC provider redirects the user's browser straight to the callback
+# (no frontend code involved), so it lives on a short top-level path the
+# operator registers with the provider -- /auth/oidc/callback -- not under
+# /api/auth with the rest. cf. Profilarr's /auth/oidc/callback, Technitium's
+# /sso/callback.
+callback_router = APIRouter(prefix="/auth", tags=["auth"])
 
 SESSION_COOKIE = "arrlink_session"
 PASSWORD_COOKIE = "arrlink_pw"
@@ -71,18 +77,30 @@ def _client(auth: dict) -> OidcClient:
     )
 
 
-def _redirect_uri(request: Request, db: State, auth: dict) -> str:
-    if auth["oidc_redirect_uri"]:
-        return auth["oidc_redirect_uri"]
-    # Not pinned: derived from the request's Host header
+_CALLBACK_PATH = "/auth/oidc/callback"
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]"}
+
+
+def _redirect_uri(request: Request, db: State) -> str:
+    """The absolute ``redirect_uri`` handed to the OIDC provider."""
+    settings: Settings = request.app.state.settings
+
+    if settings.app_url:
+        return f"{settings.app_url.rstrip('/')}{_CALLBACK_PATH}"
+
+    for raw in (settings.trusted_hosts or "").split(","):
+        host = raw.strip()
+        if host and host not in _LOOPBACK_HOSTS and host.split(":", 1)[0] not in _LOOPBACK_HOSTS:
+            return f"https://{host}{_CALLBACK_PATH}"
+
     db.log_event(
         "warn",
         "OIDC redirect_uri not configured — derived from the request Host "
         "header (spoofable unless a trusted reverse proxy is in front of "
-        "this app). Set OIDC_REDIRECT_URI to pin it.",
+        "this app). Set APP_URL or TRUSTED_HOSTS to pin it.",
     )
     base = str(request.base_url).rstrip("/")
-    return f"{base}/api/auth/oidc/callback"
+    return f"{base}{_CALLBACK_PATH}"
 
 
 def _sanitize_next(path: str | None) -> str:
@@ -341,7 +359,7 @@ def login(
     params = {
         "response_type": "code",
         "client_id": client.client_id,
-        "redirect_uri": _redirect_uri(request, db, auth),
+        "redirect_uri": _redirect_uri(request, db),
         "scope": "openid profile email offline_access",
         "state": state,
         "nonce": nonce,
@@ -356,7 +374,7 @@ def login(
     return RedirectResponse(url, status_code=302)
 
 
-@router.get("/oidc/callback")
+@callback_router.get("/oidc/callback")
 def oidc_callback(
     request: Request,
     db: Annotated[State, Depends(get_db)],
@@ -391,7 +409,7 @@ def oidc_callback(
 
     client = _client(auth)
     try:
-        tok = client.exchange_code(code, row["verifier"], _redirect_uri(request, db, auth))
+        tok = client.exchange_code(code, row["verifier"], _redirect_uri(request, db))
     except OidcError as e:
         db.log_event("warn", f"OIDC code exchange failed: {e.detail}")
         raise HTTPException(502, f"OIDC exchange failed: {e.detail}") from e

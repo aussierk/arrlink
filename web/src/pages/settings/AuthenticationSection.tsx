@@ -25,7 +25,6 @@ export default function AuthenticationSection() {
   const [oidcClientId, setOidcClientId] = useState('')
   const [oidcClientSecret, setOidcClientSecret] = useState('')
   const [oidcClientSecretSet, setOidcClientSecretSet] = useState(false)
-  const [oidcRedirectUri, setOidcRedirectUri] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -40,7 +39,6 @@ export default function AuthenticationSection() {
       setOidcClientId(a.oidc_client_id)
       setOidcClientSecret('')
       setOidcClientSecretSet(a.oidc_client_secret_set)
-      setOidcRedirectUri(a.oidc_redirect_uri)
     } catch (e) {
       setErr(String(e))
     }
@@ -63,7 +61,6 @@ export default function AuthenticationSection() {
         oidc_issuer: oidcIssuer || undefined,
         oidc_client_id: oidcClientId || undefined,
         oidc_client_secret: oidcClientSecret || undefined,
-        oidc_redirect_uri: oidcRedirectUri || null,
       })
       setOk(t('settingsAuth.saved'))
       await load()
@@ -179,17 +176,6 @@ export default function AuthenticationSection() {
                     : t('settingsAuth.clientSecretPlaceholderUnset')
                 }
                 autoComplete="new-password"
-              />
-            </label>
-            <label className="col-span-2 block text-sm">
-              <span className="mb-1 block text-zinc-400">
-                {t('settingsAuth.redirectUri')} <span className="text-zinc-600">{t('settingsAuth.redirectUriHint')}</span>
-              </span>
-              <input
-                className={inputCls}
-                value={oidcRedirectUri}
-                onChange={(e) => setOidcRedirectUri(e.target.value)}
-                placeholder={t('settingsAuth.redirectUriPlaceholder')}
               />
             </label>
           </div>

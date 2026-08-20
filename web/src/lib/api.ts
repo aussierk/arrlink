@@ -74,7 +74,6 @@ export type AuthConfig = {
   oidc_issuer: string
   oidc_client_id: string
   oidc_client_secret_set: boolean
-  oidc_redirect_uri: string
 }
 
 export type AuthConfigInput = {
@@ -89,7 +88,6 @@ export type AuthConfigInput = {
   oidc_issuer?: string
   oidc_client_id?: string
   oidc_client_secret?: string
-  oidc_redirect_uri?: string | null
 }
 
 export type AppItem = {

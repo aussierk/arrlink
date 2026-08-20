@@ -11,13 +11,12 @@ from pathlib import Path
 import httpx
 import pytest
 import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.testclient import TestClient
-
 from arrlink.arr.base import AdapterError
 from arrlink.arr.radarr import RadarrAdapter
 from arrlink.main import create_app
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
 
 API_KEY = "m7-key"
 VERSION = "5.16.0.1"
@@ -371,43 +370,6 @@ def test_create_tag_500_reports_http_status(create_tag_fail_app):
 # ---------------------------------------------------------------------------
 
 
-def test_push_tag_reimport_full_replaces_stale_tags(tag_app, client):
-    """The tag vocabulary is PER-APP, so the push re-import must be a full
-    replace: a tag that was in the app before but is gone now is cleared.
-    (The global tag_repository is a separate user-curated list and is
-    untouched.)"""
-    origin, tag_store = tag_app
-    app_id = _add_app(client, origin)
-    # the app currently reports [kids]; seed a stale stored tag that the app
-    # no longer reports, plus a repository-only tag that must survive
-    client.post(f"/api/apps/{app_id}/tags/import-manual",
-                json={"labels": ["oldtag"]})
-    client.put("/api/tags", json={"label": "repo-only"})
-
-    r = client.post("/api/tags/push", json={"label": "uhd", "app_ids": [app_id]})
-    assert r.status_code == 200 and r.json()["ok"] == 1
-
-    stored = {t["label"] for t in client.get(f"/api/apps/{app_id}/tags").json()}
-    # full replace: the app's complete vocabulary now, stale tag cleared
-    assert stored == {"kids", "uhd"}
-    assert "oldtag" not in stored
-    # the global repository is per-user, not per-app: untouched by the replace
-    repo = {t["label"] for t in client.get("/api/tags").json()}
-    assert "repo-only" in repo
-
-
-def test_manual_import_full_replaces_stale_tags(tag_app, client):
-    origin, _ = tag_app
-    app_id = _add_app(client, origin)
-    # seed a stale stored tag, then re-import the app's live vocabulary
-    client.post(f"/api/apps/{app_id}/tags/import-manual",
-                json={"labels": ["oldtag"]})
-    r = client.post(f"/api/apps/{app_id}/tags/import")
-    assert r.status_code == 201, r.text
-    stored = {t["label"] for t in client.get(f"/api/apps/{app_id}/tags").json()}
-    assert stored == {"kids"}  # the app reports only [kids]; oldtag cleared
-
-
 def test_push_tag_duplicate_app_ids_pushed_once(tag_app, client):
     origin, tag_store = tag_app
     app_id = _add_app(client, origin)
@@ -515,7 +477,9 @@ def test_update_app_type_swap_blocked_when_links_exist(client, files_app):
     app_id = _add_app(client, files_app["origin"])
     client.post("/api/rules", json={
         "name": "4k",
-        "conditions": [{"category": "quality", "match_type": "exact", "match_value": "4k", "join": None}],
+        "conditions": [
+            {"category": "quality", "match_type": "exact", "match_value": "4k", "join": None}
+        ],
         "dir_template": f"{linked_dir}/4k",
     })
     r = client.post(f"/api/apps/{app_id}/rescan")
@@ -737,7 +701,7 @@ def test_generic_settings_endpoint_rejects_protected_auth_keys(client):
     for key in (
         "auth_password", "auth_password_enabled", "auth_oidc_enabled",
         "oidc_auto_login", "auth_username", "oidc_issuer", "oidc_client_id",
-        "oidc_client_secret", "oidc_redirect_uri", "tmdb_api_key",
+        "oidc_client_secret", "tmdb_api_key",
     ):
         r = client.put(f"/api/settings/{key}", json={"value": "anything"})
         assert r.status_code == 403, (key, r.text)

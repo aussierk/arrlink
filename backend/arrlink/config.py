@@ -48,7 +48,6 @@ def effective_auth(db, env) -> dict:
         "oidc_issuer": get("oidc_issuer") or env.oidc_issuer or "",
         "oidc_client_id": get("oidc_client_id") or env.oidc_client_id or "",
         "oidc_client_secret": get("oidc_client_secret") or env.oidc_client_secret or "",
-        "oidc_redirect_uri": get("oidc_redirect_uri") or env.oidc_redirect_uri or "",
         "session_ttl_h": env.session_ttl_h,
     }
 
@@ -70,15 +69,21 @@ class Settings(BaseSettings):
     oidc_issuer: str | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None
-    oidc_redirect_uri: str | None = None  # default: <origin>/api/auth/oidc/callback
     session_ttl_h: int = 12
+    # The deployment's external base URL -- scheme + host + optional port +
+    # optional sub-path, e.g. "https://arrlink.example.com" or
+    # "https://apps.example.com/arrlink". When set, api/auth._redirect_uri()
+    # builds the OIDC redirect_uri as APP_URL + "/auth/oidc/callback"; when
+    # unset it falls back to the first non-loopback trusted_hosts entry
+    # (https), then the spoofable request Host header. A sub-path assumes the
+    # reverse proxy strips it before arrlink (no internal sub-path routing).
+    app_url: str | None = None
     # Comma-separated hostnames this app is allowed to think it's being
-    # reached as (e.g. "arrlink.example.com,192.168.1.50"). When OIDC is
-    # enabled and oidc_redirect_uri isn't pinned, the redirect_uri sent to
-    # the provider is derived from the request's own Host header -- setting
-    # this closes that off from a spoofed Host on a directly-exposed
-    # deployment (see main.py, which adds TrustedHostMiddleware only when
-    # this is set).
+    # reached as (e.g. "arrlink.example.com,192.168.1.50"). Two uses: main.py
+    # adds TrustedHostMiddleware when this is set (rejecting a spoofed Host),
+    # and api/auth._redirect_uri() derives the OIDC redirect_uri from the
+    # first non-loopback entry when app_url isn't set -- static config
+    # instead of the spoofable request Host header.
     trusted_hosts: str | None = None
     backup_enabled: bool = True
     backup_retention_days: int = 7

@@ -171,6 +171,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(auth.callback_router)
     app.include_router(backup_api.router)
     app.include_router(apps.router)
     app.include_router(links_api.router)

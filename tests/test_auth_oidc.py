@@ -13,14 +13,12 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 import uvicorn
+from arrlink.auth import sessions as sess
+from arrlink.auth.oidc import OidcClient, b64url_encode, clear_discovery_cache, decode_jwt_payload
+from arrlink.main import create_app
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-
-from arrlink.auth import sessions as sess
-from arrlink.auth.oidc import OidcClient, b64url_encode, decode_jwt_payload
-from arrlink.auth.oidc import clear_discovery_cache
-from arrlink.main import create_app
 
 CLIENT_ID = "test-client"
 CLIENT_SECRET = "test-secret"
@@ -264,7 +262,7 @@ def _set_cookies(r) -> str:
 
 def complete_login(client: TestClient, code: str, state: str) -> TestClient:
     r = client.get(
-        f"/api/auth/oidc/callback?code={code}&state={state}",
+        f"/auth/oidc/callback?code={code}&state={state}",
         follow_redirects=False,
     )
     assert r.status_code == 302, r.text
@@ -330,7 +328,7 @@ def test_oidc_state_cannot_be_reused_after_consumption(client, issuer):
     complete_login(client, code, state)
 
     r2 = client.get(
-        f"/api/auth/oidc/callback?code={code}&state={state}",
+        f"/auth/oidc/callback?code={code}&state={state}",
         follow_redirects=False,
     )
     assert r2.status_code == 400
@@ -340,7 +338,7 @@ def test_login_preserves_next_path(client, issuer):
     email = "bob@example.com"
     code, state = start_login(client, issuer, email, next_path="/rules")
     r = client.get(
-        f"/api/auth/oidc/callback?code={code}&state={state}", follow_redirects=False
+        f"/auth/oidc/callback?code={code}&state={state}", follow_redirects=False
     )
     assert r.headers["location"] == "/rules"
 
@@ -349,7 +347,7 @@ def test_bad_code_rejected(client, issuer):
     email = "carol@example.com"
     code, state = start_login(client, issuer, email)
     r = client.get(
-        f"/api/auth/oidc/callback?code=not-a-real-code&state={state}",
+        f"/auth/oidc/callback?code=not-a-real-code&state={state}",
         follow_redirects=False,
     )
     assert r.status_code == 502
@@ -358,7 +356,7 @@ def test_bad_code_rejected(client, issuer):
 
 def test_unknown_state_rejected(client):
     r = client.get(
-        "/api/auth/oidc/callback?code=whatever&state=never-issued",
+        "/auth/oidc/callback?code=whatever&state=never-issued",
         follow_redirects=False,
     )
     assert r.status_code == 400
@@ -380,7 +378,7 @@ def test_expired_login_state_rejected_and_swept(client, issuer):
     client.app.state.db.commit()
 
     r = client.get(
-        f"/api/auth/oidc/callback?code={code}&state={state}",
+        f"/auth/oidc/callback?code={code}&state={state}",
         follow_redirects=False,
     )
     assert r.status_code == 400
@@ -413,7 +411,7 @@ def test_nonce_mismatch_rejected(client, issuer):
     # provider "sends back" a code whose id_token carries a different nonce
     code = issuer.issue_code(email, "wrong-nonce", state)
     r = client.get(
-        f"/api/auth/oidc/callback?code={code}&state={state}",
+        f"/auth/oidc/callback?code={code}&state={state}",
         follow_redirects=False,
     )
     assert r.status_code == 400
@@ -427,7 +425,7 @@ def test_pkce_verifier_enforced(client, issuer):
     # backend's code_verifier would satisfy → PKCE fails → 502
     code2 = issuer.issue_code(email, "n2", state, challenge_override="bogus")
     r = client.get(
-        f"/api/auth/oidc/callback?code={code2}&state={state}",
+        f"/auth/oidc/callback?code={code2}&state={state}",
         follow_redirects=False,
     )
     assert r.status_code == 502
@@ -461,7 +459,7 @@ def test_allowlist_groups(client, issuer):
     code, state = start_login(client, issuer, email)
     issuer.state["users"][email]["groups"] = ["staff"]
     r = client.get(
-        f"/api/auth/oidc/callback?code={code}&state={state}",
+        f"/auth/oidc/callback?code={code}&state={state}",
         follow_redirects=False,
     )
     assert r.status_code == 302
@@ -475,7 +473,7 @@ def test_allowlist_groups(client, issuer):
     code2, state2 = start_login(client, issuer, email2)
     issuer.state["users"][email2]["groups"] = ["vip", "staff"]
     r = client.get(
-        f"/api/auth/oidc/callback?code={code2}&state={state2}",
+        f"/auth/oidc/callback?code={code2}&state={state2}",
         follow_redirects=False,
     )
     assert "arrlink_session=" in _set_cookies(r)
@@ -489,7 +487,7 @@ def test_allowlist_emails(client, issuer):
     email = "other@example.com"
     code, state = start_login(client, issuer, email)
     r = client.get(
-        f"/api/auth/oidc/callback?code={code}&state={state}",
+        f"/auth/oidc/callback?code={code}&state={state}",
         follow_redirects=False,
     )
     assert "arrlink_auth_error=not_authorized" in _set_cookies(r)
@@ -497,7 +495,7 @@ def test_allowlist_emails(client, issuer):
     email2 = "only@example.com"
     code2, state2 = start_login(client, issuer, email2)
     r = client.get(
-        f"/api/auth/oidc/callback?code={code2}&state={state2}",
+        f"/auth/oidc/callback?code={code2}&state={state2}",
         follow_redirects=False,
     )
     assert "arrlink_session=" in _set_cookies(r)
@@ -514,7 +512,7 @@ def test_allowlist_case_insensitive(client, issuer):
     code, state = start_login(client, issuer, email)
     issuer.state["users"][email]["groups"] = ["vip"]
     r = client.get(
-        f"/api/auth/oidc/callback?code={code}&state={state}",
+        f"/auth/oidc/callback?code={code}&state={state}",
         follow_redirects=False,
     )
     assert "arrlink_session=" in _set_cookies(r)
@@ -523,7 +521,7 @@ def test_allowlist_case_insensitive(client, issuer):
     email2 = "only@example.com"
     code2, state2 = start_login(client, issuer, email2)
     r = client.get(
-        f"/api/auth/oidc/callback?code={code2}&state={state2}",
+        f"/auth/oidc/callback?code={code2}&state={state2}",
         follow_redirects=False,
     )
     assert "arrlink_session=" in _set_cookies(r)
@@ -976,6 +974,58 @@ def test_redirect_uri_not_pinned_logs_warning(client):
         "SELECT message FROM events ORDER BY id DESC LIMIT 50"
     )
     assert any("redirect_uri not configured" in r["message"] for r in rows)
+
+
+def _oidc_env(monkeypatch, issuer, tmp_path):
+    monkeypatch.setenv("AUTH_OIDC_ENABLED", "true")
+    monkeypatch.setenv("OIDC_ISSUER", issuer.url)
+    monkeypatch.setenv("OIDC_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setenv("OIDC_CLIENT_SECRET", CLIENT_SECRET)
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+
+
+def _login_redirect_uri(c, **kwargs):
+    r = c.get("/api/auth/login", follow_redirects=False, **kwargs)
+    assert r.status_code == 302, r.text
+    return parse_qs(urlsplit(r.headers["location"]).query)["redirect_uri"][0]
+
+
+def test_redirect_uri_derives_from_trusted_hosts_when_not_pinned(
+    issuer, tmp_path, monkeypatch
+):
+    """RFC 6749 3.1.2: the redirect_uri must be an absolute, pre-registered
+    URI. With APP_URL unset but TRUSTED_HOSTS set, it is built from the first
+    *non-loopback* TRUSTED_HOSTS entry (static config, https) -- not the
+    spoofable request Host header -- and no warning is logged."""
+    _oidc_env(monkeypatch, issuer, tmp_path)
+    monkeypatch.setenv("TRUSTED_HOSTS", "127.0.0.1,arrlink.example.com")
+    clear_discovery_cache()
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        # request comes in as loopback (allowed by TrustedHostMiddleware);
+        # the derived redirect_uri must still be the non-loopback config host
+        uri = _login_redirect_uri(c, headers={"Host": "127.0.0.1"})
+        assert uri == "https://arrlink.example.com/auth/oidc/callback"
+        rows = c.app.state.db.query(
+            "SELECT message FROM events ORDER BY id DESC LIMIT 50"
+        )
+        assert not any("redirect_uri not configured" in row["message"] for row in rows)
+    clear_discovery_cache()
+
+
+def test_redirect_uri_from_app_url_including_subpath(issuer, tmp_path, monkeypatch):
+    """APP_URL is the external base URL; the callback path is appended to it
+    verbatim, sub-path and all (the proxy is assumed to strip the prefix
+    before arrlink). It wins over TRUSTED_HOSTS and the request Host."""
+    _oidc_env(monkeypatch, issuer, tmp_path)
+    monkeypatch.setenv("APP_URL", "https://apps.example.com/arrlink/")
+    monkeypatch.setenv("TRUSTED_HOSTS", "other.example.com")
+    clear_discovery_cache()
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        uri = _login_redirect_uri(c, headers={"Host": "other.example.com"})
+        assert uri == "https://apps.example.com/arrlink/auth/oidc/callback"
+    clear_discovery_cache()
 
 
 # ---------------------------------------------------------------------------
