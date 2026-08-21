@@ -701,7 +701,7 @@ def test_generic_settings_endpoint_rejects_protected_auth_keys(client):
     for key in (
         "auth_password", "auth_password_enabled", "auth_oidc_enabled",
         "oidc_auto_login", "auth_username", "oidc_issuer", "oidc_client_id",
-        "oidc_client_secret", "tmdb_api_key",
+        "oidc_client_secret", "tmdb_api_key", "log_level", "log_size_limit_mb",
     ):
         r = client.put(f"/api/settings/{key}", json={"value": "anything"})
         assert r.status_code == 403, (key, r.text)
@@ -721,3 +721,59 @@ def test_generic_settings_endpoint_logs_events(client):
     logs = client.get("/api/logs?limit=20").json()
     assert any("setting deleted: fs_fallback" in e["message"] for e in logs)
 
+
+
+def test_effective_settings_app_title_and_url_roundtrip(client):
+    r = client.get("/api/settings/effective")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["app_title"] == "ArrLink"
+    assert j["app_url"] == ""
+    assert j["display_language"] == "en"
+    assert j["display_timezone"] == "UTC"
+    assert j["bind_address"] == "0.0.0.0"
+    assert j["port"] == 8270
+
+    client.put("/api/settings/app_title", json={"value": "My ArrLink"})
+    client.put("/api/settings/app_url", json={"value": "https://arrlink.example.com"})
+    j = client.get("/api/settings/effective").json()
+    assert j["app_title"] == "My ArrLink"
+    assert j["app_url"] == "https://arrlink.example.com"
+
+
+def test_logging_settings_endpoint_get_put(client):
+    import logging
+
+    r = client.get("/api/settings/logging")
+    assert r.status_code == 200
+    assert r.json() == {"log_level": "info", "log_size_limit_mb": 10}
+
+    r = client.put("/api/settings/logging", json={"log_level": "debug", "log_size_limit_mb": 5})
+    assert r.status_code == 200
+    assert r.json() == {"log_level": "debug", "log_size_limit_mb": 5}
+    assert client.get("/api/settings/logging").json() == {
+        "log_level": "debug",
+        "log_size_limit_mb": 5,
+    }
+
+    # actually live-applied, not just stored -- no restart needed
+    assert logging.getLogger().level == logging.DEBUG
+    from arrlink import config as config_mod
+
+    assert config_mod._file_handler is not None
+    assert config_mod._file_handler.maxBytes == 5 * 1024 * 1024
+
+    client.put("/api/settings/logging", json={"log_level": "info", "log_size_limit_mb": 10})
+
+
+def test_logging_settings_endpoint_rejects_bad_input(client):
+    r = client.put("/api/settings/logging", json={"log_level": "bogus", "log_size_limit_mb": 10})
+    assert r.status_code == 422
+
+    r = client.put("/api/settings/logging", json={"log_level": "info", "log_size_limit_mb": 0})
+    assert r.status_code == 422
+
+    r = client.put(
+        "/api/settings/logging", json={"log_level": "info", "log_size_limit_mb": 1001}
+    )
+    assert r.status_code == 422

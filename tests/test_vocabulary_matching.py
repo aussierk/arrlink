@@ -524,6 +524,37 @@ def test_vocabulary_get_endpoint_scopes(client):
     assert client.get("/api/vocabulary?category=bogus&app_type=radarr").status_code == 422
 
 
+def test_tmdb_certification_region_db_override(client, monkeypatch):
+    """Settings > General > Region (tmdb_certification_country) determines
+    which country's certification scheme sync_tmdb_vocabulary fetches."""
+    import asyncio
+
+    from arrlink.core import vocabulary as vocab_mod
+
+    db = client.app.state.db
+    db.set_setting("tmdb_api_key", "test-key")
+    db.set_setting("tmdb_certification_country", "GB")
+
+    cert_response = {
+        "certifications": {
+            "US": [{"certification": "PG-13"}],
+            "GB": [{"certification": "12A"}],
+        }
+    }
+
+    async def fake_tmdb_get(path, api_key):
+        if "genre" in path:
+            return {"genres": []}
+        return cert_response
+
+    monkeypatch.setattr(vocab_mod, "_tmdb_get", fake_tmdb_get)
+    asyncio.run(vocab_mod.sync_tmdb_vocabulary(db))
+
+    r = client.get("/api/vocabulary?category=certification&app_type=radarr")
+    values = {row["value"] for row in r.json()}
+    assert values == {"12A"}  # GB, not the US default
+
+
 def test_tmdb_settings_masked(client):
     r = client.get("/api/settings/tmdb")
     assert r.status_code == 200

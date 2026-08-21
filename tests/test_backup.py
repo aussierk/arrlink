@@ -8,6 +8,7 @@ import time
 
 from arrlink.core.backup import (
     backup_now,
+    effective_backup_settings,
     list_backups,
     newest_backup_age_s,
     prune_old_backups,
@@ -173,10 +174,62 @@ def test_list_backups(tmp_path):
     assert out[0]["size"] > 0
 
 
-def test_backup_endpoint_manual_trigger(tmp_path, monkeypatch):
+def test_effective_backup_settings_db_override(tmp_path, monkeypatch):
+    """A runtime Setting overrides the env default for
+    backup_enabled/backup_retention_days/backup_interval_hours -- same
+    pattern as config.effective_auth -- so Settings > Backup can edit these
+    without a redeploy."""
+    from arrlink.config import Settings
+
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("BACKUP_ENABLED", "true")
+    monkeypatch.setenv("BACKUP_RETENTION_DAYS", "7")
+    settings = Settings()
+    db = State(tmp_path / "arrlink.db")
+
+    assert effective_backup_settings(db, settings) == (True, 7, 24)
+
+    db.set_setting("backup_enabled", False)
+    db.set_setting("backup_retention_days", 30)
+    db.set_setting("backup_interval_hours", 12)
+    assert effective_backup_settings(db, settings) == (False, 30, 12)
+
+
+def test_backup_settings_endpoint_get_put(tmp_path, monkeypatch):
+    from arrlink.main import create_app
     from fastapi.testclient import TestClient
 
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("BACKUP_ENABLED", "true")
+    monkeypatch.setenv("BACKUP_RETENTION_DAYS", "7")
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        r = c.get("/api/backup/settings")
+        assert r.status_code == 200
+        assert r.json() == {"enabled": True, "retention_days": 7, "interval_hours": 24}
+
+        r = c.put(
+            "/api/backup/settings",
+            json={"enabled": False, "retention_days": 14, "interval_hours": 12},
+        )
+        assert r.status_code == 200
+        assert r.json() == {"enabled": False, "retention_days": 14, "interval_hours": 12}
+        assert c.get("/api/backup/settings").json() == {
+            "enabled": False,
+            "retention_days": 14,
+            "interval_hours": 12,
+        }
+
+        # a manual run still works even while the automatic loop is disabled
+        # -- `enabled` only gates the background loop, not this endpoint
+        r = c.post("/api/backup/run")
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+
+def test_backup_endpoint_manual_trigger(tmp_path, monkeypatch):
     from arrlink.main import create_app
+    from fastapi.testclient import TestClient
 
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     app = create_app(db_path=tmp_path / "arrlink.db")

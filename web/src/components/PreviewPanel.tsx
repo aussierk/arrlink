@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type RuleInput } from '../lib/api'
+import { api, getDisplayTimezone, type RuleInput } from '../lib/api'
 
 type PreviewData = {
   app_id: number
@@ -53,11 +53,7 @@ export default function PreviewPanel({
   }, [])
 
   if (appId === null) {
-    return (
-      <p className="text-xs text-zinc-600">
-        {t('previewPanel.pickApp')}
-      </p>
-    )
+    return <p className="text-xs text-zinc-600">{t('previewPanel.pickApp')}</p>
   }
 
   return (
@@ -68,7 +64,11 @@ export default function PreviewPanel({
           disabled={busy}
           className="rounded-md border border-indigo-500/50 px-3 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40 disabled:opacity-50"
         >
-          {busy ? t('previewPanel.previewing') : data ? t('previewPanel.rerun') : t('previewPanel.preview')}
+          {busy
+            ? t('previewPanel.previewing')
+            : data
+              ? t('previewPanel.rerun')
+              : t('previewPanel.preview')}
         </button>
         <button
           onClick={() => void run(true)}
@@ -81,22 +81,24 @@ export default function PreviewPanel({
           <span className="text-xs text-zinc-500">
             {t('previewPanel.filesWouldLink', {
               count: data.total,
-              time: new Date(stamp).toLocaleTimeString(),
+              time: new Date(stamp).toLocaleTimeString(undefined, {
+                timeZone: getDisplayTimezone(),
+              }),
             })}
             {' · '}
             {data.source === 'snapshot'
               ? t('previewPanel.fromSnapshot', {
                   time: data.snapshot_at
-                    ? new Date(data.snapshot_at * 1000).toLocaleTimeString()
+                    ? new Date(data.snapshot_at * 1000).toLocaleTimeString(undefined, {
+                        timeZone: getDisplayTimezone(),
+                      })
                     : '—',
                 })
               : t('previewPanel.fromLive')}
           </span>
         )}
       </div>
-      {err && (
-        <p className="text-xs text-red-400">{err}</p>
-      )}
+      {err && <p className="text-xs text-red-400">{err}</p>}
       {data && data.sample.length > 0 && (
         <div className="overflow-x-auto rounded-md border border-zinc-800">
           <table className="w-full text-xs">
@@ -111,12 +113,8 @@ export default function PreviewPanel({
               {data.sample.map((s, i) => (
                 <tr key={i}>
                   <td className="px-2 py-1 text-zinc-300">{s.item_title}</td>
-                  <td className="px-2 py-1 font-mono text-zinc-500">
-                    {s.src_path}
-                  </td>
-                  <td className="px-2 py-1 font-mono text-emerald-300">
-                    {s.dst_path}
-                  </td>
+                  <td className="px-2 py-1 font-mono text-zinc-500">{s.src_path}</td>
+                  <td className="px-2 py-1 font-mono text-emerald-300">{s.dst_path}</td>
                 </tr>
               ))}
             </tbody>

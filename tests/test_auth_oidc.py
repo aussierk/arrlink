@@ -286,6 +286,8 @@ def test_me_unauthenticated_without_cookie(client):
         "password_enabled": False,
         "oidc_enabled": True,
         "auto_login": True,
+        "app_title": "ArrLink",
+        "display_timezone": "UTC",
     }
 
 
@@ -809,6 +811,8 @@ def test_both_enabled_me_reports_both_flags(both_client):
         "password_enabled": True,
         "oidc_enabled": True,
         "auto_login": True,
+        "app_title": "ArrLink",
+        "display_timezone": "UTC",
     }
 
 
@@ -1025,6 +1029,19 @@ def test_redirect_uri_from_app_url_including_subpath(issuer, tmp_path, monkeypat
     with TestClient(app) as c:
         uri = _login_redirect_uri(c, headers={"Host": "other.example.com"})
         assert uri == "https://apps.example.com/arrlink/auth/oidc/callback"
+
+
+def test_redirect_uri_db_override_wins_over_env_app_url(issuer, tmp_path, monkeypatch):
+    """A runtime `app_url` Setting (Settings > General) overrides the env
+    APP_URL, same pattern as every other effective_*() field."""
+    _oidc_env(monkeypatch, issuer, tmp_path)
+    monkeypatch.setenv("APP_URL", "https://env.example.com")
+    clear_discovery_cache()
+    app = create_app(db_path=tmp_path / "arrlink.db")
+    with TestClient(app) as c:
+        c.app.state.db.set_setting("app_url", "https://db.example.com/arrlink")
+        uri = _login_redirect_uri(c, headers={"Host": "other.example.com"})
+        assert uri == "https://db.example.com/arrlink/auth/oidc/callback"
     clear_discovery_cache()
 
 

@@ -10,8 +10,8 @@ import Settings from './pages/Settings'
 import GeneralSection from './pages/settings/GeneralSection'
 import ServicesSection from './pages/settings/ServicesSection'
 import AuthenticationSection from './pages/settings/AuthenticationSection'
-import AccessControlSection from './pages/settings/AccessControlSection'
 import VocabularySection from './pages/settings/VocabularySection'
+import BackupSection from './pages/settings/BackupSection'
 
 /** Data router (createBrowserRouter/RouterProvider, not <BrowserRouter>) --
  * needed for react-router's useBlocker, which only works with this API (see
@@ -40,8 +40,8 @@ export const router = createBrowserRouter([
           { path: 'general', element: <GeneralSection /> },
           { path: 'services', element: <ServicesSection /> },
           { path: 'authentication', element: <AuthenticationSection /> },
-          { path: 'access', element: <AccessControlSection /> },
           { path: 'vocabulary', element: <VocabularySection /> },
+          { path: 'backup', element: <BackupSection /> },
         ],
       },
     ],

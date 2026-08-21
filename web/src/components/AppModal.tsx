@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { Plug } from 'lucide-react'
 import Modal from './Modal'
 import Toggle from './ui/Toggle'
+import Field from './ui/Field'
+import Alert from './ui/Alert'
 import { api, DEFAULT_POLL_INTERVAL_S, type AppInput, type AppItem } from '../lib/api'
 import { inputCls } from '../lib/ui'
 
@@ -40,7 +42,9 @@ export default function AppModal({
           poll_interval_s: DEFAULT_POLL_INTERVAL_S,
         },
   )
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(
+    null,
+  )
   const [testing, setTesting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -50,7 +54,10 @@ export default function AppModal({
     setTestResult(null)
     try {
       const r = await api.testApp({ ...form, api_key: form.api_key || 'x' })
-      setTestResult({ ok: true, message: t('appModal.connected', { name: r.name, version: r.version }) })
+      setTestResult({
+        ok: true,
+        message: t('appModal.connected', { name: r.name, version: r.version }),
+      })
     } catch (e) {
       setTestResult({ ok: false, message: t('appModal.failed', { error: String(e) }) })
     } finally {
@@ -80,94 +87,88 @@ export default function AppModal({
 
   return (
     <Modal
-      title={editing ? t('appModal.editTitle', { name: initial!.name }) : t('appModal.addTitle')}
+      title={
+        editing
+          ? t('appModal.editTitle', { name: initial!.name })
+          : t('appModal.addTitle')
+      }
       onClose={onClose}
     >
       <form onSubmit={submit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">{t('appModal.name')}</span>
-            <input
-              className={inputCls}
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={t('appModal.namePlaceholder')}
-            />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">{t('appModal.type')}</span>
-            <select
-              className={inputCls}
-              value={form.type}
-              disabled={editing}
-              onChange={(e) =>
-                setForm({ ...form, type: e.target.value as AppInput['type'] })
-              }
-            >
-              <option value="radarr">radarr</option>
-              <option value="sonarr">sonarr</option>
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">{t('appModal.url')}</span>
-            <input
-              className={inputCls}
-              required
-              value={form.url}
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
-              placeholder={t('appModal.urlPlaceholder')}
-            />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">
+        <Field label={t('appModal.name')}>
+          <input
+            className={inputCls}
+            required
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder={t('appModal.namePlaceholder')}
+          />
+        </Field>
+        <Field label={t('appModal.type')}>
+          <select
+            className={inputCls}
+            value={form.type}
+            disabled={editing}
+            onChange={(e) =>
+              setForm({ ...form, type: e.target.value as AppInput['type'] })
+            }
+          >
+            <option value="radarr">radarr</option>
+            <option value="sonarr">sonarr</option>
+          </select>
+        </Field>
+        <Field label={t('appModal.url')}>
+          <input
+            className={inputCls}
+            required
+            value={form.url}
+            onChange={(e) => setForm({ ...form, url: e.target.value })}
+            placeholder={t('appModal.urlPlaceholder')}
+          />
+        </Field>
+        <Field
+          label={
+            <>
               {t('appModal.apiKey')}
               {editing && (
                 <span className="text-zinc-600">{t('appModal.apiKeyKeepCurrent')}</span>
               )}
-            </span>
-            <input
-              className={inputCls}
-              type="password"
-              required={!editing}
-              value={form.api_key}
-              onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-            />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-zinc-400">{t('appModal.pollInterval')}</span>
-            <input
-              className={inputCls}
-              type="number"
-              min={10}
-              max={3600}
-              value={form.poll_interval_s}
-              onChange={(e) =>
-                setForm({ ...form, poll_interval_s: Number(e.target.value) })
-              }
-            />
-          </label>
-          <div className="flex items-end pb-2">
-            <Toggle
-              checked={form.enabled}
-              onChange={(v) => setForm({ ...form, enabled: v })}
-              label={t('appModal.enabled')}
-            />
-          </div>
-        </div>
+            </>
+          }
+        >
+          <input
+            className={inputCls}
+            type="password"
+            required={!editing}
+            value={form.api_key}
+            onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+          />
+        </Field>
+        <Field label={t('appModal.pollInterval')}>
+          <input
+            className={inputCls}
+            type="number"
+            min={10}
+            max={3600}
+            value={form.poll_interval_s}
+            onChange={(e) =>
+              setForm({ ...form, poll_interval_s: Number(e.target.value) })
+            }
+          />
+        </Field>
+        <Field label={t('appModal.enabled')}>
+          <Toggle
+            checked={form.enabled}
+            onChange={(v) => setForm({ ...form, enabled: v })}
+          />
+        </Field>
 
         {testResult && (
-          <p
-            className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}
-          >
+          <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
             {testResult.message}
           </p>
         )}
-        {err && (
-          <div className="rounded-md border border-red-900 bg-red-950/40 p-2 text-sm text-red-300">
-            {err}
-          </div>
-        )}
+        <Alert variant="error">{err}</Alert>
 
         <div className="flex items-center gap-2">
           <button
@@ -192,7 +193,11 @@ export default function AppModal({
               disabled={busy}
               className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              {busy ? t('appModal.saving') : editing ? t('appModal.saveChanges') : t('appModal.addApp')}
+              {busy
+                ? t('appModal.saving')
+                : editing
+                  ? t('appModal.saveChanges')
+                  : t('appModal.addApp')}
             </button>
           </div>
         </div>

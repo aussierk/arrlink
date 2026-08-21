@@ -8,7 +8,8 @@ import {
   Settings as SettingsIcon,
   Tags as TagsIcon,
 } from 'lucide-react'
-import { api, type Me } from './lib/api'
+import { api, setDisplayTimezone, type Me } from './lib/api'
+import { useDocumentTitle } from './lib/useDocumentTitle'
 
 // Links live on the Dashboard (not a standalone tab). Apps live under Settings → Services.
 const nav = [
@@ -31,16 +32,21 @@ export default function Shell() {
   useEffect(() => {
     api
       .me()
-      .then(setMe)
+      .then((m) => {
+        setMe(m)
+        setDisplayTimezone(m.display_timezone)
+      })
       .catch(() => {})
   }, [])
+
+  useDocumentTitle(me?.app_title)
 
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60 p-4">
         <div className="mb-8">
           <h1 className="text-lg font-semibold tracking-tight text-zinc-100">
-            {t('app.name')}
+            {me?.app_title ?? t('app.name')}
           </h1>
           <p className="text-xs text-zinc-500">{t('app.tagline')}</p>
         </div>

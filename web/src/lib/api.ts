@@ -61,6 +61,10 @@ export type Me = {
   oidc_enabled: boolean
   // oidc only: whether /login auto-redirects to the provider on load
   auto_login: boolean
+  // Readable pre-auth (this endpoint never 401s) so the login screen can
+  // show the configured title/render times before any session exists.
+  app_title: string
+  display_timezone: string
   email?: string | null
   name?: string | null
 }
@@ -71,6 +75,8 @@ export type AuthConfig = {
   auto_login: boolean
   ui_username: string
   ui_password_set: boolean
+  password_locked: boolean
+  password_locked_until: number | null
   oidc_issuer: string
   oidc_client_id: string
   oidc_client_secret_set: boolean
@@ -133,13 +139,17 @@ export type AppInput = {
 export const DEFAULT_POLL_INTERVAL_S = 300
 
 export type ConditionCategory =
-  | 'user' | 'genre' | 'language' | 'quality' | 'certification' | 'collection' | 'custom'
+  'user' | 'genre' | 'language' | 'quality' | 'certification' | 'collection' | 'custom'
 
 // The 5 categories with a real Radarr/Sonarr metadata equivalent and a
 // DB-backed vocabulary — the other two (user/custom) are purely tag-based,
 // unrestricted, and never offer "source: native" or "match_type: vocabulary".
 export const RICH_CATEGORIES: ConditionCategory[] = [
-  'genre', 'language', 'quality', 'certification', 'collection',
+  'genre',
+  'language',
+  'quality',
+  'certification',
+  'collection',
 ]
 
 export type ConditionSource = 'tag' | 'native'
@@ -240,6 +250,34 @@ export type EffectiveSettings = {
   fs_fallback: string
   fs_fallback_modes: string[]
   allowed_roots: string[]
+  app_title: string
+  app_url: string
+  display_language: string
+  display_timezone: string
+  // Informational only — set at process launch (entrypoint.sh reads $PORT
+  // before Python even starts), not editable from here.
+  bind_address: string
+  port: number
+}
+
+export type BackupInfo = {
+  name: string
+  size: number
+  created_at: number
+}
+
+export type BackupRunResult =
+  { ok: true; path: string; size: number; pruned: number } | { ok: false; error: string }
+
+export type BackupSettings = {
+  enabled: boolean
+  retention_days: number
+  interval_hours: number
+}
+
+export type LoggingSettings = {
+  log_level: string
+  log_size_limit_mb: number
 }
 
 export const api = {
@@ -287,8 +325,7 @@ export const api = {
     }),
 
   // Tag repository: a user-curated shared tag list that can be pushed to apps
-  listTagRepository: () =>
-    req<{ id: number; label: string }[]>('/api/tags'),
+  listTagRepository: () => req<{ id: number; label: string }[]>('/api/tags'),
   addTagToRepository: (label: string) =>
     req<{ id: number; label: string }>('/api/tags', {
       method: 'PUT',
@@ -297,10 +334,15 @@ export const api = {
   deleteTagFromRepository: (label: string) =>
     req<void>(`/api/tags/${encodeURIComponent(label)}`, { method: 'DELETE' }),
   pushTag: (label: string, appIds: number[]) =>
-    req<{ label: string; ok: number; failed: number; results: { app_id: number; ok: boolean; detail: string | null }[] }>(
-      '/api/tags/push',
-      { method: 'POST', body: JSON.stringify({ label, app_ids: appIds }) },
-    ),
+    req<{
+      label: string
+      ok: number
+      failed: number
+      results: { app_id: number; ok: boolean; detail: string | null }[]
+    }>('/api/tags/push', {
+      method: 'POST',
+      body: JSON.stringify({ label, app_ids: appIds }),
+    }),
 
   listRules: () => req<RuleItem[]>('/api/rules'),
   previewRule: (b: RuleInput, appId: number, opts?: { live?: boolean }) =>
@@ -312,13 +354,10 @@ export const api = {
       total: number
       sample: { item_title: string; src_path: string; dst_path: string }[]
       errors: { item_title: string; src_path: string; error: string }[]
-    }>(
-      `/api/rules/preview?app_id=${appId}${opts?.live ? '&live=true' : ''}`,
-      {
-        method: 'POST',
-        body: JSON.stringify(b),
-      },
-    ),
+    }>(`/api/rules/preview?app_id=${appId}${opts?.live ? '&live=true' : ''}`, {
+      method: 'POST',
+      body: JSON.stringify(b),
+    }),
   createRule: (b: RuleInput) =>
     req<RuleItem>('/api/rules', { method: 'POST', body: JSON.stringify(b) }),
   updateRule: (id: number, b: RuleInput) =>
@@ -341,9 +380,13 @@ export const api = {
   syncAppVocabulary: (appId: number) =>
     req<{ ok: boolean }>(`/api/apps/${appId}/vocabulary/sync`, { method: 'POST' }),
   importTmdbVocabulary: () =>
-    req<{ imported: Record<string, number> }>('/api/vocabulary/import/tmdb', { method: 'POST' }),
+    req<{ imported: Record<string, number> }>('/api/vocabulary/import/tmdb', {
+      method: 'POST',
+    }),
   importTrashVocabulary: (appType: string) =>
-    req<{ imported: number }>(`/api/vocabulary/import/trash?app_type=${appType}`, { method: 'POST' }),
+    req<{ imported: number }>(`/api/vocabulary/import/trash?app_type=${appType}`, {
+      method: 'POST',
+    }),
   getTmdbSettings: () =>
     req<{ api_key_set: boolean; default_key_configured: boolean }>('/api/settings/tmdb'),
   putTmdbSettings: (apiKey: string) =>
@@ -366,8 +409,23 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ value }),
     }),
-  deleteSetting: (key: string) =>
-    req<void>(`/api/settings/${key}`, { method: 'DELETE' }),
+  deleteSetting: (key: string) => req<void>(`/api/settings/${key}`, { method: 'DELETE' }),
+
+  listBackups: () => req<BackupInfo[]>('/api/backup'),
+  runBackup: () => req<BackupRunResult>('/api/backup/run', { method: 'POST' }),
+  getBackupSettings: () => req<BackupSettings>('/api/backup/settings'),
+  putBackupSettings: (b: BackupSettings) =>
+    req<BackupSettings>('/api/backup/settings', {
+      method: 'PUT',
+      body: JSON.stringify(b),
+    }),
+
+  getLoggingSettings: () => req<LoggingSettings>('/api/settings/logging'),
+  putLoggingSettings: (b: LoggingSettings) =>
+    req<LoggingSettings>('/api/settings/logging', {
+      method: 'PUT',
+      body: JSON.stringify(b),
+    }),
 
   listPresets: (appType: string, baseFolder?: string) =>
     req<PresetList>(
@@ -396,8 +454,7 @@ export const api = {
       offset: number
     }>(`/api/links${q ? `?${q}` : ''}`)
   },
-  deleteLink: (id: number) =>
-    req<void>(`/api/links/${id}`, { method: 'DELETE' }),
+  deleteLink: (id: number) => req<void>(`/api/links/${id}`, { method: 'DELETE' }),
   repairLinks: () =>
     req<{ fixed: number; failed: number }>('/api/links/repair', {
       method: 'POST',
@@ -412,9 +469,25 @@ export const api = {
     }>('/api/apps/summary'),
 }
 
+// App-wide display timezone (Settings > General > Timezone) — every viewer
+// sees the same rendered time regardless of their own browser's local zone.
+// Module-level, set once at boot from Me.display_timezone (see Shell.tsx)
+// and again immediately whenever GeneralSection saves a new value, mirroring
+// the `redirecting` module state above — no context/prop-drilling needed
+// since every call site just reads the current value at render time.
+let displayTimezone = 'UTC'
+
+export function setDisplayTimezone(tz: string) {
+  displayTimezone = tz
+}
+
+export function getDisplayTimezone(): string {
+  return displayTimezone
+}
+
 export function fmtTime(ts: number | null): string {
   if (!ts) return '—'
-  return new Date(ts * 1000).toLocaleString()
+  return new Date(ts * 1000).toLocaleString(undefined, { timeZone: displayTimezone })
 }
 
 export type AuthError = {
@@ -423,8 +496,6 @@ export type AuthError = {
 }
 
 export function readAuthErrorCookie(): string | null {
-  const m = document.cookie
-    .split('; ')
-    .find((c) => c.startsWith('arrlink_auth_error='))
+  const m = document.cookie.split('; ').find((c) => c.startsWith('arrlink_auth_error='))
   return m ? decodeURIComponent(m.split('=')[1]) : null
 }
