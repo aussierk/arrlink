@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api, readAuthErrorCookie, type Me } from '../lib/api'
+import { api, readAuthErrorCookie, setDisplayTimezone, type Me } from '../lib/api'
 import { inputCls } from '../lib/ui'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
 
 /** Only accept a same-origin relative path — mirrors the backend's own
  * open-redirect guard on the OIDC callback's next_path. A prefix check
@@ -51,15 +52,30 @@ export default function LoginPage() {
     const err = readAuthErrorCookie()
     if (err) {
       setAuthError(
-        err === 'not_authorized' ? t('loginPage.notAuthorized') : t('loginPage.signInFailed', { reason: err }),
+        err === 'not_authorized'
+          ? t('loginPage.notAuthorized')
+          : t('loginPage.signInFailed', { reason: err }),
       )
       document.cookie = 'arrlink_auth_error=; Max-Age=0; path=/'
     }
-    api.me().then(setMe).catch(() => setApiError(true))
+    api
+      .me()
+      .then((m) => {
+        setMe(m)
+        setDisplayTimezone(m.display_timezone)
+      })
+      .catch(() => setApiError(true))
   }, [t])
 
+  useDocumentTitle(me?.app_title)
+
   const autoRedirect =
-    me !== null && !me.authenticated && me.oidc_enabled && me.auto_login && !skipAutoLogin && !authError
+    me !== null &&
+    !me.authenticated &&
+    me.oidc_enabled &&
+    me.auto_login &&
+    !skipAutoLogin &&
+    !authError
 
   useEffect(() => {
     if (!me) return
@@ -118,7 +134,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-8">
       <div className="w-full max-w-sm space-y-4">
         <div className="text-center">
-          <h1 className="text-lg font-semibold text-zinc-100">{t('app.name')}</h1>
+          <h1 className="text-lg font-semibold text-zinc-100">{me.app_title}</h1>
           <p className="text-sm text-zinc-500">{t('loginPage.title')}</p>
         </div>
 
@@ -130,7 +146,9 @@ export default function LoginPage() {
 
         {me.oidc_enabled && (
           <button
-            onClick={() => window.location.assign(`/api/auth/login?next=${encodeURIComponent(next)}`)}
+            onClick={() =>
+              window.location.assign(`/api/auth/login?next=${encodeURIComponent(next)}`)
+            }
             className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
           >
             {t('loginPage.ssoButton')}
@@ -148,7 +166,9 @@ export default function LoginPage() {
         {me.password_enabled && (
           <form onSubmit={submitPassword} className="space-y-2">
             <label className="block text-sm">
-              <span className="mb-1 block text-zinc-400">{t('loginPage.usernameLabel')}</span>
+              <span className="mb-1 block text-zinc-400">
+                {t('loginPage.usernameLabel')}
+              </span>
               <input
                 className={inputCls}
                 type="text"
@@ -161,7 +181,9 @@ export default function LoginPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-zinc-400">{t('loginPage.passwordLabel')}</span>
+              <span className="mb-1 block text-zinc-400">
+                {t('loginPage.passwordLabel')}
+              </span>
               <input
                 className={inputCls}
                 type="password"

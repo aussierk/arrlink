@@ -1,14 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { api } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
-import Toggle from '../../components/ui/Toggle'
+import Field from '../../components/ui/Field'
+import Alert from '../../components/ui/Alert'
+import SubSection from '../../components/ui/SubSection'
+
+function parseList(text: string): string[] {
+  return text
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
 /**
  * Password and OIDC login are independent — either, both, or neither can be
- * enabled at once (see /login, which offers whichever are on). Toggling
- * either applies immediately. Secret fields are blank = keep the current
- * value; only a new value replaces it (secrets are never returned to the UI).
+ * enabled at once (see /login, which offers whichever are on). Both field
+ * blocks below are always visible regardless of their "Enable" toggle, so an
+ * OIDC issuer/client ID (or a password) can be filled in and saved *before*
+ * flipping that method on — the toggle only controls whether it's active for
+ * login, not whether its fields are reachable. Secret fields are blank =
+ * keep the current value; only a new value replaces it (secrets are never
+ * returned to the UI).
  */
 export default function AuthenticationSection() {
   const { t } = useTranslation()
@@ -16,29 +29,34 @@ export default function AuthenticationSection() {
   const [ok, setOk] = useState<string | null>(null)
 
   const [passwordEnabled, setPasswordEnabled] = useState(false)
-  const [oidcEnabled, setOidcEnabled] = useState(false)
-  const [autoLogin, setAutoLogin] = useState(true)
   const [uiUsername, setUiUsername] = useState('admin')
   const [uiPassword, setUiPassword] = useState('')
   const [uiPasswordSet, setUiPasswordSet] = useState(false)
+
+  const [oidcEnabled, setOidcEnabled] = useState(false)
+  const [autoLogin, setAutoLogin] = useState(true)
   const [oidcIssuer, setOidcIssuer] = useState('')
   const [oidcClientId, setOidcClientId] = useState('')
   const [oidcClientSecret, setOidcClientSecret] = useState('')
   const [oidcClientSecretSet, setOidcClientSecretSet] = useState(false)
+  const [groupsText, setGroupsText] = useState('')
+  const [emailsText, setEmailsText] = useState('')
 
   const load = useCallback(async () => {
     try {
-      const a = await api.getAuthSettings()
+      const [a, s] = await Promise.all([api.getAuthSettings(), api.getSettings()])
       setPasswordEnabled(a.password_enabled)
-      setOidcEnabled(a.oidc_enabled)
-      setAutoLogin(a.auto_login)
       setUiUsername(a.ui_username)
       setUiPassword('')
       setUiPasswordSet(a.ui_password_set)
+      setOidcEnabled(a.oidc_enabled)
+      setAutoLogin(a.auto_login)
       setOidcIssuer(a.oidc_issuer)
       setOidcClientId(a.oidc_client_id)
       setOidcClientSecret('')
       setOidcClientSecretSet(a.oidc_client_secret_set)
+      setGroupsText(((s['oidc_allowed_groups'] as string[] | undefined) ?? []).join(', '))
+      setEmailsText(((s['oidc_allowed_emails'] as string[] | undefined) ?? []).join(', '))
     } catch (e) {
       setErr(String(e))
     }
@@ -62,6 +80,8 @@ export default function AuthenticationSection() {
         oidc_client_id: oidcClientId || undefined,
         oidc_client_secret: oidcClientSecret || undefined,
       })
+      await api.setSetting('oidc_allowed_groups', parseList(groupsText))
+      await api.setSetting('oidc_allowed_emails', parseList(emailsText))
       setOk(t('settingsAuth.saved'))
       await load()
     } catch (e) {
@@ -76,25 +96,18 @@ export default function AuthenticationSection() {
         <p className="text-xs text-zinc-500">{t('settingsAuth.subtitle')}</p>
       </div>
 
-      {err && (
-        <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
-          {err}
-        </div>
-      )}
-      {ok && (
-        <div className="rounded-md border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">
-          {ok}
-        </div>
-      )}
+      <Alert variant="error">{err}</Alert>
+      <Alert variant="success">{ok}</Alert>
 
-      <Toggle
-        checked={passwordEnabled}
-        onChange={setPasswordEnabled}
-        label={t('settingsAuth.enablePassword')}
-      />
-      {passwordEnabled && (
-        <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">{t('settingsAuth.username')}</span>
+      <SubSection title={t('settingsAuth.passwordTitle')}>
+        <Field label={t('settingsAuth.enablePassword')}>
+          <input
+            type="checkbox"
+            checked={passwordEnabled}
+            onChange={(e) => setPasswordEnabled(e.target.checked)}
+          />
+        </Field>
+        <Field label={t('settingsAuth.username')}>
           <input
             className={inputCls}
             value={uiUsername}
@@ -102,16 +115,17 @@ export default function AuthenticationSection() {
             placeholder={t('settingsAuth.usernamePlaceholder')}
             autoComplete="username"
           />
-        </label>
-      )}
-      {passwordEnabled && (
-        <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">
-            {t('settingsAuth.uiPassword')}{' '}
-            {uiPasswordSet && (
-              <span className="text-zinc-600">{t('settingsAuth.setBlankToKeep')}</span>
-            )}
-          </span>
+        </Field>
+        <Field
+          label={
+            <>
+              {t('settingsAuth.uiPassword')}
+              {uiPasswordSet && (
+                <span className="text-zinc-600">{t('settingsAuth.setBlankToKeep')}</span>
+              )}
+            </>
+          }
+        >
           <input
             className={inputCls}
             type="password"
@@ -124,63 +138,96 @@ export default function AuthenticationSection() {
             }
             autoComplete="new-password"
           />
-        </label>
-      )}
+        </Field>
+      </SubSection>
 
-      <Toggle
-        checked={oidcEnabled}
-        onChange={setOidcEnabled}
-        label={t('settingsAuth.enableOidc')}
-      />
-      {oidcEnabled && (
-        <div className="space-y-3 rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-          <Toggle
-            checked={autoLogin}
-            onChange={setAutoLogin}
-            label={t('settingsAuth.autoLoginLabel')}
+      <SubSection title={t('settingsAuth.oidcTitle')}>
+        <Field label={t('settingsAuth.enableOidc')}>
+          <input
+            type="checkbox"
+            checked={oidcEnabled}
+            onChange={(e) => setOidcEnabled(e.target.checked)}
           />
-          <div className="grid grid-cols-2 gap-3">
-            <label className="col-span-2 block text-sm">
-              <span className="mb-1 block text-zinc-400">{t('settingsAuth.oidcIssuer')}</span>
-              <input
-                className={inputCls}
-                value={oidcIssuer}
-                onChange={(e) => setOidcIssuer(e.target.value)}
-                placeholder={t('settingsAuth.oidcIssuerPlaceholder')}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-zinc-400">{t('settingsAuth.clientId')}</span>
-              <input
-                className={inputCls}
-                value={oidcClientId}
-                onChange={(e) => setOidcClientId(e.target.value)}
-                placeholder={t('settingsAuth.clientIdPlaceholder')}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-zinc-400">
-                {t('settingsAuth.clientSecret')}{' '}
-                {oidcClientSecretSet && (
-                  <span className="text-zinc-600">{t('settingsAuth.setBlankToKeep')}</span>
-                )}
+        </Field>
+        <Field
+          label={
+            <>
+              {t('settingsAuth.autoLoginLabel')}
+              <span className="mt-0.5 block text-xs text-zinc-600">
+                {t('settingsAuth.autoLoginHint')}
               </span>
-              <input
-                className={inputCls}
-                type="password"
-                value={oidcClientSecret}
-                onChange={(e) => setOidcClientSecret(e.target.value)}
-                placeholder={
-                  oidcClientSecretSet
-                    ? t('settingsAuth.clientSecretPlaceholderSet')
-                    : t('settingsAuth.clientSecretPlaceholderUnset')
-                }
-                autoComplete="new-password"
-              />
-            </label>
-          </div>
-        </div>
-      )}
+            </>
+          }
+        >
+          <input
+            type="checkbox"
+            checked={autoLogin}
+            onChange={(e) => setAutoLogin(e.target.checked)}
+          />
+        </Field>
+        <Field label={t('settingsAuth.oidcIssuer')}>
+          <input
+            className={inputCls}
+            value={oidcIssuer}
+            onChange={(e) => setOidcIssuer(e.target.value)}
+            placeholder={t('settingsAuth.oidcIssuerPlaceholder')}
+          />
+        </Field>
+        <Field label={t('settingsAuth.clientId')}>
+          <input
+            className={inputCls}
+            value={oidcClientId}
+            onChange={(e) => setOidcClientId(e.target.value)}
+            placeholder={t('settingsAuth.clientIdPlaceholder')}
+          />
+        </Field>
+        <Field
+          label={
+            <>
+              {t('settingsAuth.clientSecret')}
+              {oidcClientSecretSet && (
+                <span className="text-zinc-600">{t('settingsAuth.setBlankToKeep')}</span>
+              )}
+            </>
+          }
+        >
+          <input
+            className={inputCls}
+            type="password"
+            value={oidcClientSecret}
+            onChange={(e) => setOidcClientSecret(e.target.value)}
+            placeholder={
+              oidcClientSecretSet
+                ? t('settingsAuth.clientSecretPlaceholderSet')
+                : t('settingsAuth.clientSecretPlaceholderUnset')
+            }
+            autoComplete="new-password"
+          />
+        </Field>
+        <p className="text-xs text-zinc-500">
+          <Trans i18nKey="settingsAuth.allowListHint">
+            Allowed for sign-in: any user whose email is in the email list{' '}
+            <span className="text-zinc-400">or</span> whose group is in the group list.
+            Both empty = anyone who can sign in with the provider may use ArrLink.
+          </Trans>
+        </p>
+        <Field label={t('settingsAuth.allowedGroups')}>
+          <input
+            className={inputCls}
+            value={groupsText}
+            onChange={(e) => setGroupsText(e.target.value)}
+            placeholder={t('settingsAuth.allowedGroupsPlaceholder')}
+          />
+        </Field>
+        <Field label={t('settingsAuth.allowedEmails')}>
+          <input
+            className={inputCls}
+            value={emailsText}
+            onChange={(e) => setEmailsText(e.target.value)}
+            placeholder={t('settingsAuth.allowedEmailsPlaceholder')}
+          />
+        </Field>
+      </SubSection>
 
       <div className="flex justify-end">
         <button

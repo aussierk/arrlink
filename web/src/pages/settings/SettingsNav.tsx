@@ -1,13 +1,17 @@
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { KeyRound, Library, Link2, Server, ShieldCheck } from 'lucide-react'
+import { HardDriveDownload, KeyRound, Library, Link2, Server } from 'lucide-react'
 
 const items = [
   { to: '/settings/general', labelKey: 'settingsNav.general', icon: Link2 },
   { to: '/settings/services', labelKey: 'settingsNav.services', icon: Server },
-  { to: '/settings/authentication', labelKey: 'settingsNav.authentication', icon: KeyRound },
-  { to: '/settings/access', labelKey: 'settingsNav.access', icon: ShieldCheck },
+  {
+    to: '/settings/authentication',
+    labelKey: 'settingsNav.authentication',
+    icon: KeyRound,
+  },
   { to: '/settings/vocabulary', labelKey: 'settingsNav.vocabulary', icon: Library },
+  { to: '/settings/backup', labelKey: 'settingsNav.backup', icon: HardDriveDownload },
 ] as const
 
 /** Secondary nav for the Settings area, styled to match the main sidebar. */

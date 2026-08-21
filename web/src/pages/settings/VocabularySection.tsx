@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type AppItem } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
+import Field from '../../components/ui/Field'
+import Alert from '../../components/ui/Alert'
+import SubSection from '../../components/ui/SubSection'
 
 /**
  * Vocabulary sources (genre/certification/quality/language/collection):
@@ -55,7 +58,11 @@ export default function VocabularySection() {
     setBusy('tmdb')
     try {
       const r = await api.importTmdbVocabulary()
-      setOk(t('settingsVocab.tmdbRefreshed', { count: Object.values(r.imported).reduce((a, b) => a + b, 0) }))
+      setOk(
+        t('settingsVocab.tmdbRefreshed', {
+          count: Object.values(r.imported).reduce((a, b) => a + b, 0),
+        }),
+      )
     } catch (e) {
       setErr(String(e))
     } finally {
@@ -94,51 +101,57 @@ export default function VocabularySection() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-zinc-200">{t('settingsVocab.title')}</h3>
+        <h3 className="text-sm font-semibold text-zinc-200">
+          {t('settingsVocab.title')}
+        </h3>
         <p className="text-xs text-zinc-500">{t('settingsVocab.subtitle')}</p>
       </div>
 
-      {err && (
-        <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
-          {err}
-        </div>
-      )}
-      {ok && (
-        <div className="rounded-md border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">
-          {ok}
-        </div>
-      )}
+      <Alert variant="error">{err}</Alert>
+      <Alert variant="success">{ok}</Alert>
 
-      <div className="space-y-3 rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-zinc-200">{t('settingsVocab.tmdbTitle')}</h4>
+      <SubSection
+        title={t('settingsVocab.tmdbTitle')}
+        header={
           <button
             onClick={() => void refreshTmdb()}
             disabled={busy === 'tmdb'}
             className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
           >
-            {busy === 'tmdb' ? t('settingsVocab.refreshing') : t('settingsVocab.refreshNow')}
+            {busy === 'tmdb'
+              ? t('settingsVocab.refreshing')
+              : t('settingsVocab.refreshNow')}
           </button>
-        </div>
+        }
+      >
         <p className="text-xs text-zinc-500">
           {defaultKeyConfigured
             ? t('settingsVocab.tmdbDefaultConfigured')
             : t('settingsVocab.tmdbNoDefault')}
         </p>
-        <label className="block text-sm">
-          <span className="mb-1 block text-zinc-400">
-            {t('settingsVocab.tmdbKeyOverride')}{' '}
-            {apiKeySet && <span className="text-zinc-600">{t('settingsVocab.setBlankToKeep')}</span>}
-          </span>
+        <Field
+          label={
+            <>
+              {t('settingsVocab.tmdbKeyOverride')}{' '}
+              {apiKeySet && (
+                <span className="text-zinc-600">{t('settingsVocab.setBlankToKeep')}</span>
+              )}
+            </>
+          }
+        >
           <input
             className={inputCls}
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder={apiKeySet ? t('settingsVocab.keySetPlaceholder') : t('settingsVocab.keyUnsetPlaceholder')}
+            placeholder={
+              apiKeySet
+                ? t('settingsVocab.keySetPlaceholder')
+                : t('settingsVocab.keyUnsetPlaceholder')
+            }
             autoComplete="off"
           />
-        </label>
+        </Field>
         <div className="flex justify-end">
           <button
             onClick={() => void saveKey()}
@@ -147,10 +160,9 @@ export default function VocabularySection() {
             {t('settingsVocab.saveKey')}
           </button>
         </div>
-      </div>
+      </SubSection>
 
-      <div className="space-y-2 rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-        <h4 className="text-sm font-medium text-zinc-200">{t('settingsVocab.trashTitle')}</h4>
+      <SubSection title={t('settingsVocab.trashTitle')}>
         <p className="text-xs text-zinc-500">{t('settingsVocab.trashHint')}</p>
         <div className="flex gap-2">
           {(['radarr', 'sonarr'] as const).map((appType) => (
@@ -166,15 +178,19 @@ export default function VocabularySection() {
             </button>
           ))}
         </div>
-      </div>
+      </SubSection>
 
-      <div className="space-y-2 rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-        <h4 className="text-sm font-medium text-zinc-200">{t('settingsVocab.instanceTitle')}</h4>
+      <SubSection title={t('settingsVocab.instanceTitle')}>
         <p className="text-xs text-zinc-500">{t('settingsVocab.instanceHint')}</p>
         <div className="space-y-1">
-          {apps.length === 0 && <p className="text-xs text-zinc-600">{t('settingsVocab.noApps')}</p>}
+          {apps.length === 0 && (
+            <p className="text-xs text-zinc-600">{t('settingsVocab.noApps')}</p>
+          )}
           {apps.map((a) => (
-            <div key={a.id} className="flex items-center justify-between text-sm text-zinc-300">
+            <div
+              key={a.id}
+              className="flex items-center justify-between text-sm text-zinc-300"
+            >
               <span>
                 {a.name} <span className="text-xs text-zinc-500">({a.type})</span>
               </span>
@@ -183,12 +199,14 @@ export default function VocabularySection() {
                 disabled={busy === `app-${a.id}`}
                 className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
               >
-                {busy === `app-${a.id}` ? t('settingsVocab.refreshing') : t('settingsVocab.syncNow')}
+                {busy === `app-${a.id}`
+                  ? t('settingsVocab.refreshing')
+                  : t('settingsVocab.syncNow')}
               </button>
             </div>
           ))}
         </div>
-      </div>
+      </SubSection>
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Download, Pencil, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import AppModal from '../../components/AppModal'
+import Alert from '../../components/ui/Alert'
 import { api, fmtTime, type AppItem } from '../../lib/api'
 
 /**
@@ -41,8 +42,7 @@ export default function ServicesSection() {
   }
 
   async function remove(a: AppItem) {
-    if (!confirm(t('settingsServices.deleteConfirm', { name: a.name })))
-      return
+    if (!confirm(t('settingsServices.deleteConfirm', { name: a.name }))) return
     try {
       await api.deleteApp(a.id)
       setOk(t('settingsServices.deletedMsg', { name: a.name }))
@@ -56,9 +56,15 @@ export default function ServicesSection() {
     setRowMsg((m) => ({ ...m, [id]: t('settingsServices.testingMsg') }))
     try {
       const r = await api.testAppId(id)
-      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.testOkMsg', { version: r.version }) }))
+      setRowMsg((m) => ({
+        ...m,
+        [id]: t('settingsServices.testOkMsg', { version: r.version }),
+      }))
     } catch (ex) {
-      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.failMsg', { error: String(ex) }) }))
+      setRowMsg((m) => ({
+        ...m,
+        [id]: t('settingsServices.failMsg', { error: String(ex) }),
+      }))
     }
     await load()
   }
@@ -67,9 +73,15 @@ export default function ServicesSection() {
     setRowMsg((m) => ({ ...m, [id]: t('settingsServices.importingMsg') }))
     try {
       const r = await api.importTags(id)
-      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.importedMsg', { count: r.imported }) }))
+      setRowMsg((m) => ({
+        ...m,
+        [id]: t('settingsServices.importedMsg', { count: r.imported }),
+      }))
     } catch (ex) {
-      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.failMsg', { error: String(ex) }) }))
+      setRowMsg((m) => ({
+        ...m,
+        [id]: t('settingsServices.failMsg', { error: String(ex) }),
+      }))
     }
     await load()
   }
@@ -80,10 +92,15 @@ export default function ServicesSection() {
       const r = await api.rescanApp(id)
       setRowMsg((m) => ({
         ...m,
-        [id]: r.ok ? t('settingsServices.scannedMsg') : t('settingsServices.scanFailedMsg'),
+        [id]: r.ok
+          ? t('settingsServices.scannedMsg')
+          : t('settingsServices.scanFailedMsg'),
       }))
     } catch (ex) {
-      setRowMsg((m) => ({ ...m, [id]: t('settingsServices.scanFailedErrMsg', { error: String(ex) }) }))
+      setRowMsg((m) => ({
+        ...m,
+        [id]: t('settingsServices.scanFailedErrMsg', { error: String(ex) }),
+      }))
     }
     await load()
   }
@@ -92,7 +109,9 @@ export default function ServicesSection() {
     <div className="space-y-4">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-200">{t('settingsServices.title')}</h3>
+          <h3 className="text-sm font-semibold text-zinc-200">
+            {t('settingsServices.title')}
+          </h3>
           <p className="text-xs text-zinc-500">{t('settingsServices.subtitle')}</p>
         </div>
         <button
@@ -104,16 +123,8 @@ export default function ServicesSection() {
         </button>
       </div>
 
-      {err && (
-        <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
-          {err}
-        </div>
-      )}
-      {ok && (
-        <div className="rounded-md border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">
-          {ok}
-        </div>
-      )}
+      <Alert variant="error">{err}</Alert>
+      <Alert variant="success">{ok}</Alert>
 
       <div className="overflow-hidden rounded-lg border border-zinc-800">
         <table className="w-full text-sm">
@@ -145,7 +156,9 @@ export default function ServicesSection() {
                 <td className="px-3 py-2 font-medium">
                   {a.name}
                   {!a.enabled && (
-                    <span className="ml-2 text-xs text-zinc-500">{t('settingsServices.disabled')}</span>
+                    <span className="ml-2 text-xs text-zinc-500">
+                      {t('settingsServices.disabled')}
+                    </span>
                   )}
                 </td>
                 <td className="px-3 py-2">{a.type}</td>
@@ -153,7 +166,10 @@ export default function ServicesSection() {
                 <td className="px-3 py-2 font-mono text-xs text-zinc-500">
                   {a.api_key_masked}
                 </td>
-                <td className="px-3 py-2">{a.poll_interval_s}{t('settingsServices.pollSuffix')}</td>
+                <td className="px-3 py-2">
+                  {a.poll_interval_s}
+                  {t('settingsServices.pollSuffix')}
+                </td>
                 <td className="px-3 py-2 text-zinc-400">
                   {a.last_error ? (
                     <span className="text-red-400">{a.last_error}</span>
