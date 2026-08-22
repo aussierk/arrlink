@@ -522,6 +522,42 @@ def test_tag_category_classification(client, radarr):
     assert r3.json()["category"] is None
 
 
+def test_sync_app_tags_preserves_manual_category(client, radarr):
+    """Regression: a poll or re-import (both go through db.sync_app_tags)
+    must not wipe a tag's manually-set category. sync_app_tags used to
+    delete + reinsert every row, so every classification vanished on the
+    next poll -- the Tags page's "Save" looked to do nothing across a
+    reload."""
+    from arrlink.arr.base import Tag
+
+    app_id = _add_app(client, radarr)
+    client.post(
+        f"/api/apps/{app_id}/tags/import-manual",
+        json={"labels": ["scifi", "drama"]},
+    )
+    tags = {t["label"]: t for t in client.get(f"/api/apps/{app_id}/tags").json()}
+    scifi_id = tags["scifi"]["id"]
+    assert (
+        client.patch(
+            f"/api/apps/{app_id}/tags/{scifi_id}/category", json={"category": "genre"}
+        ).status_code
+        == 200
+    )
+
+    # next poll: "scifi" still reported (now with a real count), "kids" is
+    # new, "drama" is gone from the app
+    client.app.state.db.sync_app_tags(
+        app_id, [Tag(label="scifi", count=7), Tag(label="kids", count=1)]
+    )
+
+    after = {t["label"]: t for t in client.get(f"/api/apps/{app_id}/tags").json()}
+    assert after["scifi"]["category"] == "genre"  # classification survived
+    assert after["scifi"]["id"] == scifi_id  # same row, not reinserted
+    assert after["scifi"]["count"] == 7  # count refreshed
+    assert "drama" not in after  # stale tag still removed
+    assert after["kids"]["category"] is None  # new tag starts unclassified
+
+
 def test_tag_category_classification_preserves_in_use_count(client, radarr):
     """Regression: PATCH .../category used to return the raw tags.count
     column (always 0/stale -- see _enrich_tags) instead of the live-computed

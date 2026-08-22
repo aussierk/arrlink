@@ -316,12 +316,22 @@ class State:
     # -- tag vocabulary ----------------------------------------------------
 
     def sync_app_tags(self, app_id: int, tags: list) -> int:
-        """Replace an app's stored tag vocabulary with the given full set."""
+        """Reconcile an app's stored tag vocabulary against the given full set."""
         ts = time.time()
-        self.execute("DELETE FROM tags WHERE app_id=?", (app_id,))
+        labels = [tag.label for tag in tags]
+        if labels:
+            placeholders = ",".join("?" * len(labels))
+            self.execute(
+                f"DELETE FROM tags WHERE app_id=? AND label NOT IN ({placeholders})",
+                (app_id, *labels),
+            )
+        else:
+            self.execute("DELETE FROM tags WHERE app_id=?", (app_id,))
         for tag in tags:
             self.execute(
-                "INSERT INTO tags (app_id, label, count, imported_at) VALUES (?,?,?,?)",
+                "INSERT INTO tags (app_id, label, count, imported_at) VALUES (?,?,?,?) "
+                "ON CONFLICT (app_id, label) DO UPDATE SET "
+                "count=excluded.count, imported_at=excluded.imported_at",
                 (app_id, tag.label, tag.count, ts),
             )
         self.commit()
