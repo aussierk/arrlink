@@ -1,12 +1,13 @@
 """Smoke tests: app factory, health, CRUD round-trips, validation."""
+
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from pathlib import Path
 
 import pytest
-
 from arrlink.main import create_app, find_dist
 from arrlink.state import State
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture()
@@ -49,9 +50,7 @@ def test_apps_crud(client: TestClient):
     app = r.json()
     assert app["type"] == "radarr"
     assert app["api_key_masked"].endswith("234")
-    assert not any(
-        isinstance(v, str) and "abcdef" in v for v in app.values()
-    )
+    assert not any(isinstance(v, str) and "abcdef" in v for v in app.values())
 
     apps = client.get("/api/apps").json()
     assert len(apps) == 1
@@ -118,8 +117,12 @@ def test_rules_crud_and_validation(client: TestClient):
             "name": "user tags",
             "app_scope": app_id,
             "conditions": [
-                {"category": "user", "match_type": "regex",
-                 "match_value": r"^##\s*-\s*(?P<user>.+)$", "join": None},
+                {
+                    "category": "user",
+                    "match_type": "regex",
+                    "match_value": r"^##\s*-\s*(?P<user>.+)$",
+                    "join": None,
+                },
             ],
             "dir_template": "/media/movies/users/{$user}",
             "filename_template": "{$stem}",
@@ -136,7 +139,12 @@ def test_rules_crud_and_validation(client: TestClient):
         json={
             "name": "bad",
             "conditions": [
-                {"category": "custom", "match_type": "regex", "match_value": "([unclosed", "join": None},
+                {
+                    "category": "custom",
+                    "match_type": "regex",
+                    "match_value": "([unclosed",
+                    "join": None,
+                },
             ],
             "dir_template": "/linked/x",
         },
@@ -319,9 +327,7 @@ def test_logs_capture_events(client: TestClient):
 def test_settings_roundtrip(client: TestClient):
     r = client.put("/api/settings/oidc_allowed_groups", json={"value": ["arrlink"]})
     assert r.status_code == 200
-    assert client.get("/api/settings").json() == {
-        "oidc_allowed_groups": ["arrlink"]
-    }
+    assert client.get("/api/settings").json() == {"oidc_allowed_groups": ["arrlink"]}
 
     assert client.delete("/api/settings/oidc_allowed_groups").status_code == 204
     assert client.get("/api/settings").json() == {}

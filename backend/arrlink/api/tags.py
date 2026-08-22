@@ -1,5 +1,6 @@
 """Tags per app (M2: live import from the app's API; manual import kept for
 testing/offline use)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -35,7 +36,7 @@ class TagCategoryIn(BaseModel):
     category: str | None = None
 
     @model_validator(mode="after")
-    def _validate(self) -> "TagCategoryIn":
+    def _validate(self) -> TagCategoryIn:
         if self.category is not None and self.category not in _CLASSIFIABLE_CATEGORIES:
             raise ValueError(f"unknown category '{self.category}'")
         return self
@@ -65,16 +66,13 @@ def _rule_matches_label(rule, label: str) -> bool:
     raw = rule["conditions_json"]
     conditions = json.loads(raw) if raw else []
     return any(
-        _condition_matches_label(c["match_type"], c["match_value"], label)
-        for c in conditions
+        _condition_matches_label(c["match_type"], c["match_value"], label) for c in conditions
     )
 
 
 def _enrich_tags(db: State, app_id: int, app_type: str, tags) -> list[dict]:
     """Attach the live-computed "in use" count and rule_count to raw tags-table rows."""
-    has_items = db.query_one(
-        "SELECT 1 FROM app_items WHERE app_id=? LIMIT 1", (app_id,)
-    )
+    has_items = db.query_one("SELECT 1 FROM app_items WHERE app_id=? LIMIT 1", (app_id,))
     usage = (
         {
             r["label"]: r["cnt"]
@@ -99,9 +97,7 @@ def _enrich_tags(db: State, app_id: int, app_type: str, tags) -> list[dict]:
 
 
 @router.get("/apps/{app_id}/tags")
-def list_tags(
-    app_id: int, _user: CurrentUser, db: State = Depends(get_db)
-) -> list[dict]:
+def list_tags(app_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
     app = db.query_one("SELECT type FROM apps WHERE id=?", (app_id,))
     if not app:
         raise HTTPException(404, "app not found")
@@ -215,15 +211,12 @@ def list_repository(_user: CurrentUser, db: State = Depends(get_db)) -> list[dic
 
 
 @router.put("/tags")
-def upsert_repository(
-    body: TagIn, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def upsert_repository(body: TagIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     label = body.label.strip()
     if not label:
         raise HTTPException(422, "label must not be empty")
     db.execute(
-        "INSERT INTO tag_repository (label) VALUES (?) "
-        "ON CONFLICT(label) DO NOTHING",
+        "INSERT INTO tag_repository (label) VALUES (?) ON CONFLICT(label) DO NOTHING",
         (label,),
     )
     db.commit()
@@ -232,9 +225,7 @@ def upsert_repository(
 
 
 @router.delete("/tags/{label}", status_code=204)
-def delete_repository(
-    label: str, _user: CurrentUser, db: State = Depends(get_db)
-) -> None:
+def delete_repository(label: str, _user: CurrentUser, db: State = Depends(get_db)) -> None:
     cur = db.execute("DELETE FROM tag_repository WHERE label=?", (label,))
     db.commit()
     if cur.rowcount == 0:
@@ -242,9 +233,7 @@ def delete_repository(
 
 
 @router.post("/tags/push")
-def push_tags(
-    body: TagPushIn, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def push_tags(body: TagPushIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     """Create a tag in one or more apps, then re-import so it shows up."""
     label = body.label.strip()
     results: list[dict] = []
@@ -272,8 +261,9 @@ def push_tags(
             results.append({"app_id": app_id, "ok": True, "detail": None})
             ok += 1
         except Exception as e:  # noqa: BLE001 - tag was created; import failed
-            results.append({"app_id": app_id, "ok": True,
-                            "detail": f"created, but re-import failed: {e}"})
+            results.append(
+                {"app_id": app_id, "ok": True, "detail": f"created, but re-import failed: {e}"}
+            )
             ok += 1
     db.log_event(
         "info",

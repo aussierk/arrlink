@@ -1,6 +1,7 @@
 """Unit tests for core/fsutil.py's create_link/remove_link primitives,
 focused on the TOCTOU-hardening in create_link (O_NOFOLLOW + post-hoc
 inode verification)."""
+
 from __future__ import annotations
 
 import os
@@ -68,9 +69,7 @@ def test_create_link_copy_fallback_duplicates_content(tmp_path, monkeypatch):
     assert inode_of(str(src)) != inode_of(str(dst))
 
 
-def test_create_link_refuses_symlink_even_if_early_check_is_bypassed(
-    tmp_path, monkeypatch
-):
+def test_create_link_refuses_symlink_even_if_early_check_is_bypassed(tmp_path, monkeypatch):
     """Regression test: TOCTOU hardening."""
     import arrlink.core.fsutil as fsutil
 

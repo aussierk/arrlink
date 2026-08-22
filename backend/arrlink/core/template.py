@@ -1,4 +1,5 @@
 """Template engine: dir + filename resolution, sanitization, and the path jail."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -125,9 +126,7 @@ def check_jail(dir_path: str, roots: list[str]) -> None:
         r = os.path.normpath(root)
         if real == r or real.startswith(r + os.sep):
             return
-    raise TemplateError(
-        f"destination {dir_path!r} is outside the allowed root(s) {roots}"
-    )
+    raise TemplateError(f"destination {dir_path!r} is outside the allowed root(s) {roots}")
 
 
 def static_prefix(template: str) -> str:
@@ -157,7 +156,7 @@ def audit_rule_roots(db: Any, roots: list[str] | None = None) -> list[str]:
 
 
 def build_context(
-    matched_conditions: "list[ConditionMatch]",
+    matched_conditions: list[ConditionMatch],
     app_name: str,
     item_title: str,
     item_year: int | None,
@@ -184,7 +183,7 @@ def build_context(
 def resolve_destination(
     dir_template: str,
     filename_template: str | None,
-    matched_conditions: "list[ConditionMatch]",
+    matched_conditions: list[ConditionMatch],
     app_name: str,
     item_title: str,
     item_year: int | None,

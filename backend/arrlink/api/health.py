@@ -1,4 +1,5 @@
 """Health endpoint (used by the container HEALTHCHECK)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends

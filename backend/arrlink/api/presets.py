@@ -1,5 +1,6 @@
 """Presets API: list preset rules per app type + apply one (creates an editable
 rule, jail-validated)."""
+
 from __future__ import annotations
 
 import json
@@ -42,9 +43,7 @@ def list_presets(
 
 
 @router.post("/apply", status_code=201)
-def apply_preset(
-    body: PresetApplyIn, _user: CurrentUser, db: State = Depends(get_db)
-) -> dict:
+def apply_preset(body: PresetApplyIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     preset = presets_core.get_preset(body.preset_key)
     if preset is None:
         raise HTTPException(422, f"unknown preset: {body.preset_key}")

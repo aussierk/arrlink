@@ -4,6 +4,7 @@ A rule matches an item if any of the item's tags satisfies the matcher. The
 matched tag (and, for regex rules, the match object) drive template
 placeholder resolution.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -13,7 +14,7 @@ import re
 
 
 @functools.lru_cache(maxsize=512)
-def _compiled(pattern: str) -> "re.Pattern | None":
+def _compiled(pattern: str) -> re.Pattern | None:
     """Compile (and cache) a rule's regex. Returns None for an invalid
     pattern — a bad regex simply never matches, same as before. Cached
     because plan_links evaluates the same handful of rule patterns across
@@ -29,7 +30,7 @@ class RuleMatch:
     """Result of a rule matching an item."""
 
     tag: str
-    regex_match: "re.Match | None" = None
+    regex_match: re.Match | None = None
 
 
 def match_rule(match_type: str, match_value: str, item_tags: list[str]) -> RuleMatch | None:
@@ -83,7 +84,7 @@ class ConditionMatch:
 
     category: str
     tag: str
-    regex_match: "re.Match | None" = None
+    regex_match: re.Match | None = None
 
 
 @dataclasses.dataclass
@@ -128,7 +129,10 @@ def match_conditions(
 
         if hit:
             category = cond["category"]
-            cms = [ConditionMatch(category=category, tag=m.tag, regex_match=m.regex_match) for m in hits]
+            cms = [
+                ConditionMatch(category=category, tag=m.tag, regex_match=m.regex_match)
+                for m in hits
+            ]
             matched.append(cms[0])
             all_matches[category] = cms
 

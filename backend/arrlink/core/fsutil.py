@@ -4,13 +4,13 @@ All operations are defensive: we only ever create/remove entries that we
 created ourselves (tracked in the `links` table), and we verify inodes before
 deleting anything.
 """
+
 from __future__ import annotations
 
 import os
 import shutil
 import stat as stat_mod
 from dataclasses import dataclass
-from pathlib import Path
 
 
 @dataclass
@@ -83,9 +83,7 @@ def create_link(src: str, dst: str, fallback: str = "skip") -> LinkResult:
     try:
         st = os.fstat(fd)
         if not stat_mod.S_ISREG(st.st_mode):
-            return LinkResult(
-                False, dst, "source changed before linking (not a regular file)"
-            )
+            return LinkResult(False, dst, "source changed before linking (not a regular file)")
 
         if dev is False and fallback == "copy":
             try:

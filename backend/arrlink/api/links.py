@@ -1,4 +1,5 @@
 """Links API: browse created hardlinks, delete one, repair missing ones."""
+
 from __future__ import annotations
 
 import os
@@ -37,16 +38,13 @@ def list_links(
         where += " AND l.status=?"
         params.append(status)
 
-    total_row = db.query_one(
-        "SELECT COUNT(*) AS c FROM links l" + where, tuple(params)
-    )
+    total_row = db.query_one("SELECT COUNT(*) AS c FROM links l" + where, tuple(params))
     total = total_row["c"] if total_row else 0
 
     rows = db.query(
         "SELECT l.*, r.name AS rule_name, a.name AS app_name, a.type AS app_type "
         "FROM links l LEFT JOIN rules r ON r.id=l.rule_id "
-        "LEFT JOIN apps a ON a.id=l.app_id" + where
-        + " ORDER BY l.id DESC LIMIT ? OFFSET ?",
+        "LEFT JOIN apps a ON a.id=l.app_id" + where + " ORDER BY l.id DESC LIMIT ? OFFSET ?",
         tuple(params) + (limit, offset),
     )
     return {
@@ -89,8 +87,7 @@ def repair(
     # 'missing' too: repair re-creates links that were removed (by the UI or
     # by the poller) whose source file has since (re)appeared.
     rows = db.query(
-        "SELECT id, dst_path, src_path FROM links "
-        "WHERE status IN ('active','stale','missing')"
+        "SELECT id, dst_path, src_path FROM links WHERE status IN ('active','stale','missing')"
     )
     with db.transaction():
         for row in rows:
@@ -105,8 +102,7 @@ def repair(
             if r.ok:
                 fixed += 1
                 db.execute(
-                    "UPDATE links SET status='active', inode=?, missing_strikes=0 "
-                    "WHERE id=?",
+                    "UPDATE links SET status='active', inode=?, missing_strikes=0 WHERE id=?",
                     (inode_of(dst), row["id"]),
                 )
             else:

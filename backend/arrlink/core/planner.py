@@ -1,4 +1,5 @@
 """Link planning: given rules + a snapshot of items/files, decide the destination for each file."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -112,8 +113,7 @@ def plan_links(
     """Compute the set of links the given rules would create for the snapshot."""
     rule_dicts = [_as_dict(r) for r in rules]
     active = [
-        r for r in rule_dicts
-        if r.get("enabled") and _rule_applies_to_app(r, app_id, app_type)
+        r for r in rule_dicts if r.get("enabled") and _rule_applies_to_app(r, app_id, app_type)
     ]
     active.sort(key=lambda r: (r.get("priority", 100), r.get("id", 0)))
 

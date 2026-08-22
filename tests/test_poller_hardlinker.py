@@ -3,6 +3,7 @@
 A fake Radarr serves a movie list whose files live in a temp "media" dir;
 hardlinks are created in a temp "/linked" root. Real inodes, real os.link.
 """
+
 from __future__ import annotations
 
 import os
@@ -13,12 +14,10 @@ import time
 import httpx
 import pytest
 import uvicorn
+from arrlink.main import create_app
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-
-from arrlink.core.poller import Poller
-from arrlink.main import create_app
 
 API_KEY = "m4-key"
 VERSION = "5.16.0.1"
@@ -48,9 +47,13 @@ class Media:
         with open(full, "wb") as f:
             f.write(f"{title} data".encode())
         self.movies.append(
-            {"id": len(self.movies) + 1, "title": title, "year": year,
-             "tags": [self.tag_id(t) for t in tags],
-             "movieFile": {"path": full, "size": os.path.getsize(full)}}
+            {
+                "id": len(self.movies) + 1,
+                "title": title,
+                "year": year,
+                "tags": [self.tag_id(t) for t in tags],
+                "movieFile": {"path": full, "size": os.path.getsize(full)},
+            }
         )
 
     def movies_payload(self):
@@ -103,8 +106,7 @@ def _free_port() -> int:
 
 @pytest.fixture()
 def radarr_media(tmp_path_factory):
-    media = Media(str(tmp_path_factory.mktemp("media")),
-                  str(tmp_path_factory.mktemp("linked")))
+    media = Media(str(tmp_path_factory.mktemp("media")), str(tmp_path_factory.mktemp("linked")))
     media.add("Inception.2010.2160p.mkv", "Inception", 2010, ["4k"])
     media.add("Kids Movie/Kids Movie.2019.mkv", "Kids Movie", 2019, ["kids"])
     port = _free_port()
@@ -116,11 +118,14 @@ def radarr_media(tmp_path_factory):
     thread.start()
     for _ in range(200):
         try:
-            if httpx.get(
-                f"{origin}/api/v3/system/status",
-                headers={"X-Api-Key": API_KEY},
-                timeout=1,
-            ).status_code == 200:
+            if (
+                httpx.get(
+                    f"{origin}/api/v3/system/status",
+                    headers={"X-Api-Key": API_KEY},
+                    timeout=1,
+                ).status_code
+                == 200
+            ):
                 break
         except Exception:  # noqa: BLE001
             time.sleep(0.05)
@@ -152,14 +157,18 @@ def _add_app(client: TestClient, origin: str) -> int:
     return r.json()["id"]
 
 
-def _make_rule(client, name, match_value, dir_template, match_type="exact",
-               filename=None):
+def _make_rule(client, name, match_value, dir_template, match_type="exact", filename=None):
     r = client.post(
         "/api/rules",
         json={
             "name": name,
             "conditions": [
-                {"category": "custom", "match_type": match_type, "match_value": match_value, "join": None},
+                {
+                    "category": "custom",
+                    "match_type": match_type,
+                    "match_value": match_value,
+                    "join": None,
+                },
             ],
             "dir_template": dir_template,
             "filename_template": filename,
@@ -268,7 +277,7 @@ def test_deleted_item_grace(client, radarr_media):
     # the UI/repair flow, not get silently cascade-deleted the moment
     # app_items is (item_id/file_id both reference it ON DELETE CASCADE)
     missing = client.get("/api/links?status=missing").json()["items"]
-    assert any(l["dst_path"] == dst for l in missing)
+    assert any(ln["dst_path"] == dst for ln in missing)
 
     # regression: if the same item later reappears, the old 'missing' row
     # (item_id/file_id now NULL, so it can never be reused/updated by the
@@ -278,9 +287,9 @@ def test_deleted_item_grace(client, radarr_media):
     _poll(client, app_id)
     assert os.path.exists(dst)
     active = client.get("/api/links?status=active").json()["items"]
-    assert any(l["dst_path"] == dst for l in active)
+    assert any(ln["dst_path"] == dst for ln in active)
     missing_after = client.get("/api/links?status=missing").json()["items"]
-    assert not any(l["dst_path"] == dst for l in missing_after)
+    assert not any(ln["dst_path"] == dst for ln in missing_after)
 
 
 # ---------------------------------------------------------------------------
@@ -352,8 +361,14 @@ def test_offline_no_removals(client, radarr_media):
     # point the app at a dead URL
     client.patch(
         f"/api/apps/{app_id}",
-        json={"name": "Radarr", "type": "radarr", "url": "http://127.0.0.1:1",
-              "api_key": API_KEY, "enabled": True, "poll_interval_s": 30},
+        json={
+            "name": "Radarr",
+            "type": "radarr",
+            "url": "http://127.0.0.1:1",
+            "api_key": API_KEY,
+            "enabled": True,
+            "poll_interval_s": 30,
+        },
     )
     r = client.post(f"/api/apps/{app_id}/rescan")
     assert r.status_code == 502
@@ -368,9 +383,7 @@ def test_offline_no_removals(client, radarr_media):
 # ---------------------------------------------------------------------------
 
 
-def test_cross_device_copy_fallback(
-    client, radarr_media, tmp_path_factory, monkeypatch
-):
+def test_cross_device_copy_fallback(client, radarr_media, tmp_path_factory, monkeypatch):
     origin, media = radarr_media
     app_id = _add_app(client, origin)
     other = tmp_path_factory.mktemp("otherfs")
@@ -440,7 +453,7 @@ def test_collision_skips(client, radarr_media):
         assert f.read() == "someone else's file"
     # no active link recorded (it was skipped)
     links = client.get("/api/links?status=active").json()["items"]
-    assert not any(l["dst_path"] == foreign for l in links)
+    assert not any(ln["dst_path"] == foreign for ln in links)
 
 
 # ---------------------------------------------------------------------------
@@ -459,12 +472,16 @@ def test_unlink_off_keeps_link(client, radarr_media):
     # turn off unlink_on_mismatch on the rule, then drop the tag
     client.patch(
         f"/api/rules/{rid}",
-        json={"name": "kids",
-              "conditions": [
-                  {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
-              ],
-              "dir_template": f"{media.linked_dir}/kids", "enabled": True,
-              "unlink_on_mismatch": False, "priority": 100},
+        json={
+            "name": "kids",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
+            "dir_template": f"{media.linked_dir}/kids",
+            "enabled": True,
+            "unlink_on_mismatch": False,
+            "priority": 100,
+        },
     )
     media.set_tags(1, [])  # drop the kids tag
     _poll(client, app_id)
@@ -531,9 +548,7 @@ def test_repoll_no_changes_writes_nothing(client, radarr_media):
 
     def spy(sql, params=()):
         head = sql.lstrip().split(None, 1)[0].upper()
-        if head in ("INSERT", "UPDATE", "DELETE") and (
-            "app_items" in sql or "app_files" in sql
-        ):
+        if head in ("INSERT", "UPDATE", "DELETE") and ("app_items" in sql or "app_files" in sql):
             writes.append(sql)
         return real_execute(sql, params)
 
@@ -555,8 +570,7 @@ def test_hot_path_indexes_present(client, radarr_media):
     assert "idx_app_files_item_inode" in file_idx
 
     plan = db.query(
-        "EXPLAIN QUERY PLAN SELECT * FROM links WHERE app_id=1 AND "
-        "status IN ('active','stale')"
+        "EXPLAIN QUERY PLAN SELECT * FROM links WHERE app_id=1 AND status IN ('active','stale')"
     )
     assert any("idx_links_app_status" in (row["detail"] or "") for row in plan), plan
 
@@ -580,9 +594,7 @@ def test_reconcile_commits_in_chunks(client, radarr_media, monkeypatch):
     db = client.app.state.db
     poller = client.app.state.poller
     row = db.query_one("SELECT * FROM apps WHERE id=?", (app_id,))
-    items = asyncio.run(
-        get_adapter(row["type"], row["url"], row["api_key"]).fetch_items()
-    )
+    items = asyncio.run(get_adapter(row["type"], row["url"], row["api_key"]).fetch_items())
     poller._store_items(app_id, items)  # backfill file ids
 
     monkeypatch.setattr(linker, "COMMIT_BATCH", 1)
@@ -610,8 +622,7 @@ def test_preview_uses_snapshot_after_poll(client, radarr_media):
     body = {
         "name": "kids",
         "conditions": [
-            {"category": "custom", "match_type": "exact",
-             "match_value": "kids", "join": None},
+            {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
         ],
         "dir_template": f"{media.linked_dir}/kids",
     }
@@ -634,8 +645,7 @@ def test_preview_falls_back_to_live_when_never_polled(client, radarr_media):
         json={
             "name": "kids",
             "conditions": [
-                {"category": "custom", "match_type": "exact",
-                 "match_value": "kids", "join": None},
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
             ],
             "dir_template": f"{media.linked_dir}/kids",
         },

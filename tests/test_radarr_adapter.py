@@ -3,6 +3,7 @@
 A fake Radarr runs under uvicorn on localhost (X-Api-Key enforced), so the
 adapter's httpx path is exercised for real.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,12 +14,11 @@ import time
 import httpx
 import pytest
 import uvicorn
+from arrlink.arr.radarr import RadarrAdapter
+from arrlink.main import create_app
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-
-from arrlink.arr.radarr import RadarrAdapter
-from arrlink.main import create_app
 
 API_KEY = "radarr-key-123"
 VERSION = "5.16.0.1"
@@ -298,7 +298,9 @@ def test_rule_count_reflects_matching_rules(client, radarr):
         "/api/rules",
         json={
             "name": "kids",
-            "conditions": [{"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}],
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}
+            ],
             "dir_template": "/media/movies/kids",
         },
     )
@@ -309,17 +311,21 @@ def test_rule_count_reflects_matching_rules(client, radarr):
             "name": "user tags",
             "app_scope": app["id"],
             "conditions": [
-                {"category": "user", "match_type": "regex",
-                 "match_value": r"^##\s*-\s*(?P<user>.+)$", "join": None},
+                {
+                    "category": "user",
+                    "match_type": "regex",
+                    "match_value": r"^##\s*-\s*(?P<user>.+)$",
+                    "join": None,
+                },
             ],
             "dir_template": "/media/movies/users/{$user}",
         },
     )
     tags = client.get(f"/api/apps/{app['id']}/tags").json()
     by_label = {t["label"]: t for t in tags}
-    assert by_label["kids"]["rule_count"] == 1        # exact rule
+    assert by_label["kids"]["rule_count"] == 1  # exact rule
     assert by_label["## - alice"]["rule_count"] == 1  # regex rule
-    assert by_label["4k"]["rule_count"] == 0          # no rule matches "4k"
+    assert by_label["4k"]["rule_count"] == 0  # no rule matches "4k"
 
     # disabled rules don't count
     rule_id = client.get("/api/rules").json()[0]["id"]
@@ -327,7 +333,9 @@ def test_rule_count_reflects_matching_rules(client, radarr):
         f"/api/rules/{rule_id}",
         json={
             "name": "kids",
-            "conditions": [{"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}],
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}
+            ],
             "dir_template": "/media/movies/kids",
             "enabled": False,
         },

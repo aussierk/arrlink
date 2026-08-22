@@ -1,4 +1,5 @@
 """Edge-case tests for the later changes the earlier suites don't pin."""
+
 from __future__ import annotations
 
 import asyncio
@@ -123,8 +124,10 @@ def _start_fake(app: FastAPI) -> tuple[str, uvicorn.Server]:
     for _ in range(200):
         try:
             if (
-                httpx.get(f"{origin}/api/v3/system/status",
-                         headers={"X-Api-Key": API_KEY}, timeout=1).status_code == 200
+                httpx.get(
+                    f"{origin}/api/v3/system/status", headers={"X-Api-Key": API_KEY}, timeout=1
+                ).status_code
+                == 200
             ):
                 break
         except Exception:  # noqa: BLE001
@@ -166,8 +169,7 @@ def tmp_path_of(client: TestClient) -> Path:
 
 
 def _add_app(c: TestClient, origin: str, key: str = API_KEY) -> int:
-    r = c.post("/api/apps", json={"name": "R", "type": "radarr",
-                                  "url": origin, "api_key": key})
+    r = c.post("/api/apps", json={"name": "R", "type": "radarr", "url": origin, "api_key": key})
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
@@ -233,8 +235,7 @@ def test_push_tag_success_clears_last_error(tag_app, client):
     origin, _ = tag_app
     app_id = _add_app(client, origin)
     # seed a stale error from an earlier outage
-    client.app.state.db.execute("UPDATE apps SET last_error=? WHERE id=?",
-                                ("boom", app_id))
+    client.app.state.db.execute("UPDATE apps SET last_error=? WHERE id=?", ("boom", app_id))
     client.app.state.db.commit()
 
     r = client.post("/api/tags/push", json={"label": "uhd", "app_ids": [app_id]})
@@ -255,8 +256,7 @@ def test_default_allowed_roots_is_media(client):
 
 def test_apply_preset_default_base_inside_media(client):
     # no base_folder -> defaults to /media/movies, which is inside the /media jail
-    r = client.post("/api/presets/apply",
-                    json={"preset_key": "4k", "app_type": "radarr"})
+    r = client.post("/api/presets/apply", json={"preset_key": "4k", "app_type": "radarr"})
     assert r.status_code == 201, r.text
     assert r.json()["rule"]["dir_template"] == "/media/movies/4k"
 
@@ -264,9 +264,10 @@ def test_apply_preset_default_base_inside_media(client):
 def test_apply_preset_legacy_linked_base_now_jailed(client):
     # a base under the OLD default (/linked) is outside the new default jail.
     # this base_folder is one the user typed, which they must fix themselves.
-    r = client.post("/api/presets/apply",
-                    json={"preset_key": "4k", "app_type": "radarr",
-                          "base_folder": "/linked/movies"})
+    r = client.post(
+        "/api/presets/apply",
+        json={"preset_key": "4k", "app_type": "radarr", "base_folder": "/linked/movies"},
+    )
     assert r.status_code == 422
     assert "outside the allowed root" in r.json()["detail"]
     # nothing was created
@@ -274,9 +275,10 @@ def test_apply_preset_legacy_linked_base_now_jailed(client):
 
 
 def test_apply_preset_arbitrary_outside_root_jailed(client):
-    r = client.post("/api/presets/apply",
-                    json={"preset_key": "kids", "app_type": "radarr",
-                          "base_folder": "/etc/evil"})
+    r = client.post(
+        "/api/presets/apply",
+        json={"preset_key": "kids", "app_type": "radarr", "base_folder": "/etc/evil"},
+    )
     assert r.status_code == 422
     assert "outside the allowed root" in r.json()["detail"]
 
@@ -287,8 +289,14 @@ def test_apply_preset_arbitrary_outside_root_jailed(client):
 
 
 def test_update_missing_app_404(client):
-    body = {"name": "R2", "type": "radarr", "url": "http://x:7878",
-            "api_key": "", "enabled": True, "poll_interval_s": 120}
+    body = {
+        "name": "R2",
+        "type": "radarr",
+        "url": "http://x:7878",
+        "api_key": "",
+        "enabled": True,
+        "poll_interval_s": 120,
+    }
     r = client.patch("/api/apps/9999", json=body)
     assert r.status_code == 404
     assert "app not found" in r.json()["detail"]
@@ -373,8 +381,7 @@ def test_create_tag_500_reports_http_status(create_tag_fail_app):
 def test_push_tag_duplicate_app_ids_pushed_once(tag_app, client):
     origin, tag_store = tag_app
     app_id = _add_app(client, origin)
-    r = client.post("/api/tags/push", json={"label": "uhd",
-                                            "app_ids": [app_id, app_id]})
+    r = client.post("/api/tags/push", json={"label": "uhd", "app_ids": [app_id, app_id]})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] == 1 and body["failed"] == 0
@@ -397,8 +404,7 @@ def test_push_tag_reimport_full_replaces_stale_tags(tag_app, client):
     app_id = _add_app(client, origin)
     # the app currently reports [kids]; seed a stale stored tag that the app
     # no longer reports, plus a repository-only tag that must survive
-    client.post(f"/api/apps/{app_id}/tags/import-manual",
-                json={"labels": ["oldtag"]})
+    client.post(f"/api/apps/{app_id}/tags/import-manual", json={"labels": ["oldtag"]})
     client.put("/api/tags", json={"label": "repo-only"})
 
     r = client.post("/api/tags/push", json={"label": "uhd", "app_ids": [app_id]})
@@ -417,8 +423,7 @@ def test_manual_import_full_replaces_stale_tags(tag_app, client):
     origin, _ = tag_app
     app_id = _add_app(client, origin)
     # seed a stale stored tag, then re-import the app's live vocabulary
-    client.post(f"/api/apps/{app_id}/tags/import-manual",
-                json={"labels": ["oldtag"]})
+    client.post(f"/api/apps/{app_id}/tags/import-manual", json={"labels": ["oldtag"]})
     r = client.post(f"/api/apps/{app_id}/tags/import")
     assert r.status_code == 201, r.text
     stored = {t["label"] for t in client.get(f"/api/apps/{app_id}/tags").json()}
@@ -464,8 +469,15 @@ def files_app(tmp_path):
     media_dir.mkdir()
     src = media_dir / "Film.2020.mkv"
     src.write_bytes(b"film data")
-    movies = [{"id": 1, "title": "Film", "year": 2020, "tags": ["4k"],
-               "movieFile": {"path": str(src), "size": src.stat().st_size}}]
+    movies = [
+        {
+            "id": 1,
+            "title": "Film",
+            "year": 2020,
+            "tags": ["4k"],
+            "movieFile": {"path": str(src), "size": src.stat().st_size},
+        }
+    ]
     origin, server = _start_fake(build_radarr_with_files("origin", movies))
     yield {"origin": origin, "src": str(src)}
     server.should_exit = True
@@ -475,30 +487,42 @@ def test_update_app_type_swap_blocked_when_links_exist(client, files_app):
     linked_dir = str(tmp_path_of(client))
     client.app.state.db.set_setting("allowed_roots", [linked_dir])
     app_id = _add_app(client, files_app["origin"])
-    client.post("/api/rules", json={
-        "name": "4k",
-        "conditions": [
-            {"category": "quality", "match_type": "exact", "match_value": "4k", "join": None}
-        ],
-        "dir_template": f"{linked_dir}/4k",
-    })
+    client.post(
+        "/api/rules",
+        json={
+            "name": "4k",
+            "conditions": [
+                {"category": "quality", "match_type": "exact", "match_value": "4k", "join": None}
+            ],
+            "dir_template": f"{linked_dir}/4k",
+        },
+    )
     r = client.post(f"/api/apps/{app_id}/rescan")
     assert r.status_code == 200, r.text
     # the rescan created a real hardlink
     dst = f"{linked_dir}/4k/Film.2020.mkv"
     assert os.path.exists(dst)
     db = client.app.state.db
-    assert db.query_one(
-        "SELECT COUNT(*) c FROM links WHERE app_id=? AND status IN "
-        "('active','stale')", (app_id,),
-    )["c"] == 1
+    assert (
+        db.query_one(
+            "SELECT COUNT(*) c FROM links WHERE app_id=? AND status IN ('active','stale')",
+            (app_id,),
+        )["c"]
+        == 1
+    )
 
     # swapping the type is blocked: it would unlink that tree after the
     # deletion grace period
     r = client.patch(
         f"/api/apps/{app_id}",
-        json={"name": "R", "type": "sonarr", "url": files_app["origin"],
-              "api_key": "", "enabled": True, "poll_interval_s": 300},
+        json={
+            "name": "R",
+            "type": "sonarr",
+            "url": files_app["origin"],
+            "api_key": "",
+            "enabled": True,
+            "poll_interval_s": 300,
+        },
     )
     assert r.status_code == 422
     assert "cannot change app type" in r.json()["detail"]
@@ -513,8 +537,14 @@ def test_update_app_type_swap_allowed_when_no_links(client, files_app):
     # change (e.g. the app was added with the wrong type by mistake)
     r = client.patch(
         f"/api/apps/{app_id}",
-        json={"name": "R", "type": "sonarr", "url": files_app["origin"],
-              "api_key": "", "enabled": True, "poll_interval_s": 300},
+        json={
+            "name": "R",
+            "type": "sonarr",
+            "url": files_app["origin"],
+            "api_key": "",
+            "enabled": True,
+            "poll_interval_s": 300,
+        },
     )
     assert r.status_code == 200, r.text
     assert r.json()["type"] == "sonarr"
@@ -524,8 +554,14 @@ def test_update_app_same_type_still_works(client, files_app):
     app_id = _add_app(client, files_app["origin"])
     r = client.patch(
         f"/api/apps/{app_id}",
-        json={"name": "R2", "type": "radarr", "url": files_app["origin"],
-              "api_key": "", "enabled": True, "poll_interval_s": 120},
+        json={
+            "name": "R2",
+            "type": "radarr",
+            "url": files_app["origin"],
+            "api_key": "",
+            "enabled": True,
+            "poll_interval_s": 120,
+        },
     )
     assert r.status_code == 200, r.text
     assert r.json()["name"] == "R2" and r.json()["type"] == "radarr"
@@ -539,9 +575,10 @@ def test_update_app_same_type_still_works(client, files_app):
 def test_apply_preset_base_folder_trailing_slash(client, tmp_path):
     linked = str(tmp_path)
     client.app.state.db.set_setting("allowed_roots", [linked])
-    r = client.post("/api/presets/apply",
-                    json={"preset_key": "user", "app_type": "radarr",
-                          "base_folder": f"{linked}/"})
+    r = client.post(
+        "/api/presets/apply",
+        json={"preset_key": "user", "app_type": "radarr", "base_folder": f"{linked}/"},
+    )
     assert r.status_code == 201, r.text
     # the trailing slash must not produce a double-slash template
     assert r.json()["rule"]["dir_template"] == f"{linked}/{{$user}}"
@@ -573,37 +610,50 @@ def test_auth_view_masks_secrets(client):
 
 
 def test_auth_username_settable_via_put(client):
-    r = client.put("/api/settings/auth", json={"password_enabled": True,
-                                               "ui_username": "carol",
-                                               "ui_password": "s3cret"})
+    r = client.put(
+        "/api/settings/auth",
+        json={"password_enabled": True, "ui_username": "carol", "ui_password": "s3cret"},
+    )
     assert r.status_code == 200, r.text
     assert r.json()["ui_username"] == "carol"
     # Settings just switched password mode on — need to authenticate before
     # further /api/settings/auth calls (they're behind CurrentUser too).
-    assert client.post("/api/auth/password",
-                       json={"username": "carol", "password": "s3cret"}).status_code == 200
+    assert (
+        client.post(
+            "/api/auth/password", json={"username": "carol", "password": "s3cret"}
+        ).status_code
+        == 200
+    )
     assert client.get("/api/settings/auth").json()["ui_username"] == "carol"
     client.put("/api/settings/auth", json={"password_enabled": False})
 
 
 def test_auth_flags_switch_live_and_password_gates(client):
     # enable password login (env had it off) — takes effect immediately
-    r = client.put("/api/settings/auth", json={"password_enabled": True,
-                                               "oidc_enabled": False,
-                                               "ui_password": "s3cret"})
+    r = client.put(
+        "/api/settings/auth",
+        json={"password_enabled": True, "oidc_enabled": False, "ui_password": "s3cret"},
+    )
     assert r.status_code == 200, r.text
     assert r.json()["ui_password_set"] is True
     assert client.get("/api/auth/me").json()["password_enabled"] is True
     # data endpoint now 401 until the right password is used
     assert client.get("/api/apps").status_code == 401
-    assert client.post("/api/auth/password",
-                       json={"username": "admin", "password": "nope"}).status_code == 401
-    assert client.post("/api/auth/password",
-                       json={"username": "admin", "password": "s3cret"}).status_code == 200
+    assert (
+        client.post(
+            "/api/auth/password", json={"username": "admin", "password": "nope"}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/auth/password", json={"username": "admin", "password": "s3cret"}
+        ).status_code
+        == 200
+    )
     assert client.get("/api/apps").status_code == 200
     # back to open
-    client.put("/api/settings/auth", json={"password_enabled": False,
-                                           "oidc_enabled": False})
+    client.put("/api/settings/auth", json={"password_enabled": False, "oidc_enabled": False})
     j = client.get("/api/auth/me").json()
     assert j["password_enabled"] is False and j["oidc_enabled"] is False
     assert client.get("/api/apps").status_code == 200
@@ -611,28 +661,24 @@ def test_auth_flags_switch_live_and_password_gates(client):
 
 def test_auth_lockout_validation(client):
     # password enabled with no password (env + runtime) -> rejected
-    r = client.put("/api/settings/auth", json={"password_enabled": True,
-                                               "ui_password": ""})
+    r = client.put("/api/settings/auth", json={"password_enabled": True, "ui_password": ""})
     assert r.status_code == 422 and "password is required" in r.json()["detail"]
     # oidc enabled with no issuer/client -> rejected
-    r = client.put("/api/settings/auth", json={"oidc_enabled": True,
-                                               "oidc_issuer": "",
-                                               "oidc_client_id": ""})
-    assert r.status_code == 422 and "issuer and client ID are required" in \
-        r.json()["detail"]
+    r = client.put(
+        "/api/settings/auth", json={"oidc_enabled": True, "oidc_issuer": "", "oidc_client_id": ""}
+    )
+    assert r.status_code == 422 and "issuer and client ID are required" in r.json()["detail"]
 
 
 def test_auth_secrets_hidden_from_settings_dump(client):
-    client.put("/api/settings/auth", json={"password_enabled": True,
-                                           "ui_password": "topsecret"})
+    client.put("/api/settings/auth", json={"password_enabled": True, "ui_password": "topsecret"})
     # the generic settings dump must not leak the password
     assert "auth_password" not in client.get("/api/settings").json()
     client.put("/api/settings/auth", json={"password_enabled": False})
 
 
 def test_auth_password_hashed_at_rest(client):
-    client.put("/api/settings/auth", json={"password_enabled": True,
-                                           "ui_password": "topsecret"})
+    client.put("/api/settings/auth", json={"password_enabled": True, "ui_password": "topsecret"})
     stored = client.app.state.db.get_setting("auth_password")
     assert stored != "topsecret"
     assert stored.startswith("$argon2id$")
@@ -644,8 +690,7 @@ def test_password_login_cookie_secure_flag_ignores_spoofed_header(client):
     X-Forwarded-Proto: https header must not get a Secure session cookie --
     only the connection's real scheme (as TestClient sees it, plain http)
     counts."""
-    client.put("/api/settings/auth", json={"password_enabled": True,
-                                           "ui_password": "s3cret"})
+    client.put("/api/settings/auth", json={"password_enabled": True, "ui_password": "s3cret"})
     r = client.post(
         "/api/auth/password",
         json={"username": "admin", "password": "s3cret"},
@@ -688,8 +733,7 @@ def test_auth_both_enabled_at_once(client):
     assert j["password_enabled"] is True and j["oidc_enabled"] is True
     me = client.get("/api/auth/me").json()
     assert me["password_enabled"] is True and me["oidc_enabled"] is True
-    client.put("/api/settings/auth", json={"password_enabled": False,
-                                           "oidc_enabled": False})
+    client.put("/api/settings/auth", json={"password_enabled": False, "oidc_enabled": False})
 
 
 def test_generic_settings_endpoint_rejects_protected_auth_keys(client):
@@ -699,9 +743,17 @@ def test_generic_settings_endpoint_rejects_protected_auth_keys(client):
     caller could plant an unvalidated, unhashed, un-audited password/flag
     directly, bypassing every safeguard put_auth() enforces."""
     for key in (
-        "auth_password", "auth_password_enabled", "auth_oidc_enabled",
-        "oidc_auto_login", "auth_username", "oidc_issuer", "oidc_client_id",
-        "oidc_client_secret", "tmdb_api_key", "log_level", "log_size_limit_mb",
+        "auth_password",
+        "auth_password_enabled",
+        "auth_oidc_enabled",
+        "oidc_auto_login",
+        "auth_username",
+        "oidc_issuer",
+        "oidc_client_id",
+        "oidc_client_secret",
+        "tmdb_api_key",
+        "log_level",
+        "log_size_limit_mb",
     ):
         r = client.put(f"/api/settings/{key}", json={"value": "anything"})
         assert r.status_code == 403, (key, r.text)
@@ -720,7 +772,6 @@ def test_generic_settings_endpoint_logs_events(client):
     client.delete("/api/settings/fs_fallback")
     logs = client.get("/api/logs?limit=20").json()
     assert any("setting deleted: fs_fallback" in e["message"] for e in logs)
-
 
 
 def test_effective_settings_app_title_and_url_roundtrip(client):
@@ -773,7 +824,5 @@ def test_logging_settings_endpoint_rejects_bad_input(client):
     r = client.put("/api/settings/logging", json={"log_level": "info", "log_size_limit_mb": 0})
     assert r.status_code == 422
 
-    r = client.put(
-        "/api/settings/logging", json={"log_level": "info", "log_size_limit_mb": 1001}
-    )
+    r = client.put("/api/settings/logging", json={"log_level": "info", "log_size_limit_mb": 1001})
     assert r.status_code == 422

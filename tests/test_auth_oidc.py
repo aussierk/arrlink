@@ -1,4 +1,5 @@
 """Auth tests: OIDC (PKCE + confidential client), sessions, silent refresh, allow-lists, password/none modes."""
+
 from __future__ import annotations
 
 import base64
@@ -62,8 +63,12 @@ def build_issuer(origin: str) -> tuple[FastAPI, dict]:
 
     @app.get(f"{prefix}/authorize")
     def authorize(
-        client_id: str, redirect_uri: str, state: str, nonce: str,
-        code_challenge: str, scope: str,
+        client_id: str,
+        redirect_uri: str,
+        state: str,
+        nonce: str,
+        code_challenge: str,
+        scope: str,
     ):
         # record challenge for PKCE verification at token time
         store.setdefault("_challenges", {})[state] = code_challenge
@@ -84,9 +89,8 @@ def build_issuer(origin: str) -> tuple[FastAPI, dict]:
                 b64 = auth[6:]
                 decoded = base64.b64decode(b64 + "=" * (-len(b64) % 4)).decode()
                 cid, _, sec = decoded.partition(":")
-                ok = (
-                    hmac_mod.compare_digest(cid, CLIENT_ID)
-                    and hmac_mod.compare_digest(sec, CLIENT_SECRET)
+                ok = hmac_mod.compare_digest(cid, CLIENT_ID) and hmac_mod.compare_digest(
+                    sec, CLIENT_SECRET
                 )
             except Exception:  # noqa: BLE001
                 ok = False
@@ -101,17 +105,13 @@ def build_issuer(origin: str) -> tuple[FastAPI, dict]:
             email, nonce, challenge = entry
             actual = b64e(hashlib.sha256((code_verifier or "").encode()).digest())
             if not hmac_mod.compare_digest(actual, challenge):
-                return JSONResponse(
-                    {"error": "invalid_grant", "detail": "pkce"}, status_code=400
-                )
+                return JSONResponse({"error": "invalid_grant", "detail": "pkce"}, status_code=400)
             rt = f"rt-{email}-{store['token_calls']}"
             store["refresh"][rt] = email
             return {
                 "access_token": f"at-{email}-{store['token_calls']}",
                 "refresh_token": rt,
-                "id_token": make_jwt(
-                    {"nonce": nonce, "exp": time.time() + 3600, "email": email}
-                ),
+                "id_token": make_jwt({"nonce": nonce, "exp": time.time() + 3600, "email": email}),
                 "token_type": "Bearer",
             }
 
@@ -122,9 +122,7 @@ def build_issuer(origin: str) -> tuple[FastAPI, dict]:
                 )
             email = store["refresh"].get(refresh_token or "")
             if email is None:
-                return JSONResponse(
-                    {"error": "invalid_grant"}, status_code=400
-                )
+                return JSONResponse({"error": "invalid_grant"}, status_code=400)
             rt = f"rt-{email}-rotated-{store['token_calls']}"
             store["refresh"][rt] = email
             return {
@@ -139,7 +137,7 @@ def build_issuer(origin: str) -> tuple[FastAPI, dict]:
         auth = request.headers.get("authorization", "")
         if not auth.startswith("Bearer at-"):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
-        email = auth[len("Bearer at-"):].rsplit("-", 1)[0]
+        email = auth[len("Bearer at-") :].rsplit("-", 1)[0]
         u = store["users"].get(email)
         if u is None:
             return JSONResponse({"error": "invalid_token"}, status_code=401)
@@ -339,9 +337,7 @@ def test_oidc_state_cannot_be_reused_after_consumption(client, issuer):
 def test_login_preserves_next_path(client, issuer):
     email = "bob@example.com"
     code, state = start_login(client, issuer, email, next_path="/rules")
-    r = client.get(
-        f"/auth/oidc/callback?code={code}&state={state}", follow_redirects=False
-    )
+    r = client.get(f"/auth/oidc/callback?code={code}&state={state}", follow_redirects=False)
     assert r.headers["location"] == "/rules"
 
 
@@ -385,9 +381,9 @@ def test_expired_login_state_rejected_and_swept(client, issuer):
     )
     assert r.status_code == 400
     # the expired row itself was consumed (deleted) by the rejected attempt
-    assert client.app.state.db.query_one(
-        "SELECT 1 FROM oidc_logins WHERE state=?", (state,)
-    ) is None
+    assert (
+        client.app.state.db.query_one("SELECT 1 FROM oidc_logins WHERE state=?", (state,)) is None
+    )
 
     # a second, unrelated abandoned row gets swept just by starting a new
     # login (not only when someone bothers to complete/reject the old one)
@@ -398,9 +394,9 @@ def test_expired_login_state_rejected_and_swept(client, issuer):
     )
     client.app.state.db.commit()
     start_login(client, issuer, "frank@example.com")
-    assert client.app.state.db.query_one(
-        "SELECT 1 FROM oidc_logins WHERE state='stale-state'"
-    ) is None
+    assert (
+        client.app.state.db.query_one("SELECT 1 FROM oidc_logins WHERE state='stale-state'") is None
+    )
 
 
 def test_nonce_mismatch_rejected(client, issuer):
@@ -483,9 +479,7 @@ def test_allowlist_groups(client, issuer):
 
 
 def test_allowlist_emails(client, issuer):
-    client.app.state.db.set_setting(
-        "oidc_allowed_emails", ["only@example.com"]
-    )
+    client.app.state.db.set_setting("oidc_allowed_emails", ["only@example.com"])
     email = "other@example.com"
     code, state = start_login(client, issuer, email)
     r = client.get(
@@ -624,11 +618,14 @@ def test_password_mode(pw_client):
     assert pw_client.get("/api/auth/me").json()["authenticated"] is False
 
     # wrong password (JSON body — never a query param)
-    assert pw_client.post(
-        "/api/auth/password",
-        json={"username": "admin", "password": "wrong"},
-        follow_redirects=False,
-    ).status_code == 401
+    assert (
+        pw_client.post(
+            "/api/auth/password",
+            json={"username": "admin", "password": "wrong"},
+            follow_redirects=False,
+        ).status_code
+        == 401
+    )
 
     r = pw_client.post(
         "/api/auth/password",
@@ -649,29 +646,41 @@ def test_password_mode_rejects_missing_body(pw_client):
 
 def test_password_mode_rejects_missing_username(pw_client):
     # password without a username → 422, not treated as "use the default"
-    assert pw_client.post(
-        "/api/auth/password", json={"password": "hunter2"}, follow_redirects=False
-    ).status_code == 422
+    assert (
+        pw_client.post(
+            "/api/auth/password", json={"password": "hunter2"}, follow_redirects=False
+        ).status_code
+        == 422
+    )
 
 
 def test_password_username_defaults_to_admin(pw_client):
     # UI_USERNAME was never set — "admin" is the documented default.
-    assert pw_client.post(
-        "/api/auth/password",
-        json={"username": "wrong-user", "password": "hunter2"},
-        follow_redirects=False,
-    ).status_code == 401
-    assert pw_client.post(
-        "/api/auth/password",
-        json={"username": "admin", "password": "hunter2"},
-        follow_redirects=False,
-    ).status_code == 302
+    assert (
+        pw_client.post(
+            "/api/auth/password",
+            json={"username": "wrong-user", "password": "hunter2"},
+            follow_redirects=False,
+        ).status_code
+        == 401
+    )
+    assert (
+        pw_client.post(
+            "/api/auth/password",
+            json={"username": "admin", "password": "hunter2"},
+            follow_redirects=False,
+        ).status_code
+        == 302
+    )
     # case-insensitive, like the rest of the auth surface (allow-list emails/groups)
-    assert pw_client.post(
-        "/api/auth/password",
-        json={"username": "Admin", "password": "hunter2"},
-        follow_redirects=False,
-    ).status_code == 302
+    assert (
+        pw_client.post(
+            "/api/auth/password",
+            json={"username": "Admin", "password": "hunter2"},
+            follow_redirects=False,
+        ).status_code
+        == 302
+    )
 
 
 def test_password_username_custom_via_env(tmp_path, monkeypatch):
@@ -681,31 +690,43 @@ def test_password_username_custom_via_env(tmp_path, monkeypatch):
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     app = create_app(db_path=tmp_path / "arrlink.db")
     with TestClient(app) as c:
-        assert c.post(
-            "/api/auth/password",
-            json={"username": "admin", "password": "hunter2"},
-            follow_redirects=False,
-        ).status_code == 401
-        assert c.post(
-            "/api/auth/password",
-            json={"username": "alice", "password": "hunter2"},
-            follow_redirects=False,
-        ).status_code == 302
+        assert (
+            c.post(
+                "/api/auth/password",
+                json={"username": "admin", "password": "hunter2"},
+                follow_redirects=False,
+            ).status_code
+            == 401
+        )
+        assert (
+            c.post(
+                "/api/auth/password",
+                json={"username": "alice", "password": "hunter2"},
+                follow_redirects=False,
+            ).status_code
+            == 302
+        )
 
 
 def test_password_username_override_via_settings(pw_client):
     # A runtime Setting overrides the env default, same pattern as everything else.
     pw_client.app.state.db.set_setting("auth_username", "bob")
-    assert pw_client.post(
-        "/api/auth/password",
-        json={"username": "admin", "password": "hunter2"},
-        follow_redirects=False,
-    ).status_code == 401
-    assert pw_client.post(
-        "/api/auth/password",
-        json={"username": "bob", "password": "hunter2"},
-        follow_redirects=False,
-    ).status_code == 302
+    assert (
+        pw_client.post(
+            "/api/auth/password",
+            json={"username": "admin", "password": "hunter2"},
+            follow_redirects=False,
+        ).status_code
+        == 401
+    )
+    assert (
+        pw_client.post(
+            "/api/auth/password",
+            json={"username": "bob", "password": "hunter2"},
+            follow_redirects=False,
+        ).status_code
+        == 302
+    )
 
 
 def test_password_login_issues_opaque_token_not_the_password(pw_client):
@@ -729,11 +750,14 @@ def test_password_login_works_via_env_seeded_password_never_written_to_db(pw_cli
     # nothing is ever written to the `auth_password` Setting — it's hashed
     # once in-process (Settings.ui_password_hash) and compared from there.
     assert pw_client.app.state.db.get_setting("auth_password") is None
-    assert pw_client.post(
-        "/api/auth/password",
-        json={"username": "admin", "password": "hunter2"},
-        follow_redirects=False,
-    ).status_code == 302
+    assert (
+        pw_client.post(
+            "/api/auth/password",
+            json={"username": "admin", "password": "hunter2"},
+            follow_redirects=False,
+        ).status_code
+        == 302
+    )
 
 
 def test_logout_clears_and_revokes_password_session(pw_client):
@@ -974,9 +998,7 @@ def test_redirect_uri_not_pinned_logs_warning(client):
     # query events directly -- /api/logs is itself auth-gated in this
     # fixture's OIDC-enabled config, and this check only cares about what
     # got logged, not the API's own access control
-    rows = client.app.state.db.query(
-        "SELECT message FROM events ORDER BY id DESC LIMIT 50"
-    )
+    rows = client.app.state.db.query("SELECT message FROM events ORDER BY id DESC LIMIT 50")
     assert any("redirect_uri not configured" in r["message"] for r in rows)
 
 
@@ -994,9 +1016,7 @@ def _login_redirect_uri(c, **kwargs):
     return parse_qs(urlsplit(r.headers["location"]).query)["redirect_uri"][0]
 
 
-def test_redirect_uri_derives_from_trusted_hosts_when_not_pinned(
-    issuer, tmp_path, monkeypatch
-):
+def test_redirect_uri_derives_from_trusted_hosts_when_not_pinned(issuer, tmp_path, monkeypatch):
     """RFC 6749 3.1.2: the redirect_uri must be an absolute, pre-registered
     URI. With APP_URL unset but TRUSTED_HOSTS set, it is built from the first
     *non-loopback* TRUSTED_HOSTS entry (static config, https) -- not the
@@ -1010,9 +1030,7 @@ def test_redirect_uri_derives_from_trusted_hosts_when_not_pinned(
         # the derived redirect_uri must still be the non-loopback config host
         uri = _login_redirect_uri(c, headers={"Host": "127.0.0.1"})
         assert uri == "https://arrlink.example.com/auth/oidc/callback"
-        rows = c.app.state.db.query(
-            "SELECT message FROM events ORDER BY id DESC LIMIT 50"
-        )
+        rows = c.app.state.db.query("SELECT message FROM events ORDER BY id DESC LIMIT 50")
         assert not any("redirect_uri not configured" in row["message"] for row in rows)
     clear_discovery_cache()
 
@@ -1104,9 +1122,7 @@ def test_sanitize_error_code_collapses_unknown_values():
 def test_oidc_login_sanitizes_next_at_storage_time(client):
     """login() must sanitize `next` before it's even stored, not just when
     the callback later reads it back out -- defense in depth."""
-    r = client.get(
-        "/api/auth/login?next=%2F%5Cevil.com", follow_redirects=False
-    )
+    r = client.get("/api/auth/login?next=%2F%5Cevil.com", follow_redirects=False)
     assert r.status_code == 302
     row = client.app.state.db.query_one(
         "SELECT next_path FROM oidc_logins ORDER BY created_at DESC LIMIT 1"
@@ -1123,15 +1139,11 @@ def test_password_lockout_after_threshold_failures(pw_client):
     from arrlink.auth.lockout import THRESHOLD
 
     for _ in range(THRESHOLD):
-        r = pw_client.post(
-            "/api/auth/password", json={"username": "admin", "password": "wrong"}
-        )
+        r = pw_client.post("/api/auth/password", json={"username": "admin", "password": "wrong"})
         assert r.status_code == 401
 
     # locked now -- even the CORRECT password is rejected
-    r = pw_client.post(
-        "/api/auth/password", json={"username": "admin", "password": "hunter2"}
-    )
+    r = pw_client.post("/api/auth/password", json={"username": "admin", "password": "hunter2"})
     assert r.status_code == 401
     assert r.json()["detail"] == "wrong username or password"
 
@@ -1179,16 +1191,12 @@ def test_password_lockout_persists_across_restart(pw_client, tmp_path, monkeypat
     from arrlink.main import create_app
 
     for _ in range(THRESHOLD):
-        pw_client.post(
-            "/api/auth/password", json={"username": "admin", "password": "wrong"}
-        )
+        pw_client.post("/api/auth/password", json={"username": "admin", "password": "wrong"})
 
     db_path = pw_client.app.state.db.db_path
     app2 = create_app(db_path=db_path)
     with TestClient(app2) as c2:
-        r = c2.post(
-            "/api/auth/password", json={"username": "admin", "password": "hunter2"}
-        )
+        r = c2.post("/api/auth/password", json={"username": "admin", "password": "hunter2"})
         assert r.status_code == 401
 
 
@@ -1196,23 +1204,15 @@ def test_password_lockout_resets_on_success(pw_client):
     from arrlink.auth.lockout import THRESHOLD
 
     for _ in range(THRESHOLD - 1):
-        pw_client.post(
-            "/api/auth/password", json={"username": "admin", "password": "wrong"}
-        )
-    ok = pw_client.post(
-        "/api/auth/password", json={"username": "admin", "password": "hunter2"}
-    )
+        pw_client.post("/api/auth/password", json={"username": "admin", "password": "wrong"})
+    ok = pw_client.post("/api/auth/password", json={"username": "admin", "password": "hunter2"})
     assert ok.status_code == 200
 
-    row = pw_client.app.state.db.query_one(
-        "SELECT * FROM login_attempts WHERE username='admin'"
-    )
+    row = pw_client.app.state.db.query_one("SELECT * FROM login_attempts WHERE username='admin'")
     assert row is None
 
     # one more failure starts a fresh count, not accumulated from before
-    pw_client.post(
-        "/api/auth/password", json={"username": "admin", "password": "wrong"}
-    )
+    pw_client.post("/api/auth/password", json={"username": "admin", "password": "wrong"})
     row = pw_client.app.state.db.query_one(
         "SELECT fail_count FROM login_attempts WHERE username='admin'"
     )
@@ -1223,12 +1223,8 @@ def test_password_lockout_logs_event(pw_client):
     from arrlink.auth.lockout import THRESHOLD
 
     for _ in range(THRESHOLD):
-        pw_client.post(
-            "/api/auth/password", json={"username": "admin", "password": "wrong"}
-        )
-    rows = pw_client.app.state.db.query(
-        "SELECT message FROM events ORDER BY id DESC LIMIT 10"
-    )
+        pw_client.post("/api/auth/password", json={"username": "admin", "password": "wrong"})
+    rows = pw_client.app.state.db.query("SELECT message FROM events ORDER BY id DESC LIMIT 10")
     assert any("locked" in r["message"] for r in rows)
 
 
@@ -1240,9 +1236,7 @@ def test_password_lockout_visible_in_settings_auth(both_client, issuer):
     complete_login(both_client, code, state)
 
     for _ in range(THRESHOLD):
-        both_client.post(
-            "/api/auth/password", json={"username": "admin", "password": "wrong"}
-        )
+        both_client.post("/api/auth/password", json={"username": "admin", "password": "wrong"})
 
     j = both_client.get("/api/settings/auth").json()
     assert j["password_locked"] is True
@@ -1257,18 +1251,14 @@ def test_password_unlock_endpoint_clears_lockout(both_client, issuer):
     complete_login(both_client, code, state)
 
     for _ in range(THRESHOLD):
-        both_client.post(
-            "/api/auth/password", json={"username": "admin", "password": "wrong"}
-        )
+        both_client.post("/api/auth/password", json={"username": "admin", "password": "wrong"})
     assert both_client.get("/api/settings/auth").json()["password_locked"] is True
 
     r = both_client.post("/api/auth/password/unlock")
     assert r.status_code == 200
     assert both_client.get("/api/settings/auth").json()["password_locked"] is False
 
-    ok = both_client.post(
-        "/api/auth/password", json={"username": "admin", "password": "hunter2"}
-    )
+    ok = both_client.post("/api/auth/password", json={"username": "admin", "password": "hunter2"})
     assert ok.status_code == 200
 
 
@@ -1281,9 +1271,7 @@ def test_password_lockout_is_case_insensitive_single_bucket(pw_client):
             "/api/auth/password",
             json={"username": usernames[i % len(usernames)], "password": "wrong"},
         )
-    r = pw_client.post(
-        "/api/auth/password", json={"username": "admin", "password": "hunter2"}
-    )
+    r = pw_client.post("/api/auth/password", json={"username": "admin", "password": "hunter2"})
     assert r.status_code == 401
     rows = pw_client.app.state.db.query("SELECT * FROM login_attempts")
     assert len(rows) == 1
@@ -1301,8 +1289,6 @@ def test_password_login_with_no_password_configured_fails_clearly(tmp_path, monk
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     app = create_app(db_path=tmp_path / "arrlink.db")
     with TestClient(app) as c:
-        r = c.post(
-            "/api/auth/password", json={"username": "admin", "password": "anything"}
-        )
+        r = c.post("/api/auth/password", json={"username": "admin", "password": "anything"})
         assert r.status_code == 500
         assert c.app.state.db.query("SELECT * FROM login_attempts") == []

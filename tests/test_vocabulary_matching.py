@@ -1,4 +1,5 @@
 """Vocabulary table, native-metadata matching, tag classification."""
+
 from __future__ import annotations
 
 import json
@@ -9,14 +10,13 @@ import time
 import httpx
 import pytest
 import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.testclient import TestClient
-
 from arrlink.core.matching import match_conditions
 from arrlink.core.planner import _native_values
 from arrlink.core.vocabulary import expand_vocabulary_conditions, validate_condition_values
 from arrlink.main import create_app
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
 
 API_KEY = "m11-key"
 VERSION = "5.16.0.1"
@@ -32,17 +32,27 @@ def build_radarr() -> FastAPI:
     app = FastAPI()
     movies = [
         {
-            "id": 1, "title": "Action Flick", "year": 2020, "tags": [],
+            "id": 1,
+            "title": "Action Flick",
+            "year": 2020,
+            "tags": [],
             "movieFile": {"path": "/media/movies/Action Flick/af.mkv", "size": 10},
-            "genres": ["Action", "Adventure"], "certification": "PG-13",
+            "genres": ["Action", "Adventure"],
+            "certification": "PG-13",
             "collection": {"name": "Action Collection", "tmdbId": 1},
-            "qualityProfileId": 4, "originalLanguage": {"id": 1, "name": "English"},
+            "qualityProfileId": 4,
+            "originalLanguage": {"id": 1, "name": "English"},
         },
         {
-            "id": 2, "title": "Kids Cartoon", "year": 2019, "tags": [],
+            "id": 2,
+            "title": "Kids Cartoon",
+            "year": 2019,
+            "tags": [],
             "movieFile": {"path": "/media/movies/Kids Cartoon/kc.mkv", "size": 5},
-            "genres": ["Animation", "Family"], "certification": "G",
-            "collection": None, "qualityProfileId": 5,
+            "genres": ["Animation", "Family"],
+            "certification": "G",
+            "collection": None,
+            "qualityProfileId": 5,
             "originalLanguage": {"id": 1, "name": "English"},
         },
     ]
@@ -94,10 +104,14 @@ def radarr():
     thread.start()
     for _ in range(200):
         try:
-            if httpx.get(
-                f"{origin}/api/v3/system/status",
-                headers={"X-Api-Key": API_KEY}, timeout=1,
-            ).status_code == 200:
+            if (
+                httpx.get(
+                    f"{origin}/api/v3/system/status",
+                    headers={"X-Api-Key": API_KEY},
+                    timeout=1,
+                ).status_code
+                == 200
+            ):
                 break
         except Exception:  # noqa: BLE001
             time.sleep(0.05)
@@ -139,8 +153,10 @@ def _cond(category, match_type, match_value, join=None, source=None):
 
 def test_native_values_maps_item_fields():
     it = {
-        "genres": ["Action", "Adventure"], "certification": "PG-13",
-        "collection": "X Collection", "quality_profile_name": "HD-1080p",
+        "genres": ["Action", "Adventure"],
+        "certification": "PG-13",
+        "collection": "X Collection",
+        "quality_profile_name": "HD-1080p",
         "original_language": "English",
     }
     native = _native_values(it)
@@ -153,7 +169,11 @@ def test_native_values_maps_item_fields():
 
 def test_native_values_empty_when_absent():
     assert _native_values({}) == {
-        "genre": [], "certification": [], "collection": [], "quality": [], "language": [],
+        "genre": [],
+        "certification": [],
+        "collection": [],
+        "quality": [],
+        "language": [],
     }
 
 
@@ -174,7 +194,9 @@ def test_match_conditions_default_source_is_tag():
 
 def test_expand_vocabulary_conditions_and_validate(client):
     db = client.app.state.db
-    db.execute("INSERT INTO apps (name, type, url, api_key, created_at) VALUES ('r','radarr','http://x','k',0)")
+    db.execute(
+        "INSERT INTO apps (name, type, url, api_key, created_at) VALUES ('r','radarr','http://x','k',0)"
+    )
     db.commit()
     app_id = db.query_one("SELECT id FROM apps")["id"]
     db.sync_vocabulary("genre", "radarr", None, [("Action", "28"), ("Comedy", "35")], "tmdb")
@@ -195,13 +217,25 @@ def test_expand_vocabulary_conditions_and_validate(client):
         {"category": "genre", "match_type": "exact", "match_value": "Horror"}, db, "radarr", app_id
     )
     assert len(warn) == 1
-    assert validate_condition_values(
-        {"category": "genre", "match_type": "exact", "match_value": "Action"}, db, "radarr", app_id
-    ) == []
+    assert (
+        validate_condition_values(
+            {"category": "genre", "match_type": "exact", "match_value": "Action"},
+            db,
+            "radarr",
+            app_id,
+        )
+        == []
+    )
     # regex never flagged (no finite value to check)
-    assert validate_condition_values(
-        {"category": "genre", "match_type": "regex", "match_value": "^Hor"}, db, "radarr", app_id
-    ) == []
+    assert (
+        validate_condition_values(
+            {"category": "genre", "match_type": "regex", "match_value": "^Hor"},
+            db,
+            "radarr",
+            app_id,
+        )
+        == []
+    )
 
 
 def test_expand_vocabulary_conditions_value_containing_comma_matches_whole(client):
@@ -212,11 +246,15 @@ def test_expand_vocabulary_conditions_value_containing_comma_matches_whole(clien
     from arrlink.core.matching import match_conditions
 
     db = client.app.state.db
-    db.execute("INSERT INTO apps (name, type, url, api_key, created_at) VALUES ('r','radarr','http://x','k',0)")
+    db.execute(
+        "INSERT INTO apps (name, type, url, api_key, created_at) VALUES ('r','radarr','http://x','k',0)"
+    )
     db.commit()
     app_id = db.query_one("SELECT id FROM apps")["id"]
     db.sync_vocabulary(
-        "collection", "radarr", app_id,
+        "collection",
+        "radarr",
+        app_id,
         [("Ocean's Eleven, Twelve & Thirteen Collection", None), ("Solo Movies", None)],
         "observed",
     )
@@ -228,14 +266,13 @@ def test_expand_vocabulary_conditions_value_containing_comma_matches_whole(clien
 
     # the comma-containing value matches as one whole tag/value...
     r = match_conditions(
-        [cond], item_tags=["Ocean's Eleven, Twelve & Thirteen Collection"],
+        [cond],
+        item_tags=["Ocean's Eleven, Twelve & Thirteen Collection"],
         native={"collection": []},
     )
     assert r.result is True
     # ...and neither bogus half-split fragment matches anything on its own
-    r2 = match_conditions(
-        [cond], item_tags=["Ocean's Eleven"], native={"collection": []}
-    )
+    r2 = match_conditions([cond], item_tags=["Ocean's Eleven"], native={"collection": []})
     assert r2.result is False
 
 
@@ -414,10 +451,14 @@ def test_instance_vocabulary_synced_after_poll(client, radarr):
     names = {row["value"] for row in quality}
     assert {"HD-1080p", "SD"} <= names
 
-    collections = client.get(f"/api/vocabulary?category=collection&app_type=radarr&app_id={app_id}").json()
+    collections = client.get(
+        f"/api/vocabulary?category=collection&app_type=radarr&app_id={app_id}"
+    ).json()
     assert {row["value"] for row in collections} == {"Action Collection"}
 
-    languages = client.get(f"/api/vocabulary?category=language&app_type=radarr&app_id={app_id}").json()
+    languages = client.get(
+        f"/api/vocabulary?category=language&app_type=radarr&app_id={app_id}"
+    ).json()
     assert {row["value"] for row in languages} == {"English"}
 
 
@@ -464,10 +505,17 @@ def test_tag_category_classification(client, radarr):
     assert r.status_code == 200, r.text
     assert r.json()["category"] == "genre"
 
-    r2 = client.patch(f"/api/apps/{app_id}/tags/{tag_id}/category", json={"category": "not-a-category"})
+    r2 = client.patch(
+        f"/api/apps/{app_id}/tags/{tag_id}/category", json={"category": "not-a-category"}
+    )
     assert r2.status_code == 422
 
-    assert client.patch(f"/api/apps/{app_id}/tags/999/category", json={"category": "genre"}).status_code == 404
+    assert (
+        client.patch(
+            f"/api/apps/{app_id}/tags/999/category", json={"category": "genre"}
+        ).status_code
+        == 404
+    )
 
     # clearing back to unclassified
     r3 = client.patch(f"/api/apps/{app_id}/tags/{tag_id}/category", json={"category": None})
@@ -507,7 +555,9 @@ def test_tag_category_classification_preserves_in_use_count(client, radarr):
 
 def test_vocabulary_get_endpoint_scopes(client):
     db = client.app.state.db
-    db.execute("INSERT INTO apps (name, type, url, api_key, created_at) VALUES ('r','radarr','http://x','k',0)")
+    db.execute(
+        "INSERT INTO apps (name, type, url, api_key, created_at) VALUES ('r','radarr','http://x','k',0)"
+    )
     db.commit()
     app_id = db.query_one("SELECT id FROM apps")["id"]
     db.sync_vocabulary("genre", "radarr", None, [("Action", "28")], "tmdb")

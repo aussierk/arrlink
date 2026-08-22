@@ -1,4 +1,5 @@
 """Adapter factory (Radarr + Sonarr)."""
+
 from __future__ import annotations
 
 from .base import BaseAdapter

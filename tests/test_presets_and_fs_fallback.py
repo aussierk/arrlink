@@ -4,6 +4,7 @@ Reuses the fake Radarr (real files, real hardlinks) to prove that a
 runtime fs_fallback Setting actually changes poller behavior, and exercises
 the presets API end to end.
 """
+
 from __future__ import annotations
 
 import os
@@ -14,11 +15,10 @@ import time
 import httpx
 import pytest
 import uvicorn
+from arrlink.main import create_app
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-
-from arrlink.main import create_app
 
 API_KEY = "m6-key"
 VERSION = "5.16.0.1"
@@ -41,8 +41,7 @@ def build_radarr(origin: str, movies: list[dict]) -> FastAPI:
         for m in movies:
             for t in m["tags"]:
                 counts[t] = counts.get(t, 0) + 1
-        return [{"id": i + 1, "label": k, "count": c}
-                for i, (k, c) in enumerate(counts.items())]
+        return [{"id": i + 1, "label": k, "count": c} for i, (k, c) in enumerate(counts.items())]
 
     @app.get("/api/v3/movie")
     def movie(request: Request):
@@ -68,29 +67,39 @@ def radarr_media(tmp_path_factory):
     src = os.path.join(media_dir, "Film.2020.mkv")
     with open(src, "wb") as f:
         f.write(b"film data")
-    movies = [{"id": 1, "title": "Film", "year": 2020, "tags": ["4k"],
-               "movieFile": {"path": src, "size": os.path.getsize(src)}}]
+    movies = [
+        {
+            "id": 1,
+            "title": "Film",
+            "year": 2020,
+            "tags": ["4k"],
+            "movieFile": {"path": src, "size": os.path.getsize(src)},
+        }
+    ]
     port = _free_port()
     origin = f"http://127.0.0.1:{port}"
-    config = uvicorn.Config(build_radarr(origin, movies), host="127.0.0.1",
-                            port=port, log_level="error")
+    config = uvicorn.Config(
+        build_radarr(origin, movies), host="127.0.0.1", port=port, log_level="error"
+    )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     for _ in range(200):
         try:
-            if httpx.get(
-                f"{origin}/api/v3/system/status",
-                headers={"X-Api-Key": API_KEY},
-                timeout=1,
-            ).status_code == 200:
+            if (
+                httpx.get(
+                    f"{origin}/api/v3/system/status",
+                    headers={"X-Api-Key": API_KEY},
+                    timeout=1,
+                ).status_code
+                == 200
+            ):
                 break
         except Exception:  # noqa: BLE001
             time.sleep(0.05)
     else:
         raise RuntimeError("fake radarr did not start")
-    yield {"origin": origin, "media": media_dir, "linked": linked_dir,
-           "movies": movies}
+    yield {"origin": origin, "media": media_dir, "linked": linked_dir, "movies": movies}
     server.should_exit = True
     thread.join(timeout=5)
 
@@ -135,8 +144,7 @@ def test_list_presets_radarr(client):
     body = r.json()
     assert body["base_folder"] == "/media/movies"
     by_key = {p["key"]: p for p in body["presets"]}
-    assert set(by_key) == {"user", "certification", "kids", "4k", "1080p",
-                           "genre", "language"}
+    assert set(by_key) == {"user", "certification", "kids", "4k", "1080p", "genre", "language"}
     assert by_key["user"]["dir_template"] == "/media/movies/{$user}"
     assert by_key["user"]["category"] == "user"
     assert by_key["certification"]["dir_template"] == "/media/movies/{$certification}"
@@ -163,8 +171,7 @@ def test_list_presets_sonarr(client):
     r = client.get("/api/presets?app_type=sonarr")
     by_key = {p["key"]: p for p in r.json()["presets"]}
     # TV conventions differ from movies
-    assert by_key["certification"]["match_value"] == \
-        "^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$"
+    assert by_key["certification"]["match_value"] == "^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$"
     assert by_key["certification"]["dir_template"] == "/media/tv/{$certification}"
     assert by_key["kids"]["match_value"] == "kids,family,TV-Y,TV-Y7,TV-G,TV-PG"
     assert by_key["user"]["dir_template"] == "/media/tv/{$user}"
@@ -190,8 +197,7 @@ def test_apply_preset_creates_rule(client, radarr_media):
     # base folder inside the test's allowed root (the temp linked dir)
     r = client.post(
         "/api/presets/apply",
-        json={"preset_key": "user", "app_type": "radarr",
-              "base_folder": radarr_media["linked"]},
+        json={"preset_key": "user", "app_type": "radarr", "base_folder": radarr_media["linked"]},
     )
     assert r.status_code == 201, r.text
     rule = r.json()["rule"]
@@ -297,14 +303,20 @@ def test_fs_fallback_env_default_and_effective(client, radarr_media):
 def test_fs_fallback_setting_overrides_env(client, radarr_media, monkeypatch):
     origin, linked = radarr_media["origin"], radarr_media["linked"]
     app_id = _add_app(client, origin)
-    client.post("/api/rules", json={
-        "name": "4k",
-        "conditions": [{"category": "quality", "match_type": "exact", "match_value": "4k", "join": None}],
-        "dir_template": f"{linked}/4k",
-    })
+    client.post(
+        "/api/rules",
+        json={
+            "name": "4k",
+            "conditions": [
+                {"category": "quality", "match_type": "exact", "match_value": "4k", "join": None}
+            ],
+            "dir_template": f"{linked}/4k",
+        },
+    )
 
     # simulate a cross-filesystem source/destination pair
     import arrlink.core.fsutil as fsutil
+
     monkeypatch.setattr(fsutil, "same_device", lambda a, b: False)
 
     # default (skip): cross-device link is skipped -> no dst
@@ -386,15 +398,20 @@ def tag_app(tmp_path_factory, monkeypatch):
     tag_store: list[dict] = [{"id": 1, "label": "kids", "count": 2}]
     port = _free_port()
     origin = f"http://127.0.0.1:{port}"
-    config = uvicorn.Config(build_radarr_with_tags(origin, tag_store),
-                            host="127.0.0.1", port=port, log_level="error")
+    config = uvicorn.Config(
+        build_radarr_with_tags(origin, tag_store), host="127.0.0.1", port=port, log_level="error"
+    )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     for _ in range(200):
         try:
-            if httpx.get(f"{origin}/api/v3/system/status",
-                         headers={"X-Api-Key": API_KEY}, timeout=1).status_code == 200:
+            if (
+                httpx.get(
+                    f"{origin}/api/v3/system/status", headers={"X-Api-Key": API_KEY}, timeout=1
+                ).status_code
+                == 200
+            ):
                 break
         except Exception:  # noqa: BLE001
             time.sleep(0.05)
@@ -431,8 +448,7 @@ def test_repository_add_list_delete(tag_client):
 def test_push_tag_creates_in_app_and_reimports(tag_client):
     c, origin, tag_store = tag_client
     # add a real app
-    r = c.post("/api/apps", json={"name": "R", "type": "radarr", "url": origin,
-                                  "api_key": API_KEY})
+    r = c.post("/api/apps", json={"name": "R", "type": "radarr", "url": origin, "api_key": API_KEY})
     app_id = r.json()["id"]
     # the app's current tags: only 'kids'
     c.put("/api/tags", json={"label": "uhd"})  # add to repository
@@ -461,8 +477,7 @@ def test_push_tag_bad_app(tag_client):
 def test_push_tag_unknown_label_still_works(tag_client):
     # pushing a tag not in the repository is still allowed (it's a label)
     c, origin, _ = tag_client
-    r = c.post("/api/apps", json={"name": "R", "type": "radarr", "url": origin,
-                                  "api_key": API_KEY})
+    r = c.post("/api/apps", json={"name": "R", "type": "radarr", "url": origin, "api_key": API_KEY})
     app_id = r.json()["id"]
     r = c.post("/api/tags/push", json={"label": "dolby", "app_ids": [app_id]})
     assert r.status_code == 200
@@ -477,16 +492,23 @@ def test_push_tag_unknown_label_still_works(tag_client):
 def test_app_editable(client, radarr_media):
     origin = radarr_media["origin"]
     # start with the fake's real key so a connection test works
-    r = client.post("/api/apps", json={"name": "R", "type": "radarr",
-                                       "url": origin, "api_key": API_KEY})
+    r = client.post(
+        "/api/apps", json={"name": "R", "type": "radarr", "url": origin, "api_key": API_KEY}
+    )
     app_id = r.json()["id"]
     assert r.json()["poll_interval_s"] == 300  # default poll interval
 
     # edit name + poll interval, blank api_key -> keeps the existing key
     r = client.patch(
         f"/api/apps/{app_id}",
-        json={"name": "R2", "type": "radarr", "url": origin, "api_key": "",
-              "enabled": True, "poll_interval_s": 120},
+        json={
+            "name": "R2",
+            "type": "radarr",
+            "url": origin,
+            "api_key": "",
+            "enabled": True,
+            "poll_interval_s": 120,
+        },
     )
     assert r.status_code == 200
     body = r.json()
@@ -503,14 +525,19 @@ def test_app_editable(client, radarr_media):
     # a new api_key replaces the old one
     r = client.patch(
         f"/api/apps/{app_id}",
-        json={"name": "R2", "type": "radarr", "url": origin,
-              "api_key": "new-key-xyz", "enabled": True, "poll_interval_s": 120},
+        json={
+            "name": "R2",
+            "type": "radarr",
+            "url": origin,
+            "api_key": "new-key-xyz",
+            "enabled": True,
+            "poll_interval_s": 120,
+        },
     )
     assert r.status_code == 200
     assert r.json()["api_key_masked"].endswith("xyz")
 
     # create requires a non-empty key
-    r = client.post("/api/apps", json={"name": "X", "type": "radarr",
-                                       "url": origin, "api_key": ""})
+    r = client.post("/api/apps", json={"name": "X", "type": "radarr", "url": origin, "api_key": ""})
     assert r.status_code == 422
     assert "api_key" in r.json()["detail"]

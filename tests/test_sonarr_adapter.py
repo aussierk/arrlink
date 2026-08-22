@@ -1,4 +1,5 @@
 """Sonarr adapter (series + episodefile join) + the Radarr/Sonarr tag-id fix, against REAL files on disk."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,12 +11,11 @@ import time
 import httpx
 import pytest
 import uvicorn
+from arrlink.arr.sonarr import SonarrAdapter
+from arrlink.main import create_app
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-
-from arrlink.arr.sonarr import SonarrAdapter
-from arrlink.main import create_app
 
 API_KEY = "m5-key"
 VERSION = "4.0.12.3001"
@@ -96,8 +96,10 @@ class Tv:
     def files_by_series(self, series_id):
         for s in self.series:
             if s["id"] == series_id:
-                return [{"id": i + 1, "path": f["path"], "size": f["size"]}
-                        for i, f in enumerate(s["files"])]
+                return [
+                    {"id": i + 1, "path": f["path"], "size": f["size"]}
+                    for i, f in enumerate(s["files"])
+                ]
         return []
 
     def tag_payload(self):
@@ -163,7 +165,7 @@ def _free_port() -> int:
 @pytest.fixture()
 def sonarr_media(tmp_path_factory):
     tv = Tv(str(tmp_path_factory.mktemp("tv")), str(tmp_path_factory.mktemp("linked")))
-    s1 = tv.add_series("The Show", "The Show", 2021, ["tv-14", "## - bob"])
+    tv.add_series("The Show", "The Show", 2021, ["tv-14", "## - bob"])
     tv.add_episode(0, "The Show - S01E01 - Pilot.mkv", b"pilot data")
     tv.add_episode(0, "The Show - S01E02 - Second.mkv", b"second data")
     tv.add_series("Family Show", "Family Show", 2019, ["kids"])
@@ -180,11 +182,14 @@ def sonarr_media(tmp_path_factory):
     thread.start()
     for _ in range(200):
         try:
-            if httpx.get(
-                f"{origin}/api/v3/system/status",
-                headers={"X-Api-Key": API_KEY},
-                timeout=1,
-            ).status_code == 200:
+            if (
+                httpx.get(
+                    f"{origin}/api/v3/system/status",
+                    headers={"X-Api-Key": API_KEY},
+                    timeout=1,
+                ).status_code
+                == 200
+            ):
                 break
         except Exception:  # noqa: BLE001
             time.sleep(0.05)
@@ -221,7 +226,12 @@ def _make_rule(client, name, match_value, dir_template, match_type="exact", cate
         json={
             "name": name,
             "conditions": [
-                {"category": category, "match_type": match_type, "match_value": match_value, "join": None},
+                {
+                    "category": category,
+                    "match_type": match_type,
+                    "match_value": match_value,
+                    "join": None,
+                },
             ],
             "dir_template": dir_template,
         },
@@ -338,8 +348,14 @@ def test_import_creates_hardlinks(client, sonarr_media):
     origin, tv = sonarr_media
     app_id = _add_app(client, origin)
     _make_rule(client, "cert", "tv-14", f"{tv.linked_dir}/tv-14")
-    _make_rule(client, "user", r"^##\s*-\s*(?P<user>.+)$",
-               f"{tv.linked_dir}/users/" + "{$user}", match_type="regex", category="user")
+    _make_rule(
+        client,
+        "user",
+        r"^##\s*-\s*(?P<user>.+)$",
+        f"{tv.linked_dir}/users/" + "{$user}",
+        match_type="regex",
+        category="user",
+    )
     _make_rule(client, "kids", "kids", f"{tv.linked_dir}/kids")
 
     _poll(client, app_id)
@@ -415,8 +431,14 @@ def test_offline_no_removals(client, sonarr_media):
 
     client.patch(
         f"/api/apps/{app_id}",
-        json={"name": "Sonarr", "type": "sonarr", "url": "http://127.0.0.1:1",
-              "api_key": API_KEY, "enabled": True, "poll_interval_s": 30},
+        json={
+            "name": "Sonarr",
+            "type": "sonarr",
+            "url": "http://127.0.0.1:1",
+            "api_key": API_KEY,
+            "enabled": True,
+            "poll_interval_s": 30,
+        },
     )
     r = client.post(f"/api/apps/{app_id}/rescan")
     assert r.status_code == 502
@@ -449,7 +471,7 @@ def test_collision_skips(client, sonarr_media):
         assert f.read() == "someone else's file"
     assert _ino(src) == src_ino
     links = client.get("/api/links?status=active").json()["items"]
-    assert not any(l["dst_path"] == foreign for l in links)
+    assert not any(ln["dst_path"] == foreign for ln in links)
 
 
 def test_series_deleted_grace(client, sonarr_media):
@@ -513,7 +535,7 @@ def test_single_episode_file_deleted_grace_unlinks_not_orphans(client, sonarr_me
     assert os.path.exists(second_dst)  # the still-present episode is untouched
 
     links = client.get("/api/links?status=missing").json()["items"]
-    pilot_links = [l for l in links if l["dst_path"] == pilot_dst]
+    pilot_links = [ln for ln in links if ln["dst_path"] == pilot_dst]
     assert len(pilot_links) == 1
     assert pilot_links[0]["status"] == "missing"
 
@@ -564,9 +586,7 @@ def test_delta_fetch_grace_still_unlinks_on_stale_polls(client, sonarr_media):
     second_dst = f"{tv.linked_dir}/tv-14/The Show - S01E02 - Second.mkv"
     assert os.path.exists(pilot_dst) and os.path.exists(second_dst)
 
-    tv.series[0]["files"] = [
-        f for f in tv.series[0]["files"] if "Pilot" not in f["path"]
-    ]
+    tv.series[0]["files"] = [f for f in tv.series[0]["files"] if "Pilot" not in f["path"]]
     os.remove(f"{tv.media_dir}/The Show/The Show - S01E01 - Pilot.mkv")
 
     _poll(client, app_id)  # miss 1 (re-fetched: count changed)

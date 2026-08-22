@@ -1,4 +1,5 @@
 """Rebuild adapter-shaped `Item`/`MediaFile` objects from the poller's stored snapshot (`app_items` + `app_files`)."""
+
 from __future__ import annotations
 
 import json
@@ -31,9 +32,7 @@ def snapshot_items(db: State, app_id: int) -> list[Item]:
         )
 
     items: list[Item] = []
-    for r in db.query(
-        "SELECT * FROM app_items WHERE app_id = ? ORDER BY id", (app_id,)
-    ):
+    for r in db.query("SELECT * FROM app_items WHERE app_id = ? ORDER BY id", (app_id,)):
         items.append(
             Item(
                 id=r["item_id"],

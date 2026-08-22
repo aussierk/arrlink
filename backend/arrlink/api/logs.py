@@ -1,4 +1,5 @@
 """Event log endpoints + SSE live stream."""
+
 from __future__ import annotations
 
 import asyncio

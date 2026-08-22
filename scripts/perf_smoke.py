@@ -1,4 +1,5 @@
 """Perf smoke test for the poll/reconcile hot path."""
+
 from __future__ import annotations
 
 import os
@@ -47,8 +48,15 @@ def make_items(media_dir: str, n: int, *, bump: set[int] | None = None) -> list[
                 year=2000 + (i % 25),
                 tags=tags,
                 path=os.path.dirname(p),
-                files=[MediaFile(rel_path=f"m{i}.mkv", abs_path=p, size=st.st_size,
-                                 mtime=st.st_mtime, inode=st.st_ino)],
+                files=[
+                    MediaFile(
+                        rel_path=f"m{i}.mkv",
+                        abs_path=p,
+                        size=st.st_size,
+                        mtime=st.st_mtime,
+                        inode=st.st_ino,
+                    )
+                ],
             )
         )
     return items
@@ -85,8 +93,10 @@ def main() -> None:
     db.execute(
         "INSERT INTO rules (name, match_type, match_value, conditions_json, dir_template) "
         "VALUES ('all', 'exact', 'linkme', ?, ?)",
-        ('[{"category":"custom","match_type":"exact","match_value":"linkme","join":null}]',
-         f"{linked}/all"),
+        (
+            '[{"category":"custom","match_type":"exact","match_value":"linkme","join":null}]',
+            f"{linked}/all",
+        ),
     )
     db.commit()
     app_id = db.query_one("SELECT id FROM apps")["id"]
@@ -97,12 +107,17 @@ def main() -> None:
     poller = Poller(db, _Settings())
     counter = WriteCounter(db)
 
-    items = make_items(media, n)
     print(f"\nN = {n} items (1 file each)\n")
     print("-- _store_items --")
     time_phase("cold (all new)", lambda: poller._store_items(app_id, make_items(media, n)), counter)
-    time_phase("warm (no change)", lambda: poller._store_items(app_id, make_items(media, n)), counter)
-    time_phase("1 item changed", lambda: poller._store_items(app_id, make_items(media, n, bump={n // 2})), counter)
+    time_phase(
+        "warm (no change)", lambda: poller._store_items(app_id, make_items(media, n)), counter
+    )
+    time_phase(
+        "1 item changed",
+        lambda: poller._store_items(app_id, make_items(media, n, bump={n // 2})),
+        counter,
+    )
 
     # reconcile needs file ids backfilled onto the items it is given
     def _reconcile(bump=None):

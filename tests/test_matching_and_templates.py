@@ -3,9 +3,9 @@
 Template/matching are unit-tested directly; preview is tested against a fake
 Radarr under real HTTP (reusing the test_radarr_adapter fixture pattern).
 """
+
 from __future__ import annotations
 
-import asyncio
 import socket
 import threading
 import time
@@ -13,25 +13,24 @@ import time
 import httpx
 import pytest
 import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.testclient import TestClient
-
 from arrlink.core.matching import ConditionMatch, match_rule
 from arrlink.core.planner import plan_links
 from arrlink.core.template import (
     TemplateError,
     build_context,
-    resolve_destination,
     resolve_template,
 )
 from arrlink.main import create_app
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
 
 
 def _matched(category: str, tag: str, regex_match=None) -> list[ConditionMatch]:
     """A single matched_conditions list for one category — the shape
     build_context/resolve_destination expect."""
     return [ConditionMatch(category=category, tag=tag, regex_match=regex_match)]
+
 
 # ---------------------------------------------------------------------------
 # matching
@@ -108,9 +107,7 @@ def test_planner_multi_rule_and_file():
             "title": "Kids Movie",
             "year": 2019,
             "tags": ["kids"],
-            "files": [
-                {"abs_path": "/media/movies/Kids Movie/Kids Movie.2019.mkv", "size": 1}
-            ],
+            "files": [{"abs_path": "/media/movies/Kids Movie/Kids Movie.2019.mkv", "size": 1}],
         },
     ]
     planned, errors = plan_links(rules, items, "Radarr", 1, ["/linked"])
@@ -137,15 +134,19 @@ def test_dir_template_regex_capture_group():
     # A condition's placeholder value is the regex's first captured group,
     # not the whole matched tag, when the condition's match_type is regex.
     m = _re.match(r"^##\s*-\s*(?P<user>.+)$", "## - alice")
-    ctx = build_context(_matched("user", "## - alice", m), "Radarr", "Inception", 2010,
-                        "/media/movies/Inception.2010.2160p.mkv")
+    ctx = build_context(
+        _matched("user", "## - alice", m),
+        "Radarr",
+        "Inception",
+        2010,
+        "/media/movies/Inception.2010.2160p.mkv",
+    )
     d, f = _resolve("/linked/movies/users/{$user}", None, ctx)
     assert d == "/linked/movies/users/alice"
     assert f == "Inception.2010.2160p.mkv"  # source basename kept
 
 
 def _resolve(dir_t, file_t, ctx):
-    import re as _re
 
     from arrlink.core.template import (
         check_jail,
@@ -167,15 +168,25 @@ def _resolve(dir_t, file_t, ctx):
 
 
 def test_placeholders():
-    ctx = build_context(_matched("certification", "PG-13"), "Radarr", "Inception", 2010,
-                        "/media/movies/Inception.2010.2160p.mkv")
+    ctx = build_context(
+        _matched("certification", "PG-13"),
+        "Radarr",
+        "Inception",
+        2010,
+        "/media/movies/Inception.2010.2160p.mkv",
+    )
     d, _ = _resolve("/linked/{$app}/{$certification}/{$title} ({$year})", None, ctx)
     assert d == "/linked/Radarr/PG-13/Inception (2010)"
 
 
 def test_filename_template_stem_ext():
-    ctx = build_context(_matched("custom", "kids"), "Radarr", "Inception", 2010,
-                        "/media/movies/Inception.2010.2160p.mkv")
+    ctx = build_context(
+        _matched("custom", "kids"),
+        "Radarr",
+        "Inception",
+        2010,
+        "/media/movies/Inception.2010.2160p.mkv",
+    )
     d, f = _resolve("/linked/movies/kids", "{$stem}", ctx)
     assert f == "Inception.2010.2160p.mkv"  # ext re-attached
     d, f = _resolve("/linked/movies/kids", "{$title}{$ext}", ctx)
@@ -185,8 +196,9 @@ def test_filename_template_stem_ext():
 
 
 def test_sanitize_illegal_chars():
-    ctx = build_context(_matched("custom", 'a/b\\c:d*e"<>|'), "Radarr", "T", 2010,
-                        "/media/movies/T.mkv")
+    ctx = build_context(
+        _matched("custom", 'a/b\\c:d*e"<>|'), "Radarr", "T", 2010, "/media/movies/T.mkv"
+    )
     d, _ = _resolve("/linked/{$custom}", None, ctx)
     # illegal chars → space, whitespace collapsed
     assert d == "/linked/a b c d e"
@@ -197,9 +209,9 @@ def test_jail_blocks_escape():
     ctx = build_context(_matched("custom", "x"), "Radarr", "T", 2010, "/media/movies/T.mkv")
 
     from arrlink.core.template import (
+        check_jail,
         resolve_template,
         sanitize_dir_path,
-        check_jail,
     )
 
     with pytest.raises(TemplateError):
@@ -325,11 +337,14 @@ def radarr():
     thread.start()
     for _ in range(200):
         try:
-            if httpx.get(
-                f"{origin}/api/v3/system/status",
-                headers={"X-Api-Key": API_KEY},
-                timeout=1,
-            ).status_code == 200:
+            if (
+                httpx.get(
+                    f"{origin}/api/v3/system/status",
+                    headers={"X-Api-Key": API_KEY},
+                    timeout=1,
+                ).status_code
+                == 200
+            ):
                 break
         except Exception:  # noqa: BLE001
             time.sleep(0.05)
@@ -362,7 +377,12 @@ def _add_app(client: TestClient, url: str, key: str = API_KEY) -> int:
 
 
 def _cond(category, match_type, match_value, join=None):
-    return {"category": category, "match_type": match_type, "match_value": match_value, "join": join}
+    return {
+        "category": category,
+        "match_type": match_type,
+        "match_value": match_value,
+        "join": join,
+    }
 
 
 def test_preview_exact(client, radarr):

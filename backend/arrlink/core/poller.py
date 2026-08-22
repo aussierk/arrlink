@@ -1,4 +1,5 @@
 """Per-app poller: snapshot, diff, and reconcile hardlinks."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +22,7 @@ JITTER = 0.2
 MAX_BACKOFF = 60.0
 DELETE_AFTER = 3
 # How often the supervisor loop re-scans the apps table for newly enabled
-# apps to spawn a task for. 
+# apps to spawn a task for.
 TICK_S = 15.0
 # TMDB/TRaSH data is shared per app_type, not per app instance.
 VOCAB_LOOP_S = 24 * 3600.0
@@ -60,9 +61,7 @@ class Poller:
                     continue
                 interval = app["poll_interval_s"] or 30
                 delay = max(1.0, interval * (1 + random.uniform(-JITTER, JITTER)))
-                self._tasks[app_id] = asyncio.create_task(
-                    self._app_loop(app_id, delay)
-                )
+                self._tasks[app_id] = asyncio.create_task(self._app_loop(app_id, delay))
             await asyncio.sleep(TICK_S)
 
     async def _app_loop(self, app_id: int, delay: float) -> None:
@@ -98,9 +97,8 @@ class Poller:
         while True:
             try:
                 app_types = {
-                    r["type"] for r in self.db.query(
-                        "SELECT DISTINCT type FROM apps WHERE enabled=1"
-                    )
+                    r["type"]
+                    for r in self.db.query("SELECT DISTINCT type FROM apps WHERE enabled=1")
                 }
                 if self._vocab_stale("genre", None) or self._vocab_stale("certification", None):
                     counts = await sync_tmdb_vocabulary(self.db)
@@ -130,8 +128,7 @@ class Poller:
         except (TypeError, ValueError):
             keep = EVENTS_RETENTION
         cur = self.db.execute(
-            "DELETE FROM events WHERE id <= "
-            "(SELECT MAX(id) - ? FROM events)",
+            "DELETE FROM events WHERE id <= (SELECT MAX(id) - ? FROM events)",
             (keep,),
         )
         self.db.commit()
@@ -139,8 +136,12 @@ class Poller:
             log.info("pruned %d old event row(s)", cur.rowcount)
 
     def _vocab_stale(
-        self, category: str, app_id: int | None, app_type: str | None = None,
-        source: str | None = None, max_age: float = VOCAB_STALE_S,
+        self,
+        category: str,
+        app_id: int | None,
+        app_type: str | None = None,
+        source: str | None = None,
+        max_age: float = VOCAB_STALE_S,
     ) -> bool:
         sql = "SELECT MAX(imported_at) AS ts FROM vocabulary WHERE category=? AND app_id IS ?"
         params: list = [category, app_id]
@@ -175,17 +176,22 @@ class Poller:
             }
             if set(collections) != stored:
                 self.db.sync_vocabulary(
-                    "collection", app_type, app_id,
-                    [(c, None) for c in collections], "observed",
+                    "collection",
+                    app_type,
+                    app_id,
+                    [(c, None) for c in collections],
+                    "observed",
                 )
         except Exception as e:  # noqa: BLE001 - best-effort, suggestion data only
             log.warning("collection vocabulary sync failed for app %s: %s", app_id, e)
 
         if not (
-            self._vocab_stale("quality", app_id, app_type, "instance",
-                              max_age=INSTANCE_VOCAB_STALE_S)
-            or self._vocab_stale("language", app_id, app_type, "instance",
-                                 max_age=INSTANCE_VOCAB_STALE_S)
+            self._vocab_stale(
+                "quality", app_id, app_type, "instance", max_age=INSTANCE_VOCAB_STALE_S
+            )
+            or self._vocab_stale(
+                "language", app_id, app_type, "instance", max_age=INSTANCE_VOCAB_STALE_S
+            )
         ):
             return
         try:
@@ -196,11 +202,16 @@ class Poller:
             profiles = asyncio.run(adapter.fetch_quality_profiles())
             languages = asyncio.run(adapter.fetch_languages())
             self.db.sync_vocabulary(
-                "quality", app_type, app_id,
-                [(p.name, str(p.id)) for p in profiles if p.name], "instance",
+                "quality",
+                app_type,
+                app_id,
+                [(p.name, str(p.id)) for p in profiles if p.name],
+                "instance",
             )
             self.db.sync_vocabulary(
-                "language", app_type, app_id,
+                "language",
+                app_type,
+                app_id,
                 [(lg.name, str(lg.id)) for lg in languages if lg.name],
                 "instance",
             )
@@ -272,14 +283,11 @@ class Poller:
         # --- bulk-load the current snapshot (2 queries, not 2N) -----------
         item_rows: dict[int, object] = {
             r["item_id"]: r
-            for r in self.db.query(
-                "SELECT * FROM app_items WHERE app_id=?", (app_id,)
-            )
+            for r in self.db.query("SELECT * FROM app_items WHERE app_id=?", (app_id,))
         }
         files_by_item: dict[int, list] = {}
         for fr in self.db.query(
-            "SELECT f.* FROM app_files f JOIN app_items i ON i.id=f.item_id "
-            "WHERE i.app_id=?",
+            "SELECT f.* FROM app_files f JOIN app_items i ON i.id=f.item_id WHERE i.app_id=?",
             (app_id,),
         ):
             files_by_item.setdefault(fr["item_id"], []).append(fr)
@@ -293,8 +301,11 @@ class Poller:
             tags_json = json.dumps(sorted(item.tags))
             genres_json = json.dumps(sorted(item.genres))
             native = (
-                item.certification, item.collection, item.quality_profile_id,
-                item.quality_profile_name, item.original_language,
+                item.certification,
+                item.collection,
+                item.quality_profile_id,
+                item.quality_profile_name,
+                item.original_language,
             )
             existing = item_rows.get(item.id)
             existing_files: list = (
@@ -310,8 +321,11 @@ class Poller:
             if getattr(item, "files_stale", False) and existing_files:
                 item.files = [
                     MediaFile(
-                        rel_path=fr["rel_path"], abs_path=fr["abs_path"],
-                        size=fr["size"], mtime=fr["mtime"], inode=fr["inode"],
+                        rel_path=fr["rel_path"],
+                        abs_path=fr["abs_path"],
+                        size=fr["size"],
+                        mtime=fr["mtime"],
+                        inode=fr["inode"],
                         id=fr["id"],
                     )
                     for fr in existing_files
@@ -326,8 +340,20 @@ class Poller:
                     "genres_json, certification, collection, quality_profile_id, "
                     "quality_profile_name, original_language, stats_fingerprint) "
                     "VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?)",
-                    (app_id, item.id, item.title, item.year, tags_json, item.path,
-                     len(item.files), now, now, genres_json, *native, stats_fp),
+                    (
+                        app_id,
+                        item.id,
+                        item.title,
+                        item.year,
+                        tags_json,
+                        item.path,
+                        len(item.files),
+                        now,
+                        now,
+                        genres_json,
+                        *native,
+                        stats_fp,
+                    ),
                 )
                 item_db_id = cur.lastrowid
             else:
@@ -354,16 +380,23 @@ class Poller:
                         "certification=?, collection=?, quality_profile_id=?, "
                         "quality_profile_name=?, original_language=?, "
                         "stats_fingerprint=? WHERE id=?",
-                        (item.title, item.year, tags_json, item.path,
-                         len(item.files), now, genres_json, *native, stats_fp,
-                         item_db_id),
+                        (
+                            item.title,
+                            item.year,
+                            tags_json,
+                            item.path,
+                            len(item.files),
+                            now,
+                            genres_json,
+                            *native,
+                            stats_fp,
+                            item_db_id,
+                        ),
                     )
 
             # --- files: match by rel_path, else by inode (rename) ---------
             by_relpath = {fr["rel_path"]: fr for fr in existing_files}
-            by_inode = {
-                fr["inode"]: fr for fr in existing_files if fr["inode"] is not None
-            }
+            by_inode = {fr["inode"]: fr for fr in existing_files if fr["inode"] is not None}
             matched_ids: set[int] = set()
             for f in item.files:
                 frow = by_relpath.get(f.rel_path)
@@ -373,8 +406,7 @@ class Poller:
                     cur = self.db.execute(
                         "INSERT INTO app_files (item_id, rel_path, abs_path, size, "
                         "mtime, inode, missing_strikes) VALUES (?,?,?,?,?,?,0)",
-                        (item_db_id, f.rel_path, f.abs_path, f.size, f.mtime,
-                         f.inode),
+                        (item_db_id, f.rel_path, f.abs_path, f.size, f.mtime, f.inode),
                     )
                     fid = cur.lastrowid
                 else:
@@ -430,15 +462,13 @@ class Poller:
         # moment later anyway, undoing the "keep it as a visible 'missing'
         # record" intent.
         for lrow in self.db.query(
-            "SELECT dst_path FROM links WHERE file_id=? AND "
-            "status IN ('active','stale')",
+            "SELECT dst_path FROM links WHERE file_id=? AND status IN ('active','stale')",
             (frow["id"],),
         ):
             r = remove_link(lrow["dst_path"])
             if r.ok:
                 self.db.execute(
-                    "UPDATE links SET status='missing', file_id=NULL "
-                    "WHERE dst_path=?",
+                    "UPDATE links SET status='missing', file_id=NULL WHERE dst_path=?",
                     (lrow["dst_path"],),
                 )
         self.db.execute("DELETE FROM app_files WHERE id=?", (frow["id"],))
@@ -453,14 +483,13 @@ class Poller:
                 (strikes, row["id"]),
             )
             return
-        # item gone for good: unlink its hardlinks from disk FIRST, 
-        # then delete. item_id AND file_id are cleared in the same UPDATE: 
+        # item gone for good: unlink its hardlinks from disk FIRST,
+        # then delete. item_id AND file_id are cleared in the same UPDATE:
         # app_files.item_id also cascades on app_items(id), so deleting this row cascades through
         # app_files down to links.file_id too (two FK hops) -- leaving
         # either set would have the DELETE remove this "missing" row right back out from under it.
         for lrow in self.db.query(
-            "SELECT dst_path FROM links WHERE item_id=? AND status "
-            "IN ('active','stale')",
+            "SELECT dst_path FROM links WHERE item_id=? AND status IN ('active','stale')",
             (row["id"],),
         ):
             r = remove_link(lrow["dst_path"])
@@ -503,8 +532,7 @@ class Poller:
         if result.created or result.removed or result.moved:
             self.db.log_event(
                 "info",
-                f"{app_name}: +{result.created} -{result.removed} "
-                f"moved {result.moved}",
+                f"{app_name}: +{result.created} -{result.removed} moved {result.moved}",
                 app_id,
             )
         for err in result.errors:
