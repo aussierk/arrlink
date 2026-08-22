@@ -139,51 +139,6 @@ export default function GeneralSection() {
       <Alert variant="error">{err}</Alert>
       <Alert variant="success">{ok}</Alert>
 
-      <Field label={t('settingsGeneral.unlinkLabel')}>
-        <Toggle checked={unlink} onChange={setUnlink} />
-      </Field>
-
-      <Field label={t('settingsGeneral.fsFallback')}>
-        <select
-          className={inputCls}
-          value={fsFallback}
-          onChange={(e) => setFsFallback(e.target.value)}
-        >
-          {fsModes.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field
-        label={
-          <>
-            {t('settingsGeneral.allowedRoots')}{' '}
-            <span className="text-zinc-600">{t('settingsGeneral.allowedRootsHint')}</span>
-          </>
-        }
-      >
-        <input
-          className={inputCls}
-          value={rootsText}
-          onChange={(e) => setRootsText(e.target.value)}
-          placeholder={t('settingsGeneral.allowedRootsPlaceholder')}
-        />
-      </Field>
-
-      <p className="text-xs text-zinc-600">
-        <Trans
-          i18nKey="settingsGeneral.footnote"
-          components={[
-            <span className="font-mono" key="skip" />,
-            <span className="font-mono" key="copy" />,
-            <span className="font-mono" key="symlink" />,
-          ]}
-        />
-      </p>
-
       <SubSection title={t('settingsGeneral.applicationSectionTitle')}>
         <Field label={t('settingsGeneral.appTitle')}>
           <input
@@ -284,6 +239,55 @@ export default function GeneralSection() {
             onChange={(e) => setLogSizeLimitMb(Number(e.target.value))}
           />
         </Field>
+      </SubSection>
+
+      <SubSection title={t('settingsGeneral.linkingTitle')}>
+        <Field label={t('settingsGeneral.unlinkLabel')}>
+          <Toggle checked={unlink} onChange={setUnlink} />
+        </Field>
+
+        <Field label={t('settingsGeneral.fsFallback')}>
+          <select
+            className={inputCls}
+            value={fsFallback}
+            onChange={(e) => setFsFallback(e.target.value)}
+          >
+            {fsModes.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field
+          label={
+            <>
+              {t('settingsGeneral.allowedRoots')}{' '}
+              <span className="text-zinc-600">
+                {t('settingsGeneral.allowedRootsHint')}
+              </span>
+            </>
+          }
+        >
+          <input
+            className={inputCls}
+            value={rootsText}
+            onChange={(e) => setRootsText(e.target.value)}
+            placeholder={t('settingsGeneral.allowedRootsPlaceholder')}
+          />
+        </Field>
+
+        <p className="text-xs text-zinc-600">
+          <Trans
+            i18nKey="settingsGeneral.footnote"
+            components={[
+              <span className="font-mono" key="skip" />,
+              <span className="font-mono" key="copy" />,
+              <span className="font-mono" key="symlink" />,
+            ]}
+          />
+        </p>
       </SubSection>
 
       <div className="flex justify-end">

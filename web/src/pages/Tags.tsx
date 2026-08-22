@@ -21,10 +21,8 @@ const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
 ]
 
 /**
- * Tags (M6+): two views.
- *  - Tag repository: a curated, shared list of tags (ArrLink's own) that can
- *    be pushed to one or more *arr apps (which create the tag there).
- *  - App tags: the tag vocabulary imported from each app, with usage counts.
+ * Tags: the tag vocabulary imported from each app, with usage counts and
+ * per-tag category classification.
  */
 export default function Tags() {
   const { t } = useTranslation()
@@ -34,11 +32,6 @@ export default function Tags() {
   const [imported, setImported] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  const [repo, setRepo] = useState<{ id: number; label: string }[]>([])
-  const [newTag, setNewTag] = useState('')
-  const [pushTargets, setPushTargets] = useState<Set<number>>(new Set())
-  const [pushMsg, setPushMsg] = useState<string | null>(null)
 
   // Category edits are staged here, not saved on select — the row's
   // dropdown shows the pending value if there is one, else the saved
@@ -53,21 +46,12 @@ export default function Tags() {
     try {
       const a = await api.listApps()
       setApps(a)
-      setPushTargets(new Set(a.map((x) => x.id)))
       if (appId === null && a.length > 0) setAppId(a[0].id)
       if (appId !== null && !a.some((x) => x.id === appId)) setAppId(null)
     } catch (e) {
       setErr(String(e))
     }
   }, [appId])
-
-  const loadRepo = useCallback(async () => {
-    try {
-      setRepo(await api.listTagRepository())
-    } catch (e) {
-      setErr(String(e))
-    }
-  }, [])
 
   const loadTags = useCallback(async () => {
     if (appId === null) return
@@ -82,9 +66,6 @@ export default function Tags() {
   useEffect(() => {
     void loadApps()
   }, [loadApps])
-  useEffect(() => {
-    void loadRepo()
-  }, [loadRepo])
   useEffect(() => {
     void loadTags()
   }, [loadTags])
@@ -175,70 +156,6 @@ export default function Tags() {
     }
   }
 
-  async function addRepoTag(e: React.FormEvent) {
-    e.preventDefault()
-    const label = newTag.trim()
-    if (!label) return
-    try {
-      await api.addTagToRepository(label)
-      setNewTag('')
-      await loadRepo()
-    } catch (e) {
-      setErr(String(e))
-    }
-  }
-
-  async function removeRepoTag(label: string) {
-    try {
-      await api.deleteTagFromRepository(label)
-      await loadRepo()
-    } catch (e) {
-      setErr(String(e))
-    }
-  }
-
-  async function pushRepoTag(label: string) {
-    if (pushTargets.size === 0) {
-      setErr(t('tags.repository.selectAppsErr'))
-      return
-    }
-    setPushMsg(t('tags.repository.pushingOne', { label }))
-    try {
-      const r = await api.pushTag(label, [...pushTargets])
-      setPushMsg(t('tags.repository.pushedOne', { label, ok: r.ok, failed: r.failed }))
-      // re-import the affected apps so their tag lists refresh
-      await loadApps()
-    } catch (e) {
-      setErr(String(e))
-    }
-  }
-
-  async function pushAllRepo() {
-    if (repo.length === 0 || pushTargets.size === 0) {
-      setErr(t('tags.repository.nothingToPushErr'))
-      return
-    }
-    setPushMsg(t('tags.repository.pushingAll', { count: repo.length }))
-    let ok = 0
-    let failed = 0
-    for (const tag of repo) {
-      const r = await api.pushTag(tag.label, [...pushTargets])
-      ok += r.ok
-      failed += r.failed
-    }
-    setPushMsg(t('tags.repository.pushedAll', { ok, failed }))
-    await loadApps()
-  }
-
-  function toggleTarget(id: number) {
-    setPushTargets((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   return (
     <div className="space-y-6">
       {err && (
@@ -246,86 +163,6 @@ export default function Tags() {
           {err}
         </div>
       )}
-
-      {/* ------------------------------ Tag repository --------------------- */}
-      <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-        <div>
-          <h2 className="text-lg font-semibold">{t('tags.repository.title')}</h2>
-          <p className="text-sm text-zinc-500">{t('tags.repository.subtitle')}</p>
-        </div>
-
-        <form onSubmit={addRepoTag} className="flex items-center gap-2">
-          <input
-            className="w-64 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
-            value={newTag}
-            onChange={(e) => setNewTag(e.target.value)}
-            placeholder={t('tags.repository.placeholder')}
-          />
-          <button
-            type="submit"
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
-          >
-            {t('tags.repository.addTag')}
-          </button>
-        </form>
-
-        {apps.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400">
-            <span>{t('tags.repository.pushTo')}</span>
-            {apps.map((a) => (
-              <label key={a.id} className="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  checked={pushTargets.has(a.id)}
-                  onChange={() => toggleTarget(a.id)}
-                />
-                {a.name}
-              </label>
-            ))}
-            <button
-              type="button"
-              onClick={() => void pushAllRepo()}
-              disabled={repo.length === 0}
-              className="ml-auto rounded-md border border-indigo-500/50 px-3 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40 disabled:opacity-50"
-            >
-              {t('tags.repository.pushAllTags')}
-            </button>
-          </div>
-        )}
-
-        {pushMsg && (
-          <div className="rounded-md border border-indigo-900 bg-indigo-950/40 p-2 text-sm text-indigo-300">
-            {pushMsg}
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-2">
-          {repo.length === 0 && (
-            <span className="text-sm text-zinc-500">{t('tags.repository.empty')}</span>
-          )}
-          {repo.map((repoTag) => (
-            <span
-              key={repoTag.id}
-              className="inline-flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200"
-            >
-              <span className="font-mono text-xs">{repoTag.label}</span>
-              <button
-                onClick={() => void pushRepoTag(repoTag.label)}
-                disabled={pushTargets.size === 0}
-                className="text-xs text-indigo-300 hover:text-indigo-200 disabled:opacity-40"
-              >
-                {t('tags.repository.push')}
-              </button>
-              <button
-                onClick={() => void removeRepoTag(repoTag.label)}
-                className="text-xs text-red-400 hover:text-red-300"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      </div>
 
       {/* ------------------------------ App tags --------------------------- */}
       <div className="flex items-end gap-3">

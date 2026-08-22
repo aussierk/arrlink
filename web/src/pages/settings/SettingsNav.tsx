@@ -14,20 +14,21 @@ const items = [
   { to: '/settings/backup', labelKey: 'settingsNav.backup', icon: HardDriveDownload },
 ] as const
 
-/** Secondary nav for the Settings area, styled to match the main sidebar. */
+/** Secondary nav for the Settings area — a horizontal tab bar below the
+ * page header, underline indicating the active section. */
 export default function SettingsNav() {
   const { t } = useTranslation()
   return (
-    <nav className="w-44 shrink-0 space-y-1">
+    <nav className="flex flex-wrap gap-1 border-b border-zinc-800">
       {items.map((i) => (
         <NavLink
           key={i.to}
           to={i.to}
           className={({ isActive }) =>
-            `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+            `flex items-center gap-2 border-b-2 px-3 py-2 text-sm transition-colors ${
               isActive
-                ? 'bg-indigo-600/20 text-indigo-300'
-                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                ? 'border-indigo-500 text-indigo-300'
+                : 'border-transparent text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
             }`
           }
         >

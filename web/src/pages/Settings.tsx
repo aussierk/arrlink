@@ -13,12 +13,8 @@ export default function Settings() {
         <p className="text-sm text-zinc-500">{t('settings.subtitle')}</p>
       </div>
 
-      <div className="flex gap-8">
-        <SettingsNav />
-        <div className="min-w-0 flex-1">
-          <Outlet />
-        </div>
-      </div>
+      <SettingsNav />
+      <Outlet />
     </div>
   )
 }

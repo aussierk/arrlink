@@ -161,7 +161,7 @@
     "delete": "delete",
     "empty": "No rules yet — click \"Add rule\" and start from a preset.",
     "previewHeading": "Preview — {{name}}",
-    "footer": "Presets are a quick-start inside the rule form. Manage the shared tag repository on the Tags page.",
+    "footer": "Presets are a quick-start inside the rule form.",
     "matchMore": "+{{count}} more",
     "categoryLabel": {
       "user": "User",
@@ -174,22 +174,6 @@
     }
   },
   "tags": {
-    "repository": {
-      "title": "Tag repository",
-      "subtitle": "A curated, shared list of tags. Push them to your apps — the tag is created there and the app's tag list is refreshed.",
-      "placeholder": "e.g. 4k, kids, ## - alice",
-      "addTag": "Add tag",
-      "pushTo": "Push to:",
-      "pushAllTags": "Push all tags",
-      "pushingOne": "Pushing \"{{label}}\"…",
-      "pushedOne": "Pushed \"{{label}}\" to {{ok}} app(s), {{failed}} failed",
-      "pushingAll": "Pushing {{count}} tag(s)…",
-      "pushedAll": "Pushed to {{ok}} app(s), {{failed}} failed",
-      "selectAppsErr": "Select at least one app to push to.",
-      "nothingToPushErr": "Nothing to push — add tags and select apps.",
-      "empty": "No tags in the repository yet.",
-      "push": "push"
-    },
     "appTags": {
       "title": "App tags",
       "subtitle": "Tag vocabulary imported from each app, with usage counts.",
@@ -222,7 +206,7 @@
   },
   "settingsGeneral": {
     "title": "General",
-    "subtitle": "Applied by the poller and the repair action. Changes take effect on the next poll — no restart needed.",
+    "subtitle": "Application, localization, network, logging, and linking behavior — most changes take effect immediately, no restart needed.",
     "rootsEmptyErr": "Allowed roots must not be empty.",
     "saved": "Linking settings saved — they take effect on the next poll.",
     "unlinkLabel": "Unlink on mismatch (remove links when a rule no longer matches)",
@@ -247,7 +231,8 @@
     "loggingTitle": "Logging",
     "logLevel": "Log level",
     "logSizeLimit": "Log file size limit (MB)",
-    "logSizeLimitHint": "Rotating log file under config/logs — applies immediately, no restart needed."
+    "logSizeLimitHint": "Rotating log file under config/logs — applies immediately, no restart needed.",
+    "linkingTitle": "Linking"
   },
   "settingsServices": {
     "title": "Services",

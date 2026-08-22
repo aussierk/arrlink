@@ -15,7 +15,7 @@ export default function SubSection({
   children: React.ReactNode
 }) {
   return (
-    <div className="space-y-3 rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
+    <div className="space-y-3">
       {(title || header) && (
         <div className="flex items-center justify-between gap-3">
           {title && <h4 className="text-sm font-medium text-zinc-200">{title}</h4>}
