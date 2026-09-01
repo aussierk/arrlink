@@ -5,17 +5,12 @@ apps, import their tags, map tags to destination path/filename templates,
 and ArrLink continuously hardlinks matching media into organized folders —
 reacting to new imports and tag changes.
 
-> M6 done: Radarr + Sonarr connect, poll, and hardlink, with presets, a
-> Settings page (unlink / fs-fallback / allowed roots), and the full
-> unlink/rename/replace lifecycle. See `PLAN.md` for the design and remaining
-> milestone (M7).
-
 ## Features
 
 - Multi-stage Docker image (Node 22 → Python 3.12-slim), `PUID`/`PGID`
   (starts as root to chown volumes, drops to `PUID`/`PGID` via gosu),
   healthcheck
-- **Auth (M1, dual-mode in M10)**
+- **Auth**
   - **Password** and **OIDC** login are independent — either, both, or
     neither can be enabled, and the login page offers whichever are active
   - Generic **OIDC** (Auth Code + PKCE, **confidential client**): provider
@@ -35,11 +30,11 @@ reacting to new imports and tag changes.
   - Open mode (both disabled, default): no login at all — LAN-only assumption
   - All data endpoints 401 without a session; `/api/health` stays open for
     the container healthcheck
-- **Apps (M2)**
+- **Apps**
   - Radarr adapter: **Test connection** (pre-save + per-app), **live tag
     import** from `GET /v3/tag`, item fetching from `GET /v3/movie`
     (normalization for the diff engine), per-app `last_error` surfaced in UI
-  - **Sonarr adapter (M5)**: `GET /v3/series` + per-series
+  - **Sonarr adapter**: `GET /v3/series` + per-series
     `GET /v3/episodefile` joined by `seriesId`; series-level tags; files
     stat'ed for inodes. Both adapters translate the apps' tag **ids** (the
     wire format) to **labels** via `GET /v3/tag` so rules match real tags
@@ -53,15 +48,24 @@ reacting to new imports and tag changes.
     browse/filter/remove/**repair**)
   - Apps (create **and edit** Radarr/Sonarr connections — name, URL, API key,
     poll interval, enabled; Test + Import tags + rescan)
-  - Tags (**tag repository** — a curated shared tag list that can be pushed to
-    the apps; plus per-app vocabulary import with usage counts)
+  - Tags (per-app tag vocabulary import, usage counts, and per-tag category
+    classification)
   - Rules (create/edit rules in a modal with **preset quick-start**, live
     preview, tag autocomplete)
   - Logs (event history, live SSE feed)
-  - Settings (structured, no raw JSON: **Linking** — unlink-on-mismatch,
-    cross-filesystem fallback, allowed roots; **Access control** — OIDC
-    allow-lists)
-- **Poller + hardlinker (M4)**
+  - Settings (structured, no raw JSON), across five tabs:
+    - **General**: Application title/URL, display language, region (TMDB
+      certification country), timezone (one display timezone for every
+      viewer), a read-only bind address/port display, logging (level +
+      rotating log-file size limit, both live), and linking behavior
+      (unlink-on-mismatch, cross-filesystem fallback, allowed roots)
+    - **Services**: Radarr/Sonarr connections
+    - **Authentication**: password/OIDC config and the OIDC allowed-groups/
+      allowed-emails allow-lists
+    - **Vocabulary**: TMDB/TRaSH Guides overrides and per-app sync
+    - **Backup**: list/run-now, and the automatic backup's
+      enabled/interval/retention
+- **Poller + hardlinker**
   - per-app async poller (default **300 s** per app, ±20 % jitter,
     exponential backoff on errors, manual **rescan** button)
   - diff engine: new items/files, tag changes, **renames** (inode-tracked →
@@ -78,7 +82,7 @@ reacting to new imports and tag changes.
     log stream, link counts
   - safety: source files are never touched; only entries ArrLink created are
     removed, and only after inode verification
-- **Rules engine (M3)**
+- **Rules engine**
   - Matching: exact / list / regex (named + positional capture groups)
   - Templates: dir + optional filename with placeholders `{$tag}` `{$app}`
     `{$title}` `{$year}` `{$1..9}` `{$<group>}` `{$basename}` `{$stem}` `{$ext}`
@@ -87,8 +91,8 @@ reacting to new imports and tag changes.
     the source file extension is never dropped
   - **Live preview** (`POST /api/rules/preview?app_id=`): dry-runs the rule
     over the app's current items and shows exactly which files would land
-    where — nothing is created until the M4 poller runs
-- **Presets + runtime settings (M6)**
+    where — nothing is created until the poller runs
+- **Presets + runtime settings**
   - **Presets**: one-click, editable rules for common conventions — user tags
     (`## - $user` → `{$user}` directly under the base folder),
     certification (`{$tag}` directly under the base folder), kids, 4K/HDR,
@@ -98,12 +102,11 @@ reacting to new imports and tag changes.
     roots. Presets are a **quick-start inside the rule modal** (no separate
     page). `GET /api/presets?app_type=` + `POST /api/presets/apply`
   - **Runtime fs fallback**: the cross-filesystem fallback (`skip`/`copy`/
-    `symlink`) is a runtime **Setting** (Settings page) that takes precedence
-    over the `FS_FALLBACK` env default, applied by both the poller and repair
-  - **Settings page**: fully structured (no raw JSON) — a **Linking** section
-    edits global unlink-on-mismatch, the fs fallback mode, and the allowed
-    roots, plus an **Access control** section for OIDC allow-lists. Backed by
-    `GET /api/settings/effective` (the resolved runtime values).
+    `symlink`) is a runtime **Setting** (Settings → General) that takes
+    precedence over the `FS_FALLBACK` env default, applied by both the
+    poller and repair. See the Settings bullet above for the full page —
+    General also covers application identity, localization, network,
+    and logging, not just linking behavior.
 - FastAPI JSON API + SSE live log stream
 - SQLite (WAL), single versioned schema baseline; thread-local connections
 - **Path mirroring**: the container must see the *arr apps' media at the same
@@ -163,9 +166,9 @@ docker compose up -d
   work (otherwise the cross-filesystem fallback kicks in). Presets link under
   `/media/movies` and `/media/tv` by default.
 - If you prefer a different root, set the `allowed_roots` Setting (Settings
-  → Linking) and use matching base folders in your rules.
+  → General → Linking) and use matching base folders in your rules.
 
-### Auth setup (password / OIDC / both — M1, dual-mode in M10)
+### Auth setup (password / OIDC / both)
 
 Password and OIDC login are independent — enable either or both, via `.env`
 (seed defaults) and/or Settings → Authentication (runtime overrides, take
@@ -186,8 +189,8 @@ itself.
    scheme come from `APP_URL` if set, else `TRUSTED_HOSTS`, else the request)
 3. Set `AUTH_OIDC_ENABLED=true`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
    `OIDC_CLIENT_SECRET` in the compose file.
-4. (Optional) restrict access: Settings → Access control → allowed groups
-   and/or emails (empty = any authenticated user).
+4. (Optional) restrict access: Settings → Authentication → allowed groups
+   and/or emails, in the OIDC section (empty = any authenticated user).
 5. `OIDC_AUTO_LOGIN` (default `true`): `/login` redirects straight to the
    provider when OIDC is enabled. Visit `/login?form=true` to bypass that
    and reach the manual chooser (SSO button and/or the password form) —
@@ -239,13 +242,15 @@ Found a vulnerability? See `SECURITY.md`.
 
 ## Backups
 
-`/config/backups/arrlink-YYYYMMDD-HHMMSS.db` — a nightly backup of the
+`/config/backups/arrlink-YYYYMMDD-HHMMSS.db` — an automatic backup of the
 whole database (rules, apps, settings, everything except the physical
-media/hardlinks themselves, which live independently), retained for 7 days.
-Uses SQLite's own online backup API, safe against a live database — no
-downtime, no pausing the poller. Configurable via `BACKUP_ENABLED` (default
-`true`) and `BACKUP_RETENTION_DAYS` (default `7`); `GET /api/backup` lists
-existing backups, `POST /api/backup/run` triggers one manually. This
+media/hardlinks themselves, which live independently), on a configurable
+interval (default 24h) with retention (default 7 days). Uses SQLite's own
+online backup API, safe against a live database — no downtime, no pausing
+the poller. Enabled/interval/retention are editable live from Settings →
+Backup (seeded from `BACKUP_ENABLED`/`BACKUP_RETENTION_DAYS` env defaults),
+which also lists existing backups and can trigger one manually — the same
+`GET /api/backup` / `POST /api/backup/run` endpoints the UI uses. This
 doesn't back up your actual media or hardlinks — just ArrLink's own
 configuration database.
 
@@ -255,19 +260,6 @@ Targets the `/v3/` API surface of current Radarr/Sonarr releases (`/v3/tag`,
 `/v3/movie`, `/v3/series`, `/v3/episodefile`, etc.). No specific minimum
 version has been verified/pinned — if something breaks against your
 version, please open an issue.
-
-## Milestones
-
-| # | Scope | Status |
-|---|---|---|
-| M0 | scaffold, Docker, SPA shell, API/state foundation | ✅ done |
-| M1 | OIDC auth (PKCE, confidential client, silent refresh, allow-lists) | ✅ done |
-| M2 | Radarr adapter: ping, tag import | ✅ done |
-| M3 | rule matching, templates, live preview | ✅ done |
-| M4 | poller, diff engine, hardlinker (Radarr) | ✅ done |
-| M5 | Sonarr adapter (series + episodefile join, tag-id → label) | ✅ done |
-| M6 | presets, runtime fs fallback, Settings page, lifecycle polish | ✅ done |
-| M7 | docs, image publish, homelab test matrix | next |
 
 ## License
 
