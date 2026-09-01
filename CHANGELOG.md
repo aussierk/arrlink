@@ -6,7 +6,7 @@ on [Keep a Changelog](https://keepachangelog.com/), and this project follows
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-08-31
+## [0.1.0] - 2026-09-01
 
 Initial release. ArrLink connects to Radarr and Sonarr, matches items by
 tag, and continuously hardlinks them into organized folders as tags and

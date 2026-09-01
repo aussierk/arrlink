@@ -20,5 +20,6 @@
       ]
     }
   },
-  "tag-prefix": "v"
+  "tag-prefix": "v",
+  "bootstrap-sha": "c74cab76c41691e8ba8376f3876017debed658e6"
 }
