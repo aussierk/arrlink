@@ -1,8 +1,12 @@
 # Changelog
 
-All notable changes to this project are documented here.
+All notable changes to this project are documented here. The format is based
+on [Keep a Changelog](https://keepachangelog.com/), and this project follows
+[Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-08-31
 
 Initial release. ArrLink connects to Radarr and Sonarr, matches items by
 tag, and continuously hardlinks them into organized folders as tags and
@@ -32,3 +36,6 @@ libraries change.
   workflow publishing to `ghcr.io/aussierk/arrlink`.
 
 See the [README](README.md) for the full feature list and setup guide.
+
+[Unreleased]: https://github.com/aussierk/arrlink/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/aussierk/arrlink/releases/tag/v0.1.0

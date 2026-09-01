@@ -1,0 +1,60 @@
+name: Bug report
+description: Something isn't working the way it should
+labels: ["bug"]
+body:
+  - type: checkboxes
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and didn't find a duplicate
+          required: true
+        - label: This is a bug, not a support question (those go to Discussions)
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        Steps to reproduce:
+        1. ...
+        2. ...
+
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ArrLink version / image tag
+      placeholder: "v0.1.0 or ghcr.io/aussierk/arrlink@sha256:..."
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker Compose
+        - docker run
+        - From source
+        - Other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: arr-versions
+    attributes:
+      label: Radarr / Sonarr versions
+      placeholder: "Radarr 5.x, Sonarr 4.x"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste log output or the event log. Redact API keys, hostnames, and other secrets.
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: Rule / config details
+      description: The rule, template, or setting involved (redacted as needed).
