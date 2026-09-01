@@ -41,7 +41,7 @@ def match_rule(match_type: str, match_value: str, item_tags: list[str]) -> RuleM
 
 
 def _parse_list_value(match_value: str) -> set[str]:
-    """A "list" match_value is normally simple comma-separated text a user typed by hand in the rule editor."""
+    """A "list" match_value is comma-separated text a user typed in the rule editor."""
     try:
         decoded = json.loads(match_value)
     except (TypeError, ValueError):

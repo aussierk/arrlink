@@ -1,0 +1,45 @@
+# Local guardrails so lint/format/hygiene problems are caught before CI.
+#   pip install pre-commit   (or: pip install -r requirements-dev.txt)
+#   pre-commit install
+# Run against everything once with: pre-commit run --all-files
+minimum_pre_commit_version: "3.7.0"
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.5 # keep in sync with requirements-dev.txt and .github/workflows/ci.yml
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: prettier-web
+        name: prettier (web/)
+        language: node
+        additional_dependencies: ["prettier@3.6.2"]
+        entry: prettier --check
+        files: ^web/.*\.(ts|tsx|js|jsx|css|json|md)$
+
+  # The backend suite needs a Linux toolchain (uvloop/httptools have no
+  # Windows wheels). Once you can run `pytest -q` locally, uncomment this to
+  # gate `git push` on it too:
+  #
+  # - repo: local
+  #   hooks:
+  #     - id: pytest
+  #       name: pytest
+  #       language: system
+  #       entry: pytest -q
+  #       pass_filenames: false
+  #       stages: [pre-push]

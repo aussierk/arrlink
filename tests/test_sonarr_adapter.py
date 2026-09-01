@@ -1,4 +1,4 @@
-"""Sonarr adapter (series + episodefile join) + the Radarr/Sonarr tag-id fix, against REAL files on disk."""
+"""Sonarr adapter (series + episodefile join) + the tag-id fix, against real files on disk."""
 
 from __future__ import annotations
 
@@ -11,11 +11,12 @@ import time
 import httpx
 import pytest
 import uvicorn
-from arrlink.arr.sonarr import SonarrAdapter
-from arrlink.main import create_app
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+
+from arrlink.arr.sonarr import SonarrAdapter
+from arrlink.main import create_app
 
 API_KEY = "m5-key"
 VERSION = "4.0.12.3001"

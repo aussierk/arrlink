@@ -14,10 +14,11 @@ import time
 import httpx
 import pytest
 import uvicorn
-from arrlink.main import create_app
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+
+from arrlink.main import create_app
 
 API_KEY = "m4-key"
 VERSION = "5.16.0.1"
@@ -685,6 +686,8 @@ def test_links_list_pagination_envelope(client, radarr_media):
 def test_events_prune_caps_table(client, radarr_media):
     db = client.app.state.db
     db.set_setting("events_retention", 100)
+    db.execute("DELETE FROM events")
+    db.commit()
     for i in range(250):
         db.execute(
             "INSERT INTO events (ts, level, message) VALUES (?, 'info', ?)",

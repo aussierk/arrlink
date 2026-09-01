@@ -197,8 +197,9 @@ def test_effective_backup_settings_db_override(tmp_path, monkeypatch):
 
 
 def test_backup_settings_endpoint_get_put(tmp_path, monkeypatch):
-    from arrlink.main import create_app
     from fastapi.testclient import TestClient
+
+    from arrlink.main import create_app
 
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("BACKUP_ENABLED", "true")
@@ -229,8 +230,9 @@ def test_backup_settings_endpoint_get_put(tmp_path, monkeypatch):
 
 
 def test_backup_endpoint_manual_trigger(tmp_path, monkeypatch):
-    from arrlink.main import create_app
     from fastapi.testclient import TestClient
+
+    from arrlink.main import create_app
 
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     app = create_app(db_path=tmp_path / "arrlink.db")

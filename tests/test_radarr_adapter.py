@@ -14,11 +14,12 @@ import time
 import httpx
 import pytest
 import uvicorn
-from arrlink.arr.radarr import RadarrAdapter
-from arrlink.main import create_app
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+
+from arrlink.arr.radarr import RadarrAdapter
+from arrlink.main import create_app
 
 API_KEY = "radarr-key-123"
 VERSION = "5.16.0.1"

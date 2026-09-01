@@ -30,6 +30,7 @@ select = ["E", "F", "I", "UP", "B"]
 # separate `from x import (...)` statement per aliased name -- ugly, and
 # not how this codebase's imports were written.
 combine-as-imports = true
+known-first-party = ["arrlink"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection pattern *is* a call in an argument default

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "include-component-in-tag": false,
+      "tag-separator": "",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "web/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "pyproject.toml",
+          "jsonpath": "$.project.version"
+        }
+      ]
+    }
+  },
+  "tag-prefix": "v"
+}

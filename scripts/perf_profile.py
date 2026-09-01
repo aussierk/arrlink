@@ -20,13 +20,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import httpx  # noqa: E402
 import uvicorn  # noqa: E402
+from fastapi import FastAPI, Request  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+
 from arrlink.arr import base as arr_base  # noqa: E402
 from arrlink.arr.radarr import RadarrAdapter  # noqa: E402
 from arrlink.arr.sonarr import SonarrAdapter  # noqa: E402
 from arrlink.core.poller import Poller  # noqa: E402
 from arrlink.state import State  # noqa: E402
-from fastapi import FastAPI, Request  # noqa: E402
-from fastapi.responses import JSONResponse  # noqa: E402
 
 API_KEY = "perf-key"
 

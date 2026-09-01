@@ -105,7 +105,7 @@ def _redirect_uri(request: Request, db: State) -> str:
 
 
 def _sanitize_next(path: str | None) -> str:
-    """Only ever allow a same-origin, relative path for a post-login redirect — never let `next` become an open redirect."""
+    """Only allow a same-origin relative path for the post-login redirect."""
     if not path or "\\" in path or not path.startswith("/"):
         return "/"
     parsed = urlsplit(path)

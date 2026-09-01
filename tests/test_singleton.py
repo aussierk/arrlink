@@ -9,15 +9,15 @@ import sys
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
+
+import arrlink
 from arrlink.main import create_app
 from arrlink.singleton import (
     InstanceLockError,
     acquire_instance_lock,
     release_instance_lock,
 )
-from fastapi.testclient import TestClient
-
-import arrlink
 
 _BACKEND_SRC_DIR = str(Path(arrlink.__file__).resolve().parents[1])
 

@@ -1,4 +1,4 @@
-"""Auth tests: OIDC (PKCE + confidential client), sessions, silent refresh, allow-lists, password/none modes."""
+"""Auth tests: OIDC (PKCE, confidential client), sessions, refresh, allow-lists, password modes."""
 
 from __future__ import annotations
 
@@ -14,12 +14,13 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 import uvicorn
-from arrlink.auth import sessions as sess
-from arrlink.auth.oidc import OidcClient, b64url_encode, clear_discovery_cache, decode_jwt_payload
-from arrlink.main import create_app
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+
+from arrlink.auth import sessions as sess
+from arrlink.auth.oidc import OidcClient, b64url_encode, clear_discovery_cache, decode_jwt_payload
+from arrlink.main import create_app
 
 CLIENT_ID = "test-client"
 CLIENT_SECRET = "test-secret"
@@ -1149,7 +1150,7 @@ def test_password_lockout_after_threshold_failures(pw_client):
 
 
 def test_password_lockout_race_is_atomic(tmp_path, monkeypatch):
-    """Audit finding 1: record_failure used to SELECT then INSERT a Python-computed value, so N concurrent wrong-password requests."""
+    """Audit finding 1: record_failure's SELECT-then-INSERT was not concurrency-safe."""
     import arrlink.auth.lockout as lockout_mod
     from arrlink.state import State
 
@@ -1205,8 +1206,12 @@ def test_password_lockout_resets_on_success(pw_client):
 
     for _ in range(THRESHOLD - 1):
         pw_client.post("/api/auth/password", json={"username": "admin", "password": "wrong"})
-    ok = pw_client.post("/api/auth/password", json={"username": "admin", "password": "hunter2"})
-    assert ok.status_code == 200
+    ok = pw_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    )
+    assert ok.status_code == 302
 
     row = pw_client.app.state.db.query_one("SELECT * FROM login_attempts WHERE username='admin'")
     assert row is None
@@ -1258,8 +1263,12 @@ def test_password_unlock_endpoint_clears_lockout(both_client, issuer):
     assert r.status_code == 200
     assert both_client.get("/api/settings/auth").json()["password_locked"] is False
 
-    ok = both_client.post("/api/auth/password", json={"username": "admin", "password": "hunter2"})
-    assert ok.status_code == 200
+    ok = both_client.post(
+        "/api/auth/password",
+        json={"username": "admin", "password": "hunter2"},
+        follow_redirects=False,
+    )
+    assert ok.status_code == 302
 
 
 def test_password_lockout_is_case_insensitive_single_bucket(pw_client):

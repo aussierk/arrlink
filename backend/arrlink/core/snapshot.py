@@ -1,4 +1,4 @@
-"""Rebuild adapter-shaped `Item`/`MediaFile` objects from the poller's stored snapshot (`app_items` + `app_files`)."""
+"""Rebuild adapter-shaped `Item`/`MediaFile` objects from the poller's stored snapshot."""
 
 from __future__ import annotations
 

@@ -10,13 +10,14 @@ import time
 import httpx
 import pytest
 import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
+
 from arrlink.core.matching import match_conditions
 from arrlink.core.planner import _native_values
 from arrlink.core.vocabulary import expand_vocabulary_conditions, validate_condition_values
 from arrlink.main import create_app
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.testclient import TestClient
 
 API_KEY = "m11-key"
 VERSION = "5.16.0.1"

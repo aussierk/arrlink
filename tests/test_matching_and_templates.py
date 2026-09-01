@@ -13,6 +13,10 @@ import time
 import httpx
 import pytest
 import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
+
 from arrlink.core.matching import ConditionMatch, match_rule
 from arrlink.core.planner import plan_links
 from arrlink.core.template import (
@@ -21,9 +25,6 @@ from arrlink.core.template import (
     resolve_template,
 )
 from arrlink.main import create_app
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.testclient import TestClient
 
 
 def _matched(category: str, tag: str, regex_match=None) -> list[ConditionMatch]:

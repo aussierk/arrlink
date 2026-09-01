@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 def scandir_stats(paths: list[str]) -> dict[str, os.stat_result]:
-    """`{path: stat_result}` for the given files, using one `os.scandir()` per distinct parent directory instead of one `os.stat()` per file."""
+    """`{path: stat_result}` for the files, one `os.scandir()` per parent directory."""
     by_dir: dict[str, set[str]] = {}
     for p in paths:
         by_dir.setdefault(os.path.dirname(p) or "/", set()).add(os.path.basename(p))
@@ -42,7 +42,7 @@ class AdapterError(Exception):
 
 
 def translate_tag_labels(tags: list[Tag], raw) -> list[str]:
-    """Translate a list of tag *ids* (as *arr item payloads carry them) into tag *labels* using the app's tag vocabulary."""
+    """Translate a list of *arr tag ids into tag labels via the app's tag vocabulary."""
     if not raw:
         return []
     by_id: dict[int, str] = {t.id: t.label for t in tags if t.id is not None}

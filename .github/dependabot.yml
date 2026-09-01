@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Only GitHub Actions are watched automatically. The Python closure in
+  # requirements.txt is exact-pinned with a deliberate manual regen process
+  # (see the header there), and the web/ deps are few -- both are bumped by
+  # hand rather than by a stream of PRs.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
