@@ -325,6 +325,52 @@ def test_logs_capture_events(client: TestClient):
     assert any("app added" in e["message"] for e in logs)
 
 
+def test_dashboard_aggregates(client: TestClient):
+    """Fields the dashboard reads: summary.missing_links, rule.link_count,
+    and the /api/logs?rule_id= filter."""
+    app_id = (
+        client.post(
+            "/api/apps",
+            json={"name": "R", "type": "radarr", "url": "http://r:7878", "api_key": "k"},
+        )
+        .json()
+        .get("id")
+    )
+    rule_id = (
+        client.post(
+            "/api/rules",
+            json={
+                "name": "genre",
+                "app_scope": app_id,
+                "conditions": [
+                    {
+                        "category": "custom",
+                        "match_type": "exact",
+                        "match_value": "hbo",
+                        "join": None,
+                    }
+                ],
+                "dir_template": "/media/movies/{$genre}",
+            },
+        )
+        .json()
+        .get("id")
+    )
+
+    summary = client.get("/api/apps/summary").json()
+    assert summary["missing_links"] == 0
+    assert {"active_links", "stale_links", "missing_links"} <= summary.keys()
+
+    rules = client.get("/api/rules").json()
+    assert rules[0]["id"] == rule_id
+    assert rules[0]["link_count"] == 0
+    assert rules[0]["last_link_at"] is None
+
+    # rule_id filter narrows the event log to that rule's rows (or none).
+    filtered = client.get(f"/api/logs?rule_id={rule_id}").json()
+    assert all(e["rule_id"] == rule_id for e in filtered)
+
+
 def test_settings_roundtrip(client: TestClient):
     r = client.put("/api/settings/oidc_allowed_groups", json={"value": ["arrlink"]})
     assert r.status_code == 200

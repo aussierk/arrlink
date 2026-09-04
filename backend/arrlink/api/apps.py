@@ -59,9 +59,11 @@ def summary(_user: CurrentUser, db: State = Depends(get_db)) -> dict:
 
     active = db.query_one("SELECT COUNT(*) c FROM links WHERE status='active'")
     stale = db.query_one("SELECT COUNT(*) c FROM links WHERE status='stale'")
+    missing = db.query_one("SELECT COUNT(*) c FROM links WHERE status='missing'")
     return {
         "active_links": active["c"] if active else 0,
         "stale_links": stale["c"] if stale else 0,
+        "missing_links": missing["c"] if missing else 0,
         "orphaned_rules": audit_rule_roots(db),
     }
 

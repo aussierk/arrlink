@@ -20,6 +20,7 @@ def list_logs(
     _user: CurrentUser,
     level: str | None = None,
     app_id: int | None = None,
+    rule_id: int | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
     db: State = Depends(get_db),
 ) -> list[dict]:
@@ -32,6 +33,9 @@ def list_logs(
     if app_id is not None:
         where.append("app_id=?")
         params.append(app_id)
+    if rule_id is not None:
+        where.append("rule_id=?")
+        params.append(rule_id)
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY id DESC LIMIT ?"

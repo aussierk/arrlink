@@ -170,6 +170,10 @@ def _rule_out(row) -> dict:
     d["enabled"] = bool(d["enabled"])
     d["unlink_on_mismatch"] = bool(d["unlink_on_mismatch"])
     d["conditions"] = json.loads(d.pop("conditions_json"))
+    # link_count / last_link_at are only selected by list_rules; keep the
+    # single-rule (SELECT *) path shape-consistent for the dashboard.
+    d.setdefault("link_count", 0)
+    d.setdefault("last_link_at", None)
     return d
 
 
@@ -190,7 +194,9 @@ def _check_dir_template_jail(db: State, dir_template: str) -> None:
 def list_rules(_user: CurrentUser, db: State = Depends(get_db)) -> list[dict]:
     rows = db.query(
         """
-        SELECT r.*, a.name AS app_name
+        SELECT r.*, a.name AS app_name,
+               (SELECT COUNT(*) FROM links l WHERE l.rule_id = r.id) AS link_count,
+               (SELECT MAX(created_at) FROM links l WHERE l.rule_id = r.id) AS last_link_at
         FROM rules r LEFT JOIN apps a ON a.id = r.app_scope
         ORDER BY r.priority, r.id
         """
