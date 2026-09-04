@@ -325,6 +325,21 @@ def test_logs_capture_events(client: TestClient):
     assert any("app added" in e["message"] for e in logs)
 
 
+def test_client_error_ingest(client: TestClient):
+    r = client.post(
+        "/api/logs",
+        json={"message": "TypeError: x is undefined", "url": "/rules", "stack": "at Foo\nat Bar"},
+    )
+    assert r.status_code == 204
+    logs = client.get("/api/logs?level=error&limit=50").json()
+    hit = next(e for e in logs if e["message"].startswith("[web] TypeError"))
+    assert "@ /rules" in hit["message"] and "at Foo" in hit["message"]
+
+
+def test_client_error_ingest_rejects_blank_message(client: TestClient):
+    assert client.post("/api/logs", json={"message": ""}).status_code == 422
+
+
 def test_dashboard_aggregates(client: TestClient):
     """Fields the dashboard reads: summary.missing_links, rule.link_count,
     and the /api/logs?rule_id= filter."""

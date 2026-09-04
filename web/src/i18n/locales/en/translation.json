@@ -22,6 +22,11 @@
     "notifications": "Notifications",
     "dismiss": "Dismiss"
   },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "body": "The page hit an unexpected error. It has been logged. Reloading usually clears it.",
+    "reload": "Reload"
+  },
   "theme": {
     "label": "Theme",
     "light": "Light",

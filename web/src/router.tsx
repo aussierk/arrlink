@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import RequireAuth from './components/RequireAuth'
+import RouteError from './components/RouteError'
 import Shell from './Shell'
 import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
@@ -18,7 +19,7 @@ import BackupSection from './pages/settings/BackupSection'
  * pages/Tags.tsx's unsaved-changes guard). Mirrors the nesting that used to
  * be spread across App.tsx's and Settings.tsx's own inline <Routes>. */
 export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
+  { path: '/login', element: <LoginPage />, errorElement: <RouteError /> },
   {
     path: '/',
     element: (
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
         <Shell />
       </RequireAuth>
     ),
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <Dashboard /> },
       { path: 'apps', element: <Navigate to="/settings/services" replace /> },

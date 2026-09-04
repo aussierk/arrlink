@@ -4,15 +4,43 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from ..deps import get_db
 from ..state import State
 from .auth import CurrentUser
 
 router = APIRouter(prefix="/api", tags=["logs"])
+
+
+class ClientErrorIn(BaseModel):
+    """A JS exception reported by the SPA (error boundary or a global
+    window.onerror / unhandledrejection handler)."""
+
+    message: str = Field(min_length=1, max_length=500)
+    level: Literal["error", "warn", "info"] = "error"
+    url: str = Field(default="", max_length=300)
+    stack: str = Field(default="", max_length=2000)
+
+
+@router.post("/logs", status_code=204)
+def report_client_error(
+    _user: CurrentUser,
+    body: ClientErrorIn,
+    db: State = Depends(get_db),
+) -> None:
+    """Record a frontend exception in the event log so it shows up on the
+    Logs page and the live stream, same as any backend event."""
+    msg = f"[web] {body.message}"
+    if body.url:
+        msg += f" @ {body.url}"
+    if body.stack:
+        msg += f" | {body.stack.splitlines()[0]}"
+    db.log_event(body.level, msg[:1000])
 
 
 @router.get("/logs")

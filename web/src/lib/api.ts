@@ -528,3 +528,32 @@ export function readAuthErrorCookie(): string | null {
   const m = document.cookie.split('; ').find((c) => c.startsWith('arrlink_auth_error='))
   return m ? decodeURIComponent(m.split('=')[1]) : null
 }
+
+/**
+ * Fire-and-forget: record a frontend exception in the backend event log so
+ * it surfaces on the Logs page / live stream. Deliberately not routed
+ * through `req()` — a failure here must never trigger the 401 redirect or
+ * throw back into whatever error handler called it.
+ */
+export function reportClientError(input: {
+  message: string
+  level?: 'error' | 'warn' | 'info'
+  url?: string
+  stack?: string
+}): void {
+  try {
+    void fetch('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
+        message: input.message.slice(0, 500),
+        level: input.level ?? 'error',
+        url: input.url ?? window.location.pathname,
+        stack: (input.stack ?? '').slice(0, 2000),
+      }),
+    }).catch(() => {})
+  } catch {
+    /* reporting must never throw */
+  }
+}
