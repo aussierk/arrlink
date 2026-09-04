@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api, readAuthErrorCookie, setDisplayTimezone, type Me } from '../lib/api'
+import { api, readAuthErrorCookie } from '../lib/api'
+import { useAuth } from '../lib/useAuth'
 import { inputCls } from '../lib/ui'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import Button from '../components/ui/Button'
@@ -41,8 +42,8 @@ export default function LoginPage() {
   const next = sanitizeNext(params.get('next'))
   const skipAutoLogin = params.get('form') === 'true'
 
-  const [me, setMe] = useState<Me | null>(null)
-  const [apiError, setApiError] = useState(false)
+  const { me, status, refresh } = useAuth()
+  const apiError = status === 'error'
   const [authError, setAuthError] = useState<string | null>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -59,13 +60,6 @@ export default function LoginPage() {
       )
       document.cookie = 'arrlink_auth_error=; Max-Age=0; path=/'
     }
-    api
-      .me()
-      .then((m) => {
-        setMe(m)
-        setDisplayTimezone(m.display_timezone)
-      })
-      .catch(() => setApiError(true))
   }, [t])
 
   useDocumentTitle(me?.app_title)
@@ -99,6 +93,10 @@ export default function LoginPage() {
     try {
       const ok = await api.loginWithPassword(username, password)
       if (ok) {
+        // Refresh the shared session before navigating -- otherwise
+        // RequireAuth still sees the stale unauthenticated `me` and bounces
+        // straight back here.
+        await refresh()
         void navigate(next, { replace: true })
       } else {
         setPwError(t('loginPage.wrongCredentials'))

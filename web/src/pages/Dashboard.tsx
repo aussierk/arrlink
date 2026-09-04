@@ -7,26 +7,25 @@ import LinkHealthCard from '../components/dashboard/LinkHealthCard'
 import ServicesCard from '../components/dashboard/ServicesCard'
 import RulesCard from '../components/dashboard/RulesCard'
 import RecentActivityCard from '../components/dashboard/RecentActivityCard'
-import { api, type AppItem, type Me, type RuleItem, type Summary } from '../lib/api'
+import { api, type AppItem, type RuleItem, type Summary } from '../lib/api'
+import { useAuth } from '../lib/useAuth'
 import { useToast } from '../lib/useToast'
 
 export default function Dashboard() {
   const { t } = useTranslation()
   const toast = useToast()
-  const [me, setMe] = useState<Me | null>(null)
+  const { me } = useAuth()
   const [summary, setSummary] = useState<Summary | null>(null)
   const [apps, setApps] = useState<AppItem[] | null>(null)
   const [rules, setRules] = useState<RuleItem[] | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const [m, s, a, r] = await Promise.all([
-        api.me(),
+      const [s, a, r] = await Promise.all([
         api.summary(),
         api.listApps(),
         api.listRules(),
       ])
-      setMe(m)
       setSummary(s)
       setApps(a)
       setRules(r)

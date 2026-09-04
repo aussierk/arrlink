@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -8,7 +7,8 @@ import {
   Settings as SettingsIcon,
   Tags as TagsIcon,
 } from 'lucide-react'
-import { api, setDisplayTimezone, type Me } from './lib/api'
+import { api, type Me } from './lib/api'
+import { useAuth } from './lib/useAuth'
 import { useDocumentTitle } from './lib/useDocumentTitle'
 import { ConfirmProvider } from './lib/useConfirm'
 import { ToastProvider } from './lib/useToast'
@@ -29,17 +29,7 @@ const nav = [
  * regardless of which nav surface (this sidebar, SettingsNav, the browser
  * back button) triggered it. See pages/Tags.tsx. */
 export default function Shell() {
-  const [me, setMe] = useState<Me | null>(null)
-
-  useEffect(() => {
-    api
-      .me()
-      .then((m) => {
-        setMe(m)
-        setDisplayTimezone(m.display_timezone)
-      })
-      .catch(() => {})
-  }, [])
+  const { me } = useAuth()
 
   useDocumentTitle(me?.app_title)
 
