@@ -1,96 +1,33 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react'
-import i18n from '../i18n'
+import { Sparkles } from 'lucide-react'
 import Modal from './Modal'
 import PreviewPanel from './PreviewPanel'
+import Alert from './ui/Alert'
 import Button from './ui/Button'
 import Toggle from './ui/Toggle'
-import TagSelect from './ui/TagSelect'
 import Field from './ui/Field'
+import ConditionRow from './ruleModal/ConditionRow'
+import { useRuleVocabulary } from './ruleModal/useRuleVocabulary'
+import {
+  CATEGORY_ORDER,
+  decodeServiceValue,
+  emptyForm,
+  encodeServiceValue,
+  PRISTINE_DIRS,
+  type FormState,
+} from './ruleModal/helpers'
 import {
   api,
-  RICH_CATEGORIES,
   type AppItem,
-  type ConditionCategory,
   type ConditionItem,
-  type ConditionSource,
   type PresetItem,
   type RuleInput,
   type RuleItem,
   type TagItem,
-  type VocabularyEntry,
 } from '../lib/api'
-import {
-  CUSTOM_TAG_SUGGESTIONS,
-  REGEX_PICKS,
-  joinList,
-  parseList,
-  type ServiceType,
-} from '../lib/tagOptions'
+import { joinList, parseList, type ServiceType } from '../lib/tagOptions'
 import { inputCls } from '../lib/ui'
-
-const RICH = new Set<string>(RICH_CATEGORIES)
-
-const CUSTOM = '__custom__'
-
-const CATEGORY_ORDER: ConditionCategory[] = [
-  'user',
-  'genre',
-  'language',
-  'quality',
-  'certification',
-  'collection',
-  'custom',
-]
-
-const CATEGORY_LABEL_KEY: Record<string, string> = {
-  user: 'ruleModal.categoryLabel.user',
-  genre: 'ruleModal.categoryLabel.genre',
-  language: 'ruleModal.categoryLabel.language',
-  quality: 'ruleModal.categoryLabel.quality',
-  certification: 'ruleModal.categoryLabel.certification',
-  collection: 'ruleModal.categoryLabel.collection',
-  custom: 'ruleModal.categoryLabel.custom',
-}
-
-function categoryLabel(cat: string): string {
-  const key = CATEGORY_LABEL_KEY[cat]
-  return key ? i18n.t(key) : cat
-}
-
-type FormState = Omit<RuleInput, 'conditions'>
-
-const emptyForm: FormState = {
-  name: '',
-  app_scope: null,
-  app_type_scope: null,
-  dir_template: '/media/movies',
-  filename_template: null,
-  enabled: true,
-  unlink_on_mismatch: true,
-  priority: 100,
-}
-
-// dir_template values that count as "the user hasn't touched it yet", so
-// picking a service can swap movies<->tv without clobbering real input.
-const PRISTINE_DIRS = ['/media/movies', '/media/tv']
-
-// The Service <select> encodes three kinds of scope in one string value:
-// '' (any service), 'type:radarr' / 'type:sonarr' (all instances of that
-// type), or a specific app's id — decoded back into the two real fields.
-function encodeServiceValue(
-  appScope: number | null,
-  appTypeScope: string | null,
-): string {
-  if (appTypeScope) return `type:${appTypeScope}`
-  return appScope === null ? '' : String(appScope)
-}
-
-function selectedFor(c: ConditionItem): string[] {
-  if (c.match_type === 'list') return parseList(c.match_value)
-  return c.match_value ? [c.match_value] : []
-}
 
 /**
  * Create or edit a rule. Conditions are an ordered AND/OR chain: each
@@ -137,13 +74,6 @@ export default function RuleModal({
   const [busy, setBusy] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [presets, setPresets] = useState<PresetItem[]>([])
-  // Known values per rich category (genre/language/quality/certification/
-  // collection), backed by the DB vocabulary table — TMDB/TRaSH/instance
-  // synced automatically in the background (see Settings > Metadata providers).
-  const [vocab, setVocab] = useState<
-    Partial<Record<ConditionCategory, VocabularyEntry[]>>
-  >({})
-  const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
 
   useEffect(() => {
     api
@@ -182,80 +112,13 @@ export default function RuleModal({
       .catch(() => setTags([]))
   }, [representativeAppId])
 
-  useEffect(() => {
-    if (form.app_scope === null && form.app_type_scope === null) {
-      setVocab({})
-      return
-    }
-    let cancelled = false
-    void Promise.all(
-      RICH_CATEGORIES.map((cat) =>
-        api
-          .getVocabulary(cat, serviceType, representativeAppId)
-          .then((entries) => [cat, entries] as const)
-          .catch(() => [cat, []] as const),
-      ),
-    ).then((pairs) => {
-      if (!cancelled) setVocab(Object.fromEntries(pairs) as typeof vocab)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [serviceType, representativeAppId, form.app_scope, form.app_type_scope])
-
-  // Debounced, non-blocking vocabulary-membership check — mirrors how Live
-  // Preview already dry-runs without saving. Purely advisory: never blocks
-  // submit, just surfaces "this value isn't a known X" hints as you edit.
-  useEffect(() => {
-    if (conditions.length === 0) {
-      setVocabWarnings([])
-      return
-    }
-    const body: RuleInput = { ...form, conditions }
-    const handle = setTimeout(() => {
-      api
-        .checkRuleVocabulary(body)
-        .then((r) => setVocabWarnings(r.warnings))
-        .catch(() => setVocabWarnings([]))
-    }, 400)
-    return () => clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conditions, form.app_scope, form.app_type_scope])
-
-  const knownTags = useMemo(
-    () =>
-      new Set(RICH_CATEGORIES.flatMap((cat) => (vocab[cat] ?? []).map((v) => v.value))),
-    [vocab],
-  )
-  const customOptions = useMemo(() => {
-    const appTags = tags.map((t) => t.label).filter((l) => !knownTags.has(l))
-    const extra = CUSTOM_TAG_SUGGESTIONS.filter((t) => !knownTags.has(t))
-    return Array.from(new Set([...appTags, ...extra]))
-  }, [tags, knownTags])
-
-  function optionsFor(category: ConditionCategory): string[] {
-    if (RICH.has(category)) {
-      // Vocabulary values, plus any tag already manually classified into
-      // this category (Tags page) — both count as known members.
-      const fromVocab = (vocab[category] ?? []).map((v) => v.value)
-      const fromClassifiedTags = tags
-        .filter((t) => t.category === category)
-        .map((t) => t.label)
-      return Array.from(new Set([...fromVocab, ...fromClassifiedTags]))
-    }
-    if (category === 'custom') return customOptions
-    return [] // user
-  }
-
-  function creatableFor(
-    _category: ConditionCategory,
-    matchType: ConditionItem['match_type'],
-  ) {
-    // "vocabulary" means "match anything currently known" — no free text to
-    // enter. Every other match type stays creatable: vocabulary suggestions
-    // may simply not be synced yet, and shouldn't block typing a value.
-    return matchType !== 'vocabulary'
-  }
+  const { vocabWarnings, optionsFor } = useRuleVocabulary({
+    form,
+    conditions,
+    serviceType,
+    representativeAppId,
+    tags,
+  })
 
   function updateBlock(i: number, patch: Partial<ConditionItem>) {
     setConditions((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)))
@@ -275,11 +138,11 @@ export default function RuleModal({
       updateBlock(i, { match_value: next[0] ?? '' })
       return
     }
-    const removed = prevSelected.filter((t) => !next.includes(t))
-    const added = next.filter((t) => !prevSelected.includes(t))
-    const cur = parseList(c.match_value).filter((t) => !removed.includes(t))
-    added.forEach((t) => {
-      if (!cur.includes(t)) cur.push(t)
+    const removed = prevSelected.filter((tag) => !next.includes(tag))
+    const added = next.filter((tag) => !prevSelected.includes(tag))
+    const cur = parseList(c.match_value).filter((tag) => !removed.includes(tag))
+    added.forEach((tag) => {
+      if (!cur.includes(tag)) cur.push(tag)
     })
     updateBlock(i, { match_value: joinList(cur) })
   }
@@ -294,8 +157,7 @@ export default function RuleModal({
       match_value: '',
       join: conditions.length === 0 ? null : join,
     }
-    const updated = [...conditions, block]
-    setConditions(updated)
+    setConditions([...conditions, block])
   }
 
   function removeCondition(i: number) {
@@ -326,7 +188,7 @@ export default function RuleModal({
     const idx = conditions.findIndex((c) => c.category === p.category)
     if (idx === -1) {
       const join: 'AND' | 'OR' | null = conditions.length === 0 ? null : 'OR'
-      const next = [
+      setConditions([
         ...conditions,
         {
           category: p.category,
@@ -334,13 +196,13 @@ export default function RuleModal({
           match_value: p.match_value,
           join,
         },
-      ]
-      setConditions(next)
+      ])
     } else {
-      const next = conditions.map((c, i) =>
-        i === idx ? { ...c, match_type: p.match_type, match_value: p.match_value } : c,
+      setConditions(
+        conditions.map((c, i) =>
+          i === idx ? { ...c, match_type: p.match_type, match_value: p.match_value } : c,
+        ),
       )
-      setConditions(next)
     }
     setForm((f) => ({ ...f, dir_template: p.dir_template }))
     setErr(null)
@@ -383,77 +245,7 @@ export default function RuleModal({
   const usedCategories = new Set(conditions.map((c) => c.category))
   const allCategoriesUsed = CATEGORY_ORDER.every((cat) => usedCategories.has(cat))
   const previewRule: RuleInput = { ...form, conditions }
-
-  function renderConditionValue(i: number) {
-    const c = conditions[i]
-    const selected = selectedFor(c)
-
-    if (c.match_type === 'vocabulary') {
-      const known = optionsFor(c.category)
-      return (
-        <p className="rounded-md border border-line bg-sunken/40 px-3 py-2 text-xs text-fg-muted">
-          {t('ruleModal.vocabularyMatchHint', { count: known.length })}
-        </p>
-      )
-    }
-
-    if (c.category === 'user' && c.match_type === 'regex') {
-      const regexPick = REGEX_PICKS.find((p) => p.pattern === c.match_value)
-      const regexIsCustom = !!c.match_value && !regexPick
-      return (
-        <div className="space-y-2">
-          <select
-            className={inputCls}
-            value={regexIsCustom ? CUSTOM : (regexPick?.pattern ?? '')}
-            onChange={(e) => {
-              const v = e.target.value
-              updateBlock(i, { match_value: v === CUSTOM ? c.match_value || '' : v })
-            }}
-          >
-            <option value="">{t('ruleModal.selectPattern')}</option>
-            {REGEX_PICKS.map((p) => (
-              <option key={p.pattern} value={p.pattern}>
-                {p.label}
-              </option>
-            ))}
-            <option value={CUSTOM}>{t('ruleModal.customRegex')}</option>
-          </select>
-          {regexPick?.hint && <p className="text-xs text-fg-subtle">{regexPick.hint}</p>}
-          {regexIsCustom && (
-            <textarea
-              className={inputCls + ' font-mono'}
-              rows={2}
-              value={c.match_value}
-              onChange={(e) => updateBlock(i, { match_value: e.target.value })}
-              placeholder={t('ruleModal.customRegexPlaceholder')}
-            />
-          )}
-        </div>
-      )
-    }
-
-    return (
-      <TagSelect
-        placeholder={
-          c.match_type === 'regex'
-            ? t('ruleModal.pickOrTypePattern')
-            : t('ruleModal.selectCategoryPlaceholder', {
-                category: categoryLabel(c.category).toLowerCase(),
-              })
-        }
-        options={optionsFor(c.category)}
-        selected={selected}
-        onChange={(next) => applyBlockSelection(i, selected, next)}
-        multiple={c.match_type === 'list'}
-        creatable={creatableFor(c.category, c.match_type)}
-        searchPlaceholder={
-          c.match_type === 'regex'
-            ? t('ruleModal.searchOrTypePattern')
-            : t('ruleModal.searchOrAdd')
-        }
-      />
-    )
-  }
+  const noServiceScoped = form.app_scope === null && form.app_type_scope === null
 
   return (
     <Modal
@@ -481,16 +273,7 @@ export default function RuleModal({
             className={inputCls}
             value={encodeServiceValue(form.app_scope, form.app_type_scope)}
             onChange={(e) => {
-              const v = e.target.value
-              const scope: Partial<FormState> =
-                v === ''
-                  ? { app_scope: null, app_type_scope: null }
-                  : v.startsWith('type:')
-                    ? {
-                        app_scope: null,
-                        app_type_scope: v.slice('type:'.length) as 'radarr' | 'sonarr',
-                      }
-                    : { app_scope: Number(v), app_type_scope: null }
+              const scope = decodeServiceValue(e.target.value)
               // On a new rule, keep the pristine dir_template default in step
               // with the service kind (movies vs TV) until the user edits it.
               const nextType =
@@ -521,7 +304,7 @@ export default function RuleModal({
           </select>
         </Field>
 
-        {(form.app_scope !== null || form.app_type_scope !== null) && (
+        {!noServiceScoped && (
           <div className="rounded-md border border-ring/30 bg-accent-bg p-3">
             <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-accent">
               <Sparkles className="size-3.5" />
@@ -558,169 +341,27 @@ export default function RuleModal({
             </p>
           </div>
 
-          {form.app_scope === null && form.app_type_scope === null ? (
+          {noServiceScoped ? (
             <div className="rounded-md border border-dashed border-line-strong p-4 text-center text-sm text-fg-subtle">
               {t('ruleModal.selectServiceFirst')}
             </div>
           ) : (
             <div className="space-y-2">
               {conditions.map((c, i) => (
-                <div key={i}>
-                  {i > 0 && (
-                    <div className="flex justify-center py-1">
-                      <button
-                        type="button"
-                        onClick={() => toggleJoin(i)}
-                        className="rounded bg-fill px-2 py-0.5 text-xs font-semibold text-accent hover:bg-line-strong"
-                      >
-                        {c.join === 'AND'
-                          ? t('conditions.joinAnd')
-                          : t('conditions.joinOr')}
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex gap-3 rounded-md border border-line bg-sunken/30 p-3">
-                    <div className="flex shrink-0 flex-col items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => moveCondition(i, i - 1)}
-                        disabled={i === 0}
-                        aria-label={t('ruleModal.moveConditionUp', { number: i + 1 })}
-                        className="rounded border border-line-strong p-0.5 text-fg-muted transition-colors hover:bg-fill hover:text-fg focus-visible:focus-ring disabled:opacity-25"
-                      >
-                        <ChevronUp className="size-4" />
-                      </button>
-                      <span
-                        className="text-sm font-semibold tabular-nums text-fg-muted"
-                        aria-hidden="true"
-                      >
-                        {i + 1}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => moveCondition(i, i + 1)}
-                        disabled={i === conditions.length - 1}
-                        aria-label={t('ruleModal.moveConditionDown', { number: i + 1 })}
-                        className="rounded border border-line-strong p-0.5 text-fg-muted transition-colors hover:bg-fill hover:text-fg focus-visible:focus-ring disabled:opacity-25"
-                      >
-                        <ChevronDown className="size-4" />
-                      </button>
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span
-                          className="text-sm font-medium text-fg"
-                          aria-label={t('ruleModal.conditionNumber', { number: i + 1 })}
-                        >
-                          {t('ruleModal.conditionLabel')}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeCondition(i)}
-                          disabled={conditions.length <= 1}
-                          aria-label={t('ruleModal.removeCondition', { number: i + 1 })}
-                          className="rounded p-1 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger-fg focus-visible:focus-ring disabled:opacity-25"
-                        >
-                          <X className="size-4" />
-                        </button>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <Field label={t('ruleModal.category')}>
-                            <select
-                              className={inputCls}
-                              value={c.category}
-                              onChange={(e) => {
-                                const cat = e.target.value as ConditionCategory
-                                updateBlock(i, {
-                                  category: cat,
-                                  // Users has no literal tag suggestions — regex
-                                  // (the "## - username" style pick) is the only
-                                  // mode that actually extracts a username, so
-                                  // switching to it defaults there. Still
-                                  // overridable via the Match Type dropdown.
-                                  match_type: cat === 'user' ? 'regex' : c.match_type,
-                                  match_value: '',
-                                })
-                              }}
-                            >
-                              {CATEGORY_ORDER.map((cat) => (
-                                <option
-                                  key={cat}
-                                  value={cat}
-                                  disabled={usedCategories.has(cat) && cat !== c.category}
-                                >
-                                  {categoryLabel(cat)}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                          <Field label={t('ruleModal.matchType')}>
-                            <select
-                              className={inputCls}
-                              value={c.match_type}
-                              onChange={(e) =>
-                                updateBlock(i, {
-                                  match_type: e.target
-                                    .value as ConditionItem['match_type'],
-                                  match_value: '',
-                                })
-                              }
-                            >
-                              <option value="list">
-                                {t('ruleModal.matchTypeListOption')}
-                              </option>
-                              <option value="exact">
-                                {t('ruleModal.matchTypeExactOption')}
-                              </option>
-                              <option value="regex">
-                                {t('ruleModal.matchTypeRegex')}
-                              </option>
-                              {RICH.has(c.category) && (
-                                <option value="vocabulary">
-                                  {t('ruleModal.matchTypeVocabulary')}
-                                </option>
-                              )}
-                            </select>
-                          </Field>
-                        </div>
-                        {RICH.has(c.category) && (
-                          <Field label={t('ruleModal.matchSource')}>
-                            <div className="flex gap-1.5">
-                              {(['tag', 'native'] as ConditionSource[]).map((src) => (
-                                <button
-                                  key={src}
-                                  type="button"
-                                  onClick={() =>
-                                    updateBlock(i, { source: src === 'tag' ? null : src })
-                                  }
-                                  className={
-                                    'rounded-md border px-3 py-1 text-xs ' +
-                                    ((c.source ?? 'tag') === src
-                                      ? 'border-ring bg-accent-bg text-accent'
-                                      : 'border-line-strong text-fg-muted hover:bg-fill')
-                                  }
-                                >
-                                  {src === 'tag'
-                                    ? t('ruleModal.sourceTag')
-                                    : t('ruleModal.sourceNative')}
-                                </button>
-                              ))}
-                            </div>
-                            <p className="mt-1 text-xs text-fg-subtle">
-                              {(c.source ?? 'tag') === 'native'
-                                ? t('ruleModal.sourceNativeHint')
-                                : t('ruleModal.sourceTagHint')}
-                            </p>
-                          </Field>
-                        )}
-                        <Field label={t('ruleModal.value')}>
-                          {renderConditionValue(i)}
-                        </Field>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <ConditionRow
+                  key={i}
+                  condition={c}
+                  index={i}
+                  total={conditions.length}
+                  usedCategories={usedCategories}
+                  optionsFor={optionsFor}
+                  onUpdate={(patch) => updateBlock(i, patch)}
+                  onToggleJoin={() => toggleJoin(i)}
+                  onMoveUp={() => moveCondition(i, i - 1)}
+                  onMoveDown={() => moveCondition(i, i + 1)}
+                  onRemove={() => removeCondition(i)}
+                  onApplySelection={(prev, next) => applyBlockSelection(i, prev, next)}
+                />
               ))}
 
               {conditions.length === 0 ? (
@@ -828,11 +469,7 @@ export default function RuleModal({
           </div>
         )}
 
-        {err && (
-          <div className="rounded-md border border-danger-line bg-danger-bg p-2 text-sm text-danger-fg">
-            {err}
-          </div>
-        )}
+        <Alert variant="error">{err}</Alert>
 
         <div className="flex items-center gap-2">
           <Button
