@@ -9,7 +9,8 @@
     "tags": "Tags",
     "rules": "Rules",
     "logs": "Logs",
-    "settings": "Settings"
+    "settings": "Settings",
+    "menu": "Menu"
   },
   "common": {
     "loading": "Loading…",
@@ -20,7 +21,8 @@
   "a11y": {
     "skipToContent": "Skip to content",
     "notifications": "Notifications",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "openMenu": "Open menu"
   },
   "errorBoundary": {
     "title": "Something went wrong",

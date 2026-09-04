@@ -153,7 +153,7 @@ export default function Rules() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">{t('rules.title')}</h2>
           <p className="text-sm text-fg-subtle">{t('rules.subtitle')}</p>
@@ -171,8 +171,8 @@ export default function Rules() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-line">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-line">
+        <table className="w-full min-w-5xl text-sm">
           <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
               <th scope="col" className="px-3 py-2">

@@ -11,7 +11,7 @@ export default function Logs() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <div>
           <h2 className="text-xl font-semibold">{t('logs.title')}</h2>
           <p className="text-sm text-fg-subtle">{t('logs.subtitle')}</p>
@@ -45,8 +45,8 @@ export default function Logs() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-line">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-line">
+        <table className="w-full min-w-xl text-sm">
           <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
               <th scope="col" className="px-3 py-2">

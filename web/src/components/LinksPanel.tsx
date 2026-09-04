@@ -126,7 +126,7 @@ export default function LinksPanel() {
       </div>
 
       <div className="max-h-96 overflow-auto rounded-lg border border-line">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-4xl text-sm">
           <thead className="sticky top-0 bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
               <th scope="col" className="px-3 py-2">
