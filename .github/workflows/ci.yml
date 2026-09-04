@@ -47,6 +47,7 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
+      - run: npm test
       # `tsc -b` runs as part of the build itself, so this also
       # type-checks the whole frontend -- no separate typecheck step.
       # (`npm run build` also chains `eslint .`; the explicit lint step

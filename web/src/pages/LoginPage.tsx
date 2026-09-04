@@ -2,29 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, readAuthErrorCookie } from '../lib/api'
+import { sanitizeNext } from '../lib/sanitizeNext'
 import { useAuth } from '../lib/useAuth'
 import { inputCls } from '../lib/ui'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import Button from '../components/ui/Button'
-
-/** Only accept a same-origin relative path — mirrors the backend's own
- * open-redirect guard on the OIDC callback's next_path. A prefix check
- * alone isn't enough: browsers normalize a leading backslash to "/" when
- * resolving a relative reference against an http(s) base (WHATWG URL
- * spec), so "/\\evil.com" would still resolve off-site past a "//" check
- * alone — reject backslashes outright too. */
-function sanitizeNext(raw: string | null): string {
-  if (!raw || raw.includes('\\') || !raw.startsWith('/') || raw.startsWith('//')) {
-    return '/'
-  }
-  try {
-    const parsed = new URL(raw, window.location.origin)
-    if (parsed.origin !== window.location.origin) return '/'
-  } catch {
-    return '/'
-  }
-  return raw
-}
 
 /**
  * Dedicated /login route — the only route RequireAuth never gates.
