@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-import { Sparkles, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react'
 import i18n from '../i18n'
 import Modal from './Modal'
 import PreviewPanel from './PreviewPanel'
@@ -71,6 +71,10 @@ const emptyForm: FormState = {
   unlink_on_mismatch: true,
   priority: 100,
 }
+
+// dir_template values that count as "the user hasn't touched it yet", so
+// picking a service can swap movies<->tv without clobbering real input.
+const PRISTINE_DIRS = ['/media/movies', '/media/tv']
 
 // The Service <select> encodes three kinds of scope in one string value:
 // '' (any service), 'type:radarr' / 'type:sonarr' (all instances of that
@@ -302,6 +306,22 @@ export default function RuleModal({
     setConditions(next)
   }
 
+  // Reorder matters — the backend folds the AND/OR chain left-to-right with no
+  // precedence. `join` is positional: index 0 must be null, the rest AND/OR,
+  // so re-normalise after moving (backfilling any interior null to 'AND').
+  function moveCondition(from: number, to: number) {
+    setConditions((cs) => {
+      if (to < 0 || to >= cs.length) return cs
+      const next = [...cs]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next.map((c, idx) => ({
+        ...c,
+        join: idx === 0 ? null : (c.join ?? 'AND'),
+      }))
+    })
+  }
+
   function applyPreset(p: PresetItem) {
     const idx = conditions.findIndex((c) => c.category === p.category)
     if (idx === -1) {
@@ -342,7 +362,10 @@ export default function RuleModal({
       const body: RuleInput = {
         ...form,
         filename_template: form.filename_template || null,
-        conditions: conditions.map((c, i) => ({ ...c, join: i === 0 ? null : c.join })),
+        conditions: conditions.map((c, i) => ({
+          ...c,
+          join: i === 0 ? null : (c.join ?? 'AND'),
+        })),
       }
       const saved =
         editing && initial
@@ -459,17 +482,28 @@ export default function RuleModal({
             value={encodeServiceValue(form.app_scope, form.app_type_scope)}
             onChange={(e) => {
               const v = e.target.value
-              if (v === '') {
-                setForm({ ...form, app_scope: null, app_type_scope: null })
-              } else if (v.startsWith('type:')) {
-                setForm({
-                  ...form,
-                  app_scope: null,
-                  app_type_scope: v.slice('type:'.length) as 'radarr' | 'sonarr',
-                })
-              } else {
-                setForm({ ...form, app_scope: Number(v), app_type_scope: null })
-              }
+              const scope: Partial<FormState> =
+                v === ''
+                  ? { app_scope: null, app_type_scope: null }
+                  : v.startsWith('type:')
+                    ? {
+                        app_scope: null,
+                        app_type_scope: v.slice('type:'.length) as 'radarr' | 'sonarr',
+                      }
+                    : { app_scope: Number(v), app_type_scope: null }
+              // On a new rule, keep the pristine dir_template default in step
+              // with the service kind (movies vs TV) until the user edits it.
+              const nextType =
+                (apps.find((a) => a.id === scope.app_scope)?.type ??
+                  scope.app_type_scope) ||
+                null
+              const dir =
+                !editing && PRISTINE_DIRS.includes(form.dir_template)
+                  ? nextType === 'sonarr'
+                    ? '/media/tv'
+                    : '/media/movies'
+                  : form.dir_template
+              setForm({ ...form, ...scope, dir_template: dir })
             }}
           >
             <option value="">{t('ruleModal.anyService')}</option>
@@ -545,111 +579,145 @@ export default function RuleModal({
                       </button>
                     </div>
                   )}
-                  <div className="rounded-md border border-line bg-sunken/30 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-sm font-medium text-fg">
-                        {t('ruleModal.conditionNumber', { number: i + 1 })}
+                  <div className="flex gap-3 rounded-md border border-line bg-sunken/30 p-3">
+                    <div className="flex shrink-0 flex-col items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => moveCondition(i, i - 1)}
+                        disabled={i === 0}
+                        aria-label={t('ruleModal.moveConditionUp', { number: i + 1 })}
+                        className="rounded border border-line-strong p-0.5 text-fg-muted transition-colors hover:bg-fill hover:text-fg focus-visible:focus-ring disabled:opacity-25"
+                      >
+                        <ChevronUp className="size-4" />
+                      </button>
+                      <span
+                        className="text-sm font-semibold tabular-nums text-fg-muted"
+                        aria-hidden="true"
+                      >
+                        {i + 1}
                       </span>
                       <button
                         type="button"
-                        onClick={() => removeCondition(i)}
-                        disabled={conditions.length <= 1}
-                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-danger-fg hover:bg-danger-bg disabled:opacity-30"
+                        onClick={() => moveCondition(i, i + 1)}
+                        disabled={i === conditions.length - 1}
+                        aria-label={t('ruleModal.moveConditionDown', { number: i + 1 })}
+                        className="rounded border border-line-strong p-0.5 text-fg-muted transition-colors hover:bg-fill hover:text-fg focus-visible:focus-ring disabled:opacity-25"
                       >
-                        <Trash2 className="size-3.5" />
-                        {t('ruleModal.removeCondition')}
+                        <ChevronDown className="size-4" />
                       </button>
                     </div>
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label={t('ruleModal.category')}>
-                          <select
-                            className={inputCls}
-                            value={c.category}
-                            onChange={(e) => {
-                              const cat = e.target.value as ConditionCategory
-                              updateBlock(i, {
-                                category: cat,
-                                // Users has no literal tag suggestions — regex
-                                // (the "## - username" style pick) is the only
-                                // mode that actually extracts a username, so
-                                // switching to it defaults there. Still
-                                // overridable via the Match Type dropdown.
-                                match_type: cat === 'user' ? 'regex' : c.match_type,
-                                match_value: '',
-                              })
-                            }}
-                          >
-                            {CATEGORY_ORDER.map((cat) => (
-                              <option
-                                key={cat}
-                                value={cat}
-                                disabled={usedCategories.has(cat) && cat !== c.category}
-                              >
-                                {categoryLabel(cat)}
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span
+                          className="text-sm font-medium text-fg"
+                          aria-label={t('ruleModal.conditionNumber', { number: i + 1 })}
+                        >
+                          {t('ruleModal.conditionLabel')}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeCondition(i)}
+                          disabled={conditions.length <= 1}
+                          aria-label={t('ruleModal.removeCondition', { number: i + 1 })}
+                          className="rounded p-1 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger-fg focus-visible:focus-ring disabled:opacity-25"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field label={t('ruleModal.category')}>
+                            <select
+                              className={inputCls}
+                              value={c.category}
+                              onChange={(e) => {
+                                const cat = e.target.value as ConditionCategory
+                                updateBlock(i, {
+                                  category: cat,
+                                  // Users has no literal tag suggestions — regex
+                                  // (the "## - username" style pick) is the only
+                                  // mode that actually extracts a username, so
+                                  // switching to it defaults there. Still
+                                  // overridable via the Match Type dropdown.
+                                  match_type: cat === 'user' ? 'regex' : c.match_type,
+                                  match_value: '',
+                                })
+                              }}
+                            >
+                              {CATEGORY_ORDER.map((cat) => (
+                                <option
+                                  key={cat}
+                                  value={cat}
+                                  disabled={usedCategories.has(cat) && cat !== c.category}
+                                >
+                                  {categoryLabel(cat)}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                          <Field label={t('ruleModal.matchType')}>
+                            <select
+                              className={inputCls}
+                              value={c.match_type}
+                              onChange={(e) =>
+                                updateBlock(i, {
+                                  match_type: e.target
+                                    .value as ConditionItem['match_type'],
+                                  match_value: '',
+                                })
+                              }
+                            >
+                              <option value="list">
+                                {t('ruleModal.matchTypeListOption')}
                               </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label={t('ruleModal.matchType')}>
-                          <select
-                            className={inputCls}
-                            value={c.match_type}
-                            onChange={(e) =>
-                              updateBlock(i, {
-                                match_type: e.target.value as ConditionItem['match_type'],
-                                match_value: '',
-                              })
-                            }
-                          >
-                            <option value="list">
-                              {t('ruleModal.matchTypeListOption')}
-                            </option>
-                            <option value="exact">
-                              {t('ruleModal.matchTypeExactOption')}
-                            </option>
-                            <option value="regex">{t('ruleModal.matchTypeRegex')}</option>
-                            {RICH.has(c.category) && (
-                              <option value="vocabulary">
-                                {t('ruleModal.matchTypeVocabulary')}
+                              <option value="exact">
+                                {t('ruleModal.matchTypeExactOption')}
                               </option>
-                            )}
-                          </select>
+                              <option value="regex">
+                                {t('ruleModal.matchTypeRegex')}
+                              </option>
+                              {RICH.has(c.category) && (
+                                <option value="vocabulary">
+                                  {t('ruleModal.matchTypeVocabulary')}
+                                </option>
+                              )}
+                            </select>
+                          </Field>
+                        </div>
+                        {RICH.has(c.category) && (
+                          <Field label={t('ruleModal.matchSource')}>
+                            <div className="flex gap-1.5">
+                              {(['tag', 'native'] as ConditionSource[]).map((src) => (
+                                <button
+                                  key={src}
+                                  type="button"
+                                  onClick={() =>
+                                    updateBlock(i, { source: src === 'tag' ? null : src })
+                                  }
+                                  className={
+                                    'rounded-md border px-3 py-1 text-xs ' +
+                                    ((c.source ?? 'tag') === src
+                                      ? 'border-ring bg-accent-bg text-accent'
+                                      : 'border-line-strong text-fg-muted hover:bg-fill')
+                                  }
+                                >
+                                  {src === 'tag'
+                                    ? t('ruleModal.sourceTag')
+                                    : t('ruleModal.sourceNative')}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="mt-1 text-xs text-fg-subtle">
+                              {(c.source ?? 'tag') === 'native'
+                                ? t('ruleModal.sourceNativeHint')
+                                : t('ruleModal.sourceTagHint')}
+                            </p>
+                          </Field>
+                        )}
+                        <Field label={t('ruleModal.value')}>
+                          {renderConditionValue(i)}
                         </Field>
                       </div>
-                      {RICH.has(c.category) && (
-                        <Field label={t('ruleModal.matchSource')}>
-                          <div className="flex gap-1.5">
-                            {(['tag', 'native'] as ConditionSource[]).map((src) => (
-                              <button
-                                key={src}
-                                type="button"
-                                onClick={() =>
-                                  updateBlock(i, { source: src === 'tag' ? null : src })
-                                }
-                                className={
-                                  'rounded-md border px-3 py-1 text-xs ' +
-                                  ((c.source ?? 'tag') === src
-                                    ? 'border-ring bg-accent-bg text-accent'
-                                    : 'border-line-strong text-fg-muted hover:bg-fill')
-                                }
-                              >
-                                {src === 'tag'
-                                  ? t('ruleModal.sourceTag')
-                                  : t('ruleModal.sourceNative')}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="mt-1 text-xs text-fg-subtle">
-                            {(c.source ?? 'tag') === 'native'
-                              ? t('ruleModal.sourceNativeHint')
-                              : t('ruleModal.sourceTagHint')}
-                          </p>
-                        </Field>
-                      )}
-                      <Field label={t('ruleModal.value')}>
-                        {renderConditionValue(i)}
-                      </Field>
                     </div>
                   </div>
                 </div>
@@ -702,7 +770,11 @@ export default function RuleModal({
               required
               value={form.dir_template}
               onChange={(e) => setForm({ ...form, dir_template: e.target.value })}
-              placeholder={t('ruleModal.dirTemplatePlaceholder')}
+              placeholder={t(
+                serviceType === 'sonarr'
+                  ? 'ruleModal.dirTemplatePlaceholderTv'
+                  : 'ruleModal.dirTemplatePlaceholderMovies',
+              )}
             />
           </Field>
           <Field label={t('ruleModal.filenameTemplate')}>

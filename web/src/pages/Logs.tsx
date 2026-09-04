@@ -1,44 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, fmtTime, type LogEntry } from '../lib/api'
+import { fmtTime } from '../lib/api'
+import { logLevelClass, useLogStream } from '../lib/useLogStream'
 import Button from '../components/ui/Button'
 
 export default function Logs() {
   const { t } = useTranslation()
-  const [logs, setLogs] = useState<LogEntry[]>([])
   const [level, setLevel] = useState('')
-  const [err, setErr] = useState<string | null>(null)
-  const [live, setLive] = useState(true)
-  const esRef = useRef<EventSource | null>(null)
-
-  const load = useCallback(async () => {
-    try {
-      setLogs(await api.listLogs(level || undefined))
-    } catch (e) {
-      setErr(String(e))
-    }
-  }, [level])
-
-  useEffect(() => {
-    if (!live) return
-    const es = new EventSource('/api/logs/stream')
-    esRef.current = es
-    es.onmessage = (ev) => {
-      try {
-        const e = JSON.parse(ev.data as string) as LogEntry
-        setLogs((prev) =>
-          prev.some((x) => x.id === e.id) ? prev : [e, ...prev].slice(0, 500),
-        )
-      } catch {
-        /* ignore malformed frames */
-      }
-    }
-    return () => es.close()
-  }, [live])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const { logs, error, live, setLive, reload } = useLogStream({ level, cap: 500 })
 
   return (
     <div className="space-y-6">
@@ -57,7 +26,7 @@ export default function Logs() {
           <option value="warn">{t('logs.warn')}</option>
           <option value="info">{t('logs.info')}</option>
         </select>
-        <Button variant="secondary" onClick={() => void load()}>
+        <Button variant="secondary" onClick={() => void reload()}>
           {t('common.refresh')}
         </Button>
         <label className="flex items-center gap-2 text-sm text-fg-soft">
@@ -70,9 +39,9 @@ export default function Logs() {
         </label>
       </div>
 
-      {err && (
+      {error && (
         <div className="rounded-md border border-danger-line bg-danger-bg p-3 text-sm text-danger-fg">
-          {err}
+          {error}
         </div>
       )}
 
@@ -105,17 +74,7 @@ export default function Logs() {
                   {fmtTime(l.ts)}
                 </td>
                 <td className="px-3 py-2">
-                  <span
-                    className={
-                      l.level === 'error'
-                        ? 'text-danger-fg'
-                        : l.level === 'warn'
-                          ? 'text-warning-fg'
-                          : 'text-fg-muted'
-                    }
-                  >
-                    {l.level}
-                  </span>
+                  <span className={logLevelClass(l.level)}>{l.level}</span>
                 </td>
                 <td className="px-3 py-2 text-fg">{l.message}</td>
               </tr>

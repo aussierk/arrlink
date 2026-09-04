@@ -3,33 +3,33 @@ import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import LinksPanel from '../components/LinksPanel'
 import Card from '../components/ui/Card'
-import { api, fmtTime, type AppItem, type Health, type Me } from '../lib/api'
+import LinkHealthCard from '../components/dashboard/LinkHealthCard'
+import ServicesCard from '../components/dashboard/ServicesCard'
+import RulesCard from '../components/dashboard/RulesCard'
+import RecentActivityCard from '../components/dashboard/RecentActivityCard'
+import { api, type AppItem, type Me, type RuleItem, type Summary } from '../lib/api'
 import { useToast } from '../lib/useToast'
 
 export default function Dashboard() {
   const { t } = useTranslation()
   const toast = useToast()
-  const [health, setHealth] = useState<Health | null>(null)
   const [me, setMe] = useState<Me | null>(null)
-  const [apps, setApps] = useState<AppItem[]>([])
-  const [linksCount, setLinksCount] = useState<{
-    active_links: number
-    stale_links: number
-    orphaned_rules: string[]
-  } | null>(null)
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [apps, setApps] = useState<AppItem[] | null>(null)
+  const [rules, setRules] = useState<RuleItem[] | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const [h, m, a, s] = await Promise.all([
-        api.health(),
+      const [m, s, a, r] = await Promise.all([
         api.me(),
-        api.listApps(),
         api.summary(),
+        api.listApps(),
+        api.listRules(),
       ])
-      setHealth(h)
       setMe(m)
+      setSummary(s)
       setApps(a)
-      setLinksCount(s)
+      setRules(r)
     } catch (e) {
       toast.error(String(e))
     }
@@ -46,14 +46,12 @@ export default function Dashboard() {
         <p className="text-sm text-fg-subtle">{t('dashboard.subtitle')}</p>
       </div>
 
-      {linksCount && linksCount.orphaned_rules.length > 0 && (
+      {summary && summary.orphaned_rules.length > 0 && (
         <div className="rounded-md border border-warning-line bg-warning-bg p-3 text-sm text-warning-fg">
           <p className="font-medium">
-            {t('dashboard.orphanedRules', { count: linksCount.orphaned_rules.length })}
+            {t('dashboard.orphanedRules', { count: summary.orphaned_rules.length })}
           </p>
-          <p className="mt-1 text-warning-fg/80">
-            {linksCount.orphaned_rules.join(', ')}
-          </p>
+          <p className="mt-1 text-warning-fg/80">{summary.orphaned_rules.join(', ')}</p>
           <p className="mt-1 text-warning-fg/70">
             <Trans i18nKey="dashboard.orphanedHint">
               Edit the rules, or add their destination to{' '}
@@ -82,95 +80,16 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-4">
-        <Card title={t('dashboard.statusCard')}>
-          {health ? (
-            <div className="space-y-1 text-sm">
-              <p>
-                <span
-                  className={
-                    health.status === 'ok' ? 'text-success-fg' : 'text-danger-fg'
-                  }
-                >
-                  ● {health.status}
-                </span>
-              </p>
-              <p className="text-fg-muted">
-                {t('dashboard.version', { version: health.version })}
-              </p>
-              <p className="text-fg-muted">
-                {t('dashboard.schemaVersion', { version: health.schema_version })}
-              </p>
-            </div>
-          ) : (
-            <p className="text-sm text-fg-subtle">{t('common.loading')}</p>
-          )}
-        </Card>
-        <Card title={t('dashboard.authCard')}>
-          {me ? (
-            <div className="space-y-1 text-sm">
-              <p className="text-fg-soft">
-                {t('dashboard.authMethodsLine', {
-                  methods:
-                    [
-                      me.password_enabled && t('dashboard.methodPassword'),
-                      me.oidc_enabled && t('dashboard.methodOidc'),
-                    ]
-                      .filter(Boolean)
-                      .join(', ') || t('dashboard.methodNone'),
-                })}
-              </p>
-              <p className="text-fg-subtle">{t('dashboard.signedIn')}</p>
-            </div>
-          ) : (
-            <p className="text-sm text-fg-subtle">{t('common.loading')}</p>
-          )}
-        </Card>
-        <Card title={t('dashboard.appsCard')}>
-          <p className="text-2xl font-semibold">{apps.length}</p>
-          <p className="text-sm text-fg-subtle">
-            {t('dashboard.appsConnectedCount', { count: apps.length })}
-          </p>
-        </Card>
-        <Card title={t('dashboard.linksCard')}>
-          <p className="text-2xl font-semibold">{linksCount?.active_links ?? 0}</p>
-          <p className="text-sm text-fg-subtle">
-            {t('dashboard.hardlinked')}
-            {linksCount?.stale_links
-              ? t('dashboard.staleSuffix', { count: linksCount.stale_links })
-              : ''}
-          </p>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <LinkHealthCard summary={summary} />
+        <RulesCard rules={rules} />
       </div>
 
-      <Card title={t('dashboard.connectedApps')}>
-        {apps.length === 0 ? (
-          <p className="text-sm text-fg-subtle">{t('dashboard.noApps')}</p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {apps.map((a) => (
-              <li key={a.id} className="flex items-center gap-3 py-2 text-sm">
-                <span
-                  className={
-                    a.type === 'radarr'
-                      ? 'rounded bg-radarr-bg px-2 py-0.5 text-xs text-radarr-fg'
-                      : 'rounded bg-sonarr-bg px-2 py-0.5 text-xs text-sonarr-fg'
-                  }
-                >
-                  {a.type}
-                </span>
-                <span className="font-medium">{a.name}</span>
-                <span className="text-fg-subtle">{a.url}</span>
-                <span className="ml-auto text-fg-subtle">
-                  {t('dashboard.lastPoll', { time: fmtTime(a.last_poll_at) })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <ServicesCard apps={apps} />
 
-      <Card title={t('dashboard.linksCard')}>
+      <RecentActivityCard />
+
+      <Card id="links" title={t('dashboard.linksCard')}>
         <LinksPanel />
       </Card>
     </div>

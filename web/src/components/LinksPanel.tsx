@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import { api, type AppItem, type LinkItem } from '../lib/api'
 import Button from './ui/Button'
 import { useToast } from '../lib/useToast'
@@ -10,16 +11,34 @@ import { useToast } from '../lib/useToast'
  */
 const PAGE_SIZE = 100
 
+const STATUSES = ['active', 'stale', 'missing', ''] as const
+
+/** `?links=<status>` if it's a valid filter value, else null. */
+function readStatusParam(params: URLSearchParams): string | null {
+  const s = params.get('links')
+  return s !== null && (STATUSES as readonly string[]).includes(s) ? s : null
+}
+
 export default function LinksPanel() {
   const { t } = useTranslation()
   const toast = useToast()
+  const [params] = useSearchParams()
   const [links, setLinks] = useState<LinkItem[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [apps, setApps] = useState<AppItem[]>([])
   const [appId, setAppId] = useState('')
-  const [status, setStatus] = useState('active')
+  const [status, setStatus] = useState(readStatusParam(params) ?? 'active')
   const [busy, setBusy] = useState(false)
+
+  // The dashboard's link-health card deep-links here via ?links=<status>.
+  // The panel is already mounted (it lives on the Dashboard), so a plain
+  // param change won't re-run the initializer above — sync it here. Manual
+  // <select> edits don't navigate, so this doesn't fight them.
+  useEffect(() => {
+    const s = readStatusParam(params)
+    if (s !== null) setStatus(s)
+  }, [params])
 
   const load = useCallback(async () => {
     try {
@@ -95,6 +114,7 @@ export default function LinksPanel() {
         >
           <option value="active">{t('linksTable.active')}</option>
           <option value="stale">{t('linksTable.stale')}</option>
+          <option value="missing">{t('linksTable.missing')}</option>
           <option value="">{t('linksTable.all')}</option>
         </select>
         <Button onClick={() => void repair()} disabled={busy} loading={busy}>
@@ -152,6 +172,8 @@ export default function LinksPanel() {
                     <span className="text-success-fg">{t('linksTable.active')}</span>
                   ) : l.status === 'stale' ? (
                     <span className="text-warning-fg">{t('linksTable.stale')}</span>
+                  ) : l.status === 'missing' ? (
+                    <span className="text-danger-fg">{t('linksTable.missing')}</span>
                   ) : (
                     <span className="text-warning-fg">{l.status}</span>
                   )}

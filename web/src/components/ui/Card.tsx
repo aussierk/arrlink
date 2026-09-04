@@ -6,15 +6,20 @@ export default function Card({
   title,
   actions,
   className = '',
+  id,
   children,
 }: {
   title?: string
   actions?: React.ReactNode
   className?: string
+  id?: string
   children: React.ReactNode
 }) {
   return (
-    <div className={`rounded-lg border border-line bg-surface/60 p-4 ${className}`}>
+    <div
+      id={id}
+      className={`rounded-lg border border-line bg-surface/60 p-4 ${className}`}
+    >
       {(title || actions) && (
         <div className="mb-2 flex items-center justify-between gap-3">
           {title && (

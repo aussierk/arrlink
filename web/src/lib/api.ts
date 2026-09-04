@@ -186,6 +186,10 @@ export type RuleItem = {
   enabled: boolean
   unlink_on_mismatch: boolean
   priority: number
+  // From the list endpoint only (aggregates over `links`): how many links
+  // this rule currently owns, and when the most recent one was created.
+  link_count: number
+  last_link_at: number | null
   // Present on create/update responses only (not on list/get) — soft,
   // non-blocking "this value isn't a known vocabulary member" notices.
   vocabulary_warnings?: string[]
@@ -394,8 +398,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ api_key: apiKey }),
     }),
-  listLogs: (level?: string) =>
-    req<LogEntry[]>(`/api/logs${level ? `?level=${encodeURIComponent(level)}` : ''}`),
+  listLogs: (level?: string, ruleId?: number) => {
+    const p = new URLSearchParams()
+    if (level) p.set('level', level)
+    if (ruleId != null) p.set('rule_id', String(ruleId))
+    const q = p.toString()
+    return req<LogEntry[]>(`/api/logs${q ? `?${q}` : ''}`)
+  },
   getSettings: () => req<Record<string, unknown>>('/api/settings'),
   getEffectiveSettings: () => req<EffectiveSettings>('/api/settings/effective'),
   getAuthSettings: () => req<AuthConfig>('/api/settings/auth'),
@@ -461,12 +470,14 @@ export const api = {
     }),
   rescanApp: (id: number) =>
     req<{ ok: boolean }>(`/api/apps/${id}/rescan`, { method: 'POST' }),
-  summary: () =>
-    req<{
-      active_links: number
-      stale_links: number
-      orphaned_rules: string[]
-    }>('/api/apps/summary'),
+  summary: () => req<Summary>('/api/apps/summary'),
+}
+
+export type Summary = {
+  active_links: number
+  stale_links: number
+  missing_links: number
+  orphaned_rules: string[]
 }
 
 // App-wide display timezone (Settings > General > Timezone) — every viewer
@@ -488,6 +499,24 @@ export function getDisplayTimezone(): string {
 export function fmtTime(ts: number | null): string {
   if (!ts) return '—'
   return new Date(ts * 1000).toLocaleString(undefined, { timeZone: displayTimezone })
+}
+
+/** "3 minutes ago" / "in 2 hours" from a unix-seconds timestamp. Locale-aware
+ * via Intl.RelativeTimeFormat; picks the largest sensible unit. */
+export function fmtRelative(ts: number | null): string {
+  if (!ts) return '—'
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+  const diff = ts - Date.now() / 1000
+  const abs = Math.abs(diff)
+  const [unit, secs]: [Intl.RelativeTimeFormatUnit, number] =
+    abs < 60
+      ? ['second', 1]
+      : abs < 3600
+        ? ['minute', 60]
+        : abs < 86400
+          ? ['hour', 3600]
+          : ['day', 86400]
+  return rtf.format(Math.round(diff / secs), unit)
 }
 
 export type AuthError = {
