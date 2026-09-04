@@ -197,12 +197,15 @@
     "editRule": "Edit “{{name}}”",
     "delete": "Delete",
     "deleteRule": "Delete “{{name}}”",
-    "filterPlaceholder": "Filter rules…",
+    "filterPlaceholder": "Search by name…",
+    "serviceFilterAll": "All services",
+    "matchTypeFilterAll": "All match types",
+    "categoryFilterAll": "All categories",
+    "clearFilters": "Clear filters",
     "countShown": "{{shown}} of {{total}}",
-    "noMatch": "No rules match “{{query}}”.",
+    "noMatch": "No rules match the current filters.",
     "empty": "No rules yet — click “Add rule” and start from a preset.",
     "previewHeading": "Preview — {{name}}",
-    "footer": "Presets are a quick-start inside the rule form.",
     "matchMore": "+{{count}} more",
     "categoryLabel": {
       "user": "User",
@@ -212,6 +215,12 @@
       "certification": "Cert",
       "collection": "Collection",
       "custom": "Custom"
+    },
+    "matchTypeLabel": {
+      "exact": "Exact",
+      "list": "List",
+      "regex": "Regex",
+      "vocabulary": "Known value"
     }
   },
   "tags": {

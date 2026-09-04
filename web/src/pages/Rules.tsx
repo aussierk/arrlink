@@ -1,19 +1,29 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, Pencil, Trash2 } from 'lucide-react'
 import PreviewPanel from '../components/PreviewPanel'
 import RuleModal from '../components/RuleModal'
 import Button from '../components/ui/Button'
 import SortHeader from '../components/ui/SortHeader'
+import { encodeServiceValue } from '../components/ruleModal/helpers'
 import { useConfirm } from '../lib/useConfirm'
 import { useSort } from '../lib/useSort'
 import { useToast } from '../lib/useToast'
-import { api, type AppItem, type ConditionItem, type RuleItem } from '../lib/api'
+import {
+  api,
+  type AppItem,
+  type ConditionCategory,
+  type ConditionItem,
+  type RuleItem,
+} from '../lib/api'
 import { REGEX_PICKS } from '../lib/tagOptions'
 import i18n from '../i18n'
 
 const filterCls =
   'w-56 rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg outline-none focus:border-ring focus-visible:focus-ring'
+
+const selectCls =
+  'rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg'
 
 const RULE_SORT: Record<string, (r: RuleItem) => string | number> = {
   name: (r) => r.name.toLowerCase(),
@@ -21,18 +31,29 @@ const RULE_SORT: Record<string, (r: RuleItem) => string | number> = {
   priority: (r) => r.priority,
 }
 
-/** Lowercased text blob for the filter box to match against. */
-function ruleHaystack(r: RuleItem): string {
-  return [
-    r.name,
-    r.app_name ?? r.app_type_scope ?? '',
-    r.dir_template,
-    r.filename_template ?? '',
-    ...r.conditions.flatMap((c) => [c.category, c.match_value]),
-  ]
-    .join(' ')
-    .toLowerCase()
+const MATCH_TYPES: ConditionItem['match_type'][] = [
+  'exact',
+  'list',
+  'regex',
+  'vocabulary',
+]
+
+const MATCH_TYPE_LABEL_KEY: Record<string, string> = {
+  exact: 'rules.matchTypeLabel.exact',
+  list: 'rules.matchTypeLabel.list',
+  regex: 'rules.matchTypeLabel.regex',
+  vocabulary: 'rules.matchTypeLabel.vocabulary',
 }
+
+const CATEGORIES: ConditionCategory[] = [
+  'user',
+  'genre',
+  'language',
+  'quality',
+  'certification',
+  'collection',
+  'custom',
+]
 
 const CATEGORY_LABEL_KEY: Record<string, string> = {
   user: 'rules.categoryLabel.user',
@@ -118,16 +139,66 @@ export default function Rules() {
   const [previewFor, setPreviewFor] = useState<RuleItem | null>(null)
   const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
   const [filter, setFilter] = useState('')
+  const [serviceFilter, setServiceFilter] = useState('')
+  const [matchTypeFilter, setMatchTypeFilter] = useState<
+    ConditionItem['match_type'] | ''
+  >('')
+  const [categoryFilter, setCategoryFilter] = useState<ConditionCategory | ''>('')
   const {
     sorted: sortedRules,
     sortKey,
     sortDir,
     toggleSort,
   } = useSort(rules, RULE_SORT, 'priority')
+
+  function serviceLabel(appName: string | null, appTypeScope: string | null): string {
+    return (
+      appName ??
+      (appTypeScope === 'radarr'
+        ? t('ruleModal.allRadarr')
+        : appTypeScope === 'sonarr'
+          ? t('ruleModal.allSonarr')
+          : t('rules.any'))
+    )
+  }
+
+  const serviceOptions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const r of rules) {
+      const value = encodeServiceValue(r.app_scope, r.app_type_scope)
+      if (!seen.has(value)) seen.set(value, serviceLabel(r.app_name, r.app_type_scope))
+    }
+    return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rules])
+
   const q = filter.trim().toLowerCase()
-  const visibleRules = q
-    ? sortedRules.filter((r) => ruleHaystack(r).includes(q))
-    : sortedRules
+  const visibleRules = sortedRules.filter((r) => {
+    if (q && !r.name.toLowerCase().includes(q)) return false
+    if (
+      serviceFilter &&
+      encodeServiceValue(r.app_scope, r.app_type_scope) !== serviceFilter
+    ) {
+      return false
+    }
+    if (matchTypeFilter && !r.conditions.some((c) => c.match_type === matchTypeFilter)) {
+      return false
+    }
+    if (categoryFilter && !r.conditions.some((c) => c.category === categoryFilter)) {
+      return false
+    }
+    return true
+  })
+  const hasActiveFilter = Boolean(q || serviceFilter || matchTypeFilter || categoryFilter)
+
+  function clearFilters() {
+    setFilter('')
+    setServiceFilter('')
+    setMatchTypeFilter('')
+    setCategoryFilter('')
+  }
 
   const previewAppId = (r: { app_scope: number | null; app_type_scope: string | null }) =>
     r.app_scope ??
@@ -199,6 +270,49 @@ export default function Rules() {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
+          <select
+            className={selectCls}
+            value={serviceFilter}
+            onChange={(e) => setServiceFilter(e.target.value)}
+          >
+            <option value="">{t('rules.serviceFilterAll')}</option>
+            {serviceOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className={selectCls}
+            value={matchTypeFilter}
+            onChange={(e) =>
+              setMatchTypeFilter(e.target.value as ConditionItem['match_type'] | '')
+            }
+          >
+            <option value="">{t('rules.matchTypeFilterAll')}</option>
+            {MATCH_TYPES.map((mt) => (
+              <option key={mt} value={mt}>
+                {t(MATCH_TYPE_LABEL_KEY[mt])}
+              </option>
+            ))}
+          </select>
+          <select
+            className={selectCls}
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value as ConditionCategory | '')}
+          >
+            <option value="">{t('rules.categoryFilterAll')}</option>
+            {CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>
+                {t(CATEGORY_LABEL_KEY[cat])}
+              </option>
+            ))}
+          </select>
+          {hasActiveFilter && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              {t('rules.clearFilters')}
+            </Button>
+          )}
           <span className="text-xs text-fg-subtle">
             {t('rules.countShown', { shown: visibleRules.length, total: rules.length })}
           </span>
@@ -261,25 +375,20 @@ export default function Rules() {
             {rules.length > 0 && visibleRules.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-6 text-center text-fg-subtle">
-                  {t('rules.noMatch', { query: filter.trim() })}
+                  {t('rules.noMatch')}
                 </td>
               </tr>
             )}
             {visibleRules.map((r) => (
               <tr key={r.id} className="bg-sunken/40">
-                <td className="px-3 py-2 font-medium">
+                <td className="px-3 py-2 align-top font-medium">
                   {r.name}
                   {!r.enabled && (
                     <span className="ml-2 text-xs text-fg-subtle">{t('rules.off')}</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-fg-muted">
-                  {r.app_name ??
-                    (r.app_type_scope === 'radarr'
-                      ? t('ruleModal.allRadarr')
-                      : r.app_type_scope === 'sonarr'
-                        ? t('ruleModal.allSonarr')
-                        : t('rules.any'))}
+                <td className="px-3 py-2 align-top text-fg-muted">
+                  {serviceLabel(r.app_name, r.app_type_scope)}
                 </td>
                 <td className="px-3 py-2 align-top text-xs">{matchCell(r)}</td>
                 <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-soft">
@@ -361,8 +470,6 @@ export default function Rules() {
           </tbody>
         </table>
       </div>
-
-      <p className="text-xs text-fg-faint">{t('rules.footer')}</p>
 
       {modalOpen && (
         <RuleModal
