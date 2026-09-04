@@ -46,7 +46,9 @@ export default function Logs() {
       )}
 
       <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full min-w-xl text-sm">
+        {/* No min-width: only 3 columns, so the message can wrap on a phone
+            instead of forcing a horizontal scroll that hides it. */}
+        <table className="w-full text-sm">
           <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
               <th scope="col" className="px-3 py-2">
@@ -76,7 +78,7 @@ export default function Logs() {
                 <td className="px-3 py-2">
                   <span className={logLevelClass(l.level)}>{l.level}</span>
                 </td>
-                <td className="px-3 py-2 text-fg">{l.message}</td>
+                <td className="wrap-break-word px-3 py-2 text-fg">{l.message}</td>
               </tr>
             ))}
           </tbody>

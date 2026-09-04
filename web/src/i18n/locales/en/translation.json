@@ -232,7 +232,10 @@
       "emptyImport": "No tags imported yet — click Import tags.",
       "unsaved": "unsaved",
       "saving": "Saving…",
-      "saveChanges": "Save changes ({{count}})"
+      "saveChanges": "Save changes ({{count}})",
+      "filterPlaceholder": "Filter tags…",
+      "countShown": "{{shown}} of {{total}}",
+      "noMatch": "No tags match “{{query}}”."
     }
   },
   "settings": {

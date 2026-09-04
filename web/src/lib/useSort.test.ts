@@ -1,0 +1,51 @@
+import { act, renderHook } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { useSort } from './useSort'
+
+type Row = { name: string; n: number; when: number | null }
+
+const rows: Row[] = [
+  { name: 'beta', n: 2, when: 100 },
+  { name: 'alpha', n: 10, when: null },
+  { name: 'gamma', n: 1, when: 50 },
+]
+
+const acc = {
+  name: (r: Row) => r.name,
+  n: (r: Row) => r.n,
+  when: (r: Row) => r.when,
+}
+
+describe('useSort', () => {
+  it('sorts by the initial key ascending', () => {
+    const { result } = renderHook(() => useSort(rows, acc, 'name'))
+    expect(result.current.sorted.map((r) => r.name)).toEqual(['alpha', 'beta', 'gamma'])
+  })
+
+  it('compares numbers numerically, not lexically', () => {
+    const { result } = renderHook(() => useSort(rows, acc, 'n'))
+    expect(result.current.sorted.map((r) => r.n)).toEqual([1, 2, 10])
+  })
+
+  it('toggles direction when the same key is clicked again', () => {
+    const { result } = renderHook(() => useSort(rows, acc, 'name'))
+    act(() => result.current.toggleSort('name'))
+    expect(result.current.sortDir).toBe('desc')
+    expect(result.current.sorted.map((r) => r.name)).toEqual(['gamma', 'beta', 'alpha'])
+  })
+
+  it('keeps nulls last regardless of direction', () => {
+    const { result } = renderHook(() => useSort(rows, acc, 'when'))
+    expect(result.current.sorted.map((r) => r.when)).toEqual([50, 100, null])
+    act(() => result.current.toggleSort('when'))
+    expect(result.current.sorted.map((r) => r.when)).toEqual([100, 50, null])
+  })
+
+  it('switching key resets direction to ascending', () => {
+    const { result } = renderHook(() => useSort(rows, acc, 'name'))
+    act(() => result.current.toggleSort('name')) // -> desc
+    act(() => result.current.toggleSort('n')) // new key -> asc
+    expect(result.current.sortKey).toBe('n')
+    expect(result.current.sortDir).toBe('asc')
+  })
+})

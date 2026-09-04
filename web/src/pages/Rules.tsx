@@ -3,11 +3,19 @@ import { useTranslation } from 'react-i18next'
 import PreviewPanel from '../components/PreviewPanel'
 import RuleModal from '../components/RuleModal'
 import Button from '../components/ui/Button'
+import SortHeader from '../components/ui/SortHeader'
 import { useConfirm } from '../lib/useConfirm'
+import { useSort } from '../lib/useSort'
 import { useToast } from '../lib/useToast'
 import { api, type AppItem, type ConditionItem, type RuleItem } from '../lib/api'
 import { REGEX_PICKS } from '../lib/tagOptions'
 import i18n from '../i18n'
+
+const RULE_SORT: Record<string, (r: RuleItem) => string | number> = {
+  name: (r) => r.name.toLowerCase(),
+  app: (r) => r.app_name ?? r.app_type_scope ?? '',
+  priority: (r) => r.priority,
+}
 
 const CATEGORY_LABEL_KEY: Record<string, string> = {
   user: 'rules.categoryLabel.user',
@@ -101,6 +109,12 @@ export default function Rules() {
   const [editing, setEditing] = useState<RuleItem | null>(null)
   const [previewFor, setPreviewFor] = useState<RuleItem | null>(null)
   const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
+  const {
+    sorted: sortedRules,
+    sortKey,
+    sortDir,
+    toggleSort,
+  } = useSort(rules, RULE_SORT, 'priority')
 
   const previewAppId = (r: { app_scope: number | null; app_type_scope: string | null }) =>
     r.app_scope ??
@@ -172,15 +186,23 @@ export default function Rules() {
       )}
 
       <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full min-w-5xl text-sm">
+        <table className="w-full min-w-4xl text-sm">
           <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colName')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colApp')}
-              </th>
+              <SortHeader
+                label={t('rules.colName')}
+                columnKey="name"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortHeader
+                label={t('rules.colApp')}
+                columnKey="app"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
               <th scope="col" className="px-3 py-2">
                 {t('rules.colMatch')}
               </th>
@@ -190,9 +212,13 @@ export default function Rules() {
               <th scope="col" className="px-3 py-2">
                 {t('rules.colFilename')}
               </th>
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colFlags')}
-              </th>
+              <SortHeader
+                label={t('rules.colFlags')}
+                columnKey="priority"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
               <th scope="col" className="px-3 py-2">
                 {t('rules.colPreview')}
               </th>
@@ -200,14 +226,14 @@ export default function Rules() {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {rules.length === 0 && (
+            {sortedRules.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
                   {t('rules.empty')}
                 </td>
               </tr>
             )}
-            {rules.map((r) => (
+            {sortedRules.map((r) => (
               <tr key={r.id} className="bg-sunken/40">
                 <td className="px-3 py-2 font-medium">
                   {r.name}

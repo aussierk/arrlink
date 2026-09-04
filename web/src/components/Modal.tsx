@@ -29,7 +29,7 @@ export default function Modal({
         transition
         className="fixed inset-0 bg-black/60 transition duration-150 data-closed:opacity-0 motion-reduce:transition-none"
       />
-      <div className="fixed inset-0 flex items-start justify-center overflow-y-auto p-4 pt-16">
+      <div className="fixed inset-0 flex items-start justify-center overflow-y-auto p-4 pt-6 sm:pt-16">
         <DialogPanel
           transition
           className={`w-full rounded-lg border border-line bg-surface shadow-xl transition duration-150 data-closed:scale-95 data-closed:opacity-0 motion-reduce:transition-none motion-reduce:data-closed:scale-100 ${

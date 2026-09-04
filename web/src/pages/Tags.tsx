@@ -10,7 +10,9 @@ import {
 } from '../lib/api'
 import { useBeforeUnloadGuard } from '../lib/unsavedGuard'
 import Button from '../components/ui/Button'
+import SortHeader from '../components/ui/SortHeader'
 import { useConfirm } from '../lib/useConfirm'
+import { useSort } from '../lib/useSort'
 import { useToast } from '../lib/useToast'
 
 const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
@@ -22,6 +24,17 @@ const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
   'user',
   'custom',
 ]
+
+const TAG_SORT: Record<string, (t: TagItem) => string | number> = {
+  label: (t) => t.label.toLowerCase(),
+  category: (t) => t.category ?? '',
+  count: (t) => t.count,
+  rules: (t) => t.rule_count,
+  imported: (t) => t.imported_at,
+}
+
+const selectCls =
+  'rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg'
 
 /**
  * Tags: the tag vocabulary imported from each app, with usage counts and
@@ -35,6 +48,17 @@ export default function Tags() {
   const [appId, setAppId] = useState<number | null>(null)
   const [tags, setTags] = useState<TagItem[]>([])
   const [busy, setBusy] = useState(false)
+  const [filter, setFilter] = useState('')
+  const {
+    sorted: sortedTags,
+    sortKey,
+    sortDir,
+    toggleSort,
+  } = useSort(tags, TAG_SORT, 'label')
+  const q = filter.trim().toLowerCase()
+  const visibleTags = q
+    ? sortedTags.filter((tg) => tg.label.toLowerCase().includes(q))
+    : sortedTags
 
   // Category edits are staged here, not saved on select — the row's
   // dropdown shows the pending value if there is one, else the saved
@@ -208,25 +232,63 @@ export default function Tags() {
         </button>
       </div>
 
+      {tags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            className={`${selectCls} w-56`}
+            placeholder={t('tags.appTags.filterPlaceholder')}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          <span className="text-xs text-fg-subtle">
+            {t('tags.appTags.countShown', {
+              shown: visibleTags.length,
+              total: tags.length,
+            })}
+          </span>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-2xl text-sm">
           <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
-              <th scope="col" className="px-3 py-2">
-                {t('tags.appTags.colTag')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('tags.appTags.colCategory')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('tags.appTags.colInUse')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('tags.appTags.colRules')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('tags.appTags.colImported')}
-              </th>
+              <SortHeader
+                label={t('tags.appTags.colTag')}
+                columnKey="label"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortHeader
+                label={t('tags.appTags.colCategory')}
+                columnKey="category"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortHeader
+                label={t('tags.appTags.colInUse')}
+                columnKey="count"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortHeader
+                label={t('tags.appTags.colRules')}
+                columnKey="rules"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortHeader
+                label={t('tags.appTags.colImported')}
+                columnKey="imported"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -239,7 +301,14 @@ export default function Tags() {
                 </td>
               </tr>
             )}
-            {tags.map((tag) => {
+            {tags.length > 0 && visibleTags.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-fg-subtle">
+                  {t('tags.appTags.noMatch', { query: filter.trim() })}
+                </td>
+              </tr>
+            )}
+            {visibleTags.map((tag) => {
               const isPending = tag.id in pendingEdits
               const shown = isPending ? pendingEdits[tag.id] : tag.category
               return (
