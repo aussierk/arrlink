@@ -27,6 +27,23 @@ same as you would for Radarr/Sonarr themselves.
   (https) when `APP_URL` is unset. `127.0.0.1` / `localhost` stay implicitly
   trusted (the container's own healthcheck needs them).
 
+## Response headers
+
+Every response carries a hardening header set, including the SPA:
+
+- `Content-Security-Policy` — `default-src 'self'`, no framing
+  (`frame-ancestors 'none'`), no plugins, `connect-src 'self'`. The one inline
+  script (the pre-paint theme switch in `index.html`) is allow-listed by
+  sha256, recomputed from the built file at startup so it never drifts.
+- `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`.
+- `index.html` is served `Cache-Control: no-cache` (always revalidated) while
+  the fingerprinted `/assets/*` files stay cacheable.
+
+Cross-origin API calls are rejected by default. `ENABLE_DEV_CORS=1` opens
+CORS to `http://localhost:5173` for the Vite dev server only — never set it
+in production.
+
 ## Rate limiting
 
 Password login is rate-limited (see [authentication.md](authentication.md)).

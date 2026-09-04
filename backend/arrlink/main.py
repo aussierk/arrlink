@@ -40,6 +40,7 @@ from .config import (
 from .core import backup as backup_core
 from .core.poller import Poller
 from .core.template import audit_rule_roots
+from .security import SecurityHeadersMiddleware, build_csp
 from .singleton import InstanceLockError, acquire_instance_lock, release_instance_lock
 from .state import State
 
@@ -156,6 +157,8 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.db = db
 
+    dist = find_dist(Path(__file__).resolve())
+
     # Opt-in Host-header allow-list (TRUSTED_HOSTS env) -- unset by default,
     if settings.trusted_hosts:
         hosts = [h.strip() for h in settings.trusted_hosts.split(",") if h.strip()]
@@ -165,18 +168,26 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         if hosts:
             app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
 
-    # Permissive CORS only for the Vite dev server (:5173) during development.
-    # In production the SPA is served from the same origin, so this is inert.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Permissive CORS for the Vite dev server (:5173) -- opt-in only (see
+    # Settings.enable_dev_cors). Off in production, where the SPA is served
+    # from the same origin.
+    if settings.enable_dev_cors:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+            ],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+    # Outermost middleware: hardening headers on every response, incl. the SPA.
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        csp=build_csp(dist / "index.html" if dist else None),
+    )
 
     app.include_router(health.router)
     app.include_router(auth.router)
@@ -191,7 +202,6 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(presets_api.router)
     app.include_router(vocabulary_api.router)
 
-    dist = find_dist(Path(__file__).resolve())
     if dist:
         if (dist / "assets").exists():
             app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
@@ -199,8 +209,10 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str):  # noqa: ANN202
             full = (dist / path).resolve()
-            if full.is_file() and full.is_relative_to(dist):
+            # Vite fingerprints asset filenames, so any real file under dist/
+            # is safe to serve as-is; index.html is always revalidated.
+            if full.is_file() and full.is_relative_to(dist) and full.name != "index.html":
                 return FileResponse(full)
-            return FileResponse(dist / "index.html")
+            return FileResponse(dist / "index.html", headers={"Cache-Control": "no-cache"})
 
     return app

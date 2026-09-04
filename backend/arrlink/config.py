@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     # first non-loopback entry when app_url isn't set -- static config
     # instead of the spoofable request Host header.
     trusted_hosts: str | None = None
+    # Enable permissive CORS for the Vite dev server (:5173). Off by default:
+    # in production the SPA is same-origin, and in local dev the Vite proxy
+    # (web/vite.config.ts) already makes /api calls same-origin. Set
+    # ENABLE_DEV_CORS=1 only when hitting the API cross-origin during dev.
+    enable_dev_cors: bool = False
     backup_enabled: bool = True
     backup_retention_days: int = 7
     # Read-only display in Settings > General only -- entrypoint.sh reads
