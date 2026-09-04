@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 
 /**
@@ -24,6 +24,7 @@ export default function Collapsible({
 }) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen)
   const isOpen = open ?? uncontrolledOpen
+  const panelId = useId()
 
   function toggle() {
     if (onOpenChange) onOpenChange(!isOpen)
@@ -35,6 +36,8 @@ export default function Collapsible({
       <button
         type="button"
         onClick={toggle}
+        aria-expanded={isOpen}
+        aria-controls={panelId}
         className="flex w-full items-center justify-between gap-3 text-left"
       >
         <span className="flex items-center gap-1.5 text-sm font-medium text-fg">
@@ -47,7 +50,11 @@ export default function Collapsible({
         </span>
         {!isOpen && badge && <span className="text-xs text-fg-subtle">{badge}</span>}
       </button>
-      {isOpen && <div className="mt-3 space-y-3">{children}</div>}
+      {isOpen && (
+        <div id={panelId} className="mt-3 space-y-3">
+          {children}
+        </div>
+      )}
     </div>
   )
 }
