@@ -45,6 +45,10 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
       # `tsc -b` runs as part of the build itself, so this also
       # type-checks the whole frontend -- no separate typecheck step.
+      # (`npm run build` also chains `eslint .`; the explicit lint step
+      # above keeps a lint failure's CI log distinct from a build failure.)
       - run: npm run build

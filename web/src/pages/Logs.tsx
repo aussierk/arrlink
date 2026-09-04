@@ -24,7 +24,7 @@ export default function Logs() {
     esRef.current = es
     es.onmessage = (ev) => {
       try {
-        const e = JSON.parse(ev.data) as LogEntry
+        const e = JSON.parse(ev.data as string) as LogEntry
         setLogs((prev) =>
           prev.some((x) => x.id === e.id) ? prev : [e, ...prev].slice(0, 500),
         )

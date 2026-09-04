@@ -23,15 +23,20 @@ pre-commit install
 cd web && npm ci
 ```
 
+`npm ci` in `web/` is also required before `pre-commit` — the `eslint-web` hook
+is type-checked and runs against the installed `web/node_modules`.
+
 ## The loop
 
 ```sh
-ruff check . && ruff format .          # lint + format (the CI lint gate)
+ruff check . && ruff format .          # backend lint + format (the CI lint gate)
 pytest -q                              # backend tests
-cd web && npm run build                # type-checks (tsc -b) + builds the SPA
+cd web && npm run lint                 # type-checked ESLint (also chained into build)
+cd web && npm run build                # type-checks (tsc -b) + lint + builds the SPA
 ```
 
-`pre-commit` runs ruff, prettier, and basic hygiene checks on every commit.
+`pre-commit` runs ruff, prettier, ESLint (`web/`), and basic hygiene checks on
+every commit.
 The backend test suite needs a Linux toolchain (`uvloop`/`httptools` have no
 Windows wheels) — run it in WSL or a container if you're on Windows, or lean
 on CI.
@@ -46,7 +51,7 @@ on CI.
 - Keep the PR to one concern. Unrelated churn (reformatting untouched files,
   drive-by renames) makes review harder.
 - Fill in the PR template: what changed, why, and how you tested it.
-- CI must be green (lint, backend tests, frontend build).
+- CI must be green (backend lint/tests, frontend format + lint + build).
 - If a change is user-facing, mention it so it lands in the changelog.
 
 ## AI-assisted contributions

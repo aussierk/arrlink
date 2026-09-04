@@ -2,12 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import PreviewPanel from '../components/PreviewPanel'
 import RuleModal from '../components/RuleModal'
-import {
-  api,
-  type AppItem,
-  type ConditionItem,
-  type RuleItem,
-} from '../lib/api'
+import { api, type AppItem, type ConditionItem, type RuleItem } from '../lib/api'
 import { REGEX_PICKS } from '../lib/tagOptions'
 import i18n from '../i18n'
 
@@ -28,7 +23,10 @@ const CATEGORY_LABEL_KEY: Record<string, string> = {
 function conditionValue(c: ConditionItem) {
   const t = i18n.t
   if (c.match_type === 'list') {
-    const tags = c.match_value.split(',').map((s) => s.trim()).filter(Boolean)
+    const tags = c.match_value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
     const shown = tags.slice(0, 3)
     const more = tags.length - shown.length
     return (
@@ -42,7 +40,9 @@ function conditionValue(c: ConditionItem) {
           </span>
         ))}
         {more > 0 && (
-          <span className="text-[11px] text-zinc-500">{t('rules.matchMore', { count: more })}</span>
+          <span className="text-[11px] text-zinc-500">
+            {t('rules.matchMore', { count: more })}
+          </span>
         )}
       </span>
     )
@@ -71,7 +71,10 @@ function matchCell(r: RuleItem) {
             </span>
           )}
           <span className="text-zinc-500">
-            {CATEGORY_LABEL_KEY[c.category] ? t(CATEGORY_LABEL_KEY[c.category]) : c.category} ·
+            {CATEGORY_LABEL_KEY[c.category]
+              ? t(CATEGORY_LABEL_KEY[c.category])
+              : c.category}{' '}
+            ·
           </span>
           {conditionValue(c)}
         </span>
@@ -215,9 +218,7 @@ export default function Rules() {
                         ? t('ruleModal.allSonarr')
                         : t('rules.any'))}
                 </td>
-                <td className="px-3 py-2 text-xs">
-                  {matchCell(r)}
-                </td>
+                <td className="px-3 py-2 text-xs">{matchCell(r)}</td>
                 <td className="px-3 py-2 font-mono text-xs text-zinc-300">
                   {r.dir_template}
                 </td>
@@ -230,9 +231,7 @@ export default function Rules() {
                 </td>
                 <td className="px-3 py-2">
                   <button
-                    onClick={() =>
-                      setPreviewFor(previewFor?.id === r.id ? null : r)
-                    }
+                    onClick={() => setPreviewFor(previewFor?.id === r.id ? null : r)}
                     className="rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
                   >
                     {previewFor?.id === r.id ? t('rules.hide') : t('rules.preview')}
@@ -283,9 +282,7 @@ export default function Rules() {
         </table>
       </div>
 
-      <p className="text-xs text-zinc-600">
-        {t('rules.footer')}
-      </p>
+      <p className="text-xs text-zinc-600">{t('rules.footer')}</p>
 
       {modalOpen && (
         <RuleModal

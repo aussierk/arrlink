@@ -80,12 +80,15 @@ export default function LoginPage() {
   useEffect(() => {
     if (!me) return
     if (me.authenticated) {
-      navigate(next, { replace: true })
+      void navigate(next, { replace: true })
       return
     }
     if (autoRedirect) {
       window.location.assign(`/api/auth/login?next=${encodeURIComponent(next)}`)
     }
+    // `next` is derived from the URL and `navigate` is stable; re-running on
+    // their identity would loop the redirect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me, autoRedirect])
 
   async function submitPassword(e: React.FormEvent) {
@@ -95,7 +98,7 @@ export default function LoginPage() {
     try {
       const ok = await api.loginWithPassword(username, password)
       if (ok) {
-        navigate(next, { replace: true })
+        void navigate(next, { replace: true })
       } else {
         setPwError(t('loginPage.wrongCredentials'))
       }
@@ -164,7 +167,7 @@ export default function LoginPage() {
         )}
 
         {me.password_enabled && (
-          <form onSubmit={submitPassword} className="space-y-2">
+          <form onSubmit={(e) => void submitPassword(e)} className="space-y-2">
             <label className="block text-sm">
               <span className="mb-1 block text-zinc-400">
                 {t('loginPage.usernameLabel')}

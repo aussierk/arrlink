@@ -31,6 +31,16 @@ repos:
         entry: prettier --check
         files: ^web/.*\.(ts|tsx|js|jsx|css|json|md)$
 
+      # Type-checked ESLint needs the whole project + every plugin, so it runs
+      # against the installed web/node_modules rather than re-resolving deps.
+      # Requires `npm ci` in web/ first (see CONTRIBUTING.md).
+      - id: eslint-web
+        name: eslint (web/)
+        language: system
+        entry: npm --prefix web run lint
+        pass_filenames: false
+        files: ^web/.*\.(ts|tsx)$
+
   # The backend suite needs a Linux toolchain (uvloop/httptools have no
   # Windows wheels). Once you can run `pytest -q` locally, uncomment this to
   # gate `git push` on it too:

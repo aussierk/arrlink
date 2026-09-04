@@ -48,9 +48,7 @@ export default function TagSelect({
   }, [open])
 
   const q = query.trim().toLowerCase()
-  const filtered = q
-    ? options.filter((o) => o.toLowerCase().includes(q))
-    : options
+  const filtered = q ? options.filter((o) => o.toLowerCase().includes(q)) : options
   const canCreate =
     creatable &&
     query.trim() &&
@@ -95,7 +93,9 @@ export default function TagSelect({
             )}
           </span>
         )}
-        <ChevronDown className={`size-4 shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          className={`size-4 shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {open && (

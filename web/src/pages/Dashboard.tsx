@@ -2,13 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import LinksPanel from '../components/LinksPanel'
-import {
-  api,
-  fmtTime,
-  type AppItem,
-  type Health,
-  type Me,
-} from '../lib/api'
+import { api, fmtTime, type AppItem, type Health, type Me } from '../lib/api'
 
 export default function Dashboard() {
   const { t } = useTranslation()
@@ -64,8 +58,9 @@ export default function Dashboard() {
           <p className="mt-1 text-amber-200/80">{linksCount.orphaned_rules.join(', ')}</p>
           <p className="mt-1 text-amber-200/60">
             <Trans i18nKey="dashboard.orphanedHint">
-              Edit the rules, or set <code className="rounded bg-black/30 px-1">allowed_roots</code> to
-              include their destination in Settings.
+              Edit the rules, or set{' '}
+              <code className="rounded bg-black/30 px-1">allowed_roots</code> to include
+              their destination in Settings.
             </Trans>
           </p>
         </div>
@@ -78,7 +73,10 @@ export default function Dashboard() {
             <Trans i18nKey="dashboard.authDisabledHint">
               Anyone who can reach this app can use it, with no login. Turn on password or
               OIDC login in{' '}
-              <Link className="underline hover:text-amber-100" to="/settings/authentication">
+              <Link
+                className="underline hover:text-amber-100"
+                to="/settings/authentication"
+              >
                 Settings → Authentication
               </Link>
               .
@@ -93,16 +91,17 @@ export default function Dashboard() {
             <div className="space-y-1 text-sm">
               <p>
                 <span
-                  className={
-                    health.status === 'ok'
-                      ? 'text-emerald-400'
-                      : 'text-red-400'
-                }>
+                  className={health.status === 'ok' ? 'text-emerald-400' : 'text-red-400'}
+                >
                   ● {health.status}
                 </span>
               </p>
-              <p className="text-zinc-400">{t('dashboard.version', { version: health.version })}</p>
-              <p className="text-zinc-400">{t('dashboard.schemaVersion', { version: health.schema_version })}</p>
+              <p className="text-zinc-400">
+                {t('dashboard.version', { version: health.version })}
+              </p>
+              <p className="text-zinc-400">
+                {t('dashboard.schemaVersion', { version: health.schema_version })}
+              </p>
             </div>
           ) : (
             <p className="text-sm text-zinc-500">{t('common.loading')}</p>
@@ -135,9 +134,7 @@ export default function Dashboard() {
           </p>
         </Card>
         <Card title={t('dashboard.linksCard')}>
-          <p className="text-2xl font-semibold">
-            {linksCount?.active_links ?? 0}
-          </p>
+          <p className="text-2xl font-semibold">{linksCount?.active_links ?? 0}</p>
           <p className="text-sm text-zinc-500">
             {t('dashboard.hardlinked')}
             {linksCount?.stale_links
@@ -181,13 +178,7 @@ export default function Dashboard() {
   )
 }
 
-function Card({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">

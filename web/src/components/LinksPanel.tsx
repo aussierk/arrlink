@@ -36,7 +36,10 @@ export default function LinksPanel() {
   }, [appId, status, offset])
 
   useEffect(() => {
-    api.listApps().then(setApps).catch(() => {})
+    api
+      .listApps()
+      .then(setApps)
+      .catch(() => {})
   }, [])
 
   useEffect(() => {

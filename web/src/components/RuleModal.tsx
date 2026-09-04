@@ -34,7 +34,13 @@ const RICH = new Set<string>(RICH_CATEGORIES)
 const CUSTOM = '__custom__'
 
 const CATEGORY_ORDER: ConditionCategory[] = [
-  'user', 'genre', 'language', 'quality', 'certification', 'collection', 'custom',
+  'user',
+  'genre',
+  'language',
+  'quality',
+  'certification',
+  'collection',
+  'custom',
 ]
 
 const CATEGORY_LABEL_KEY: Record<string, string> = {
@@ -68,7 +74,10 @@ const emptyForm: FormState = {
 // The Service <select> encodes three kinds of scope in one string value:
 // '' (any service), 'type:radarr' / 'type:sonarr' (all instances of that
 // type), or a specific app's id — decoded back into the two real fields.
-function encodeServiceValue(appScope: number | null, appTypeScope: string | null): string {
+function encodeServiceValue(
+  appScope: number | null,
+  appTypeScope: string | null,
+): string {
   if (appTypeScope) return `type:${appTypeScope}`
   return appScope === null ? '' : String(appScope)
 }
@@ -126,11 +135,16 @@ export default function RuleModal({
   // Known values per rich category (genre/language/quality/certification/
   // collection), backed by the DB vocabulary table — TMDB/TRaSH/instance
   // synced automatically in the background (see Settings > Vocabulary).
-  const [vocab, setVocab] = useState<Partial<Record<ConditionCategory, VocabularyEntry[]>>>({})
+  const [vocab, setVocab] = useState<
+    Partial<Record<ConditionCategory, VocabularyEntry[]>>
+  >({})
   const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
 
   useEffect(() => {
-    api.listApps().then(setApps).catch(() => {})
+    api
+      .listApps()
+      .then(setApps)
+      .catch(() => {})
   }, [])
 
   const selectedApp = apps.find((a) => a.id === form.app_scope)
@@ -169,7 +183,7 @@ export default function RuleModal({
       return
     }
     let cancelled = false
-    Promise.all(
+    void Promise.all(
       RICH_CATEGORIES.map((cat) =>
         api
           .getVocabulary(cat, serviceType, representativeAppId)
@@ -177,7 +191,7 @@ export default function RuleModal({
           .catch(() => [cat, []] as const),
       ),
     ).then((pairs) => {
-      if (!cancelled) setVocab(Object.fromEntries(pairs))
+      if (!cancelled) setVocab(Object.fromEntries(pairs) as typeof vocab)
     })
     return () => {
       cancelled = true
@@ -204,7 +218,8 @@ export default function RuleModal({
   }, [conditions, form.app_scope, form.app_type_scope])
 
   const knownTags = useMemo(
-    () => new Set(RICH_CATEGORIES.flatMap((cat) => (vocab[cat] ?? []).map((v) => v.value))),
+    () =>
+      new Set(RICH_CATEGORIES.flatMap((cat) => (vocab[cat] ?? []).map((v) => v.value))),
     [vocab],
   )
   const customOptions = useMemo(() => {
@@ -217,15 +232,20 @@ export default function RuleModal({
     if (RICH.has(category)) {
       // Vocabulary values, plus any tag already manually classified into
       // this category (Tags page) — both count as known members.
-      const fromVocab = (vocab[category as ConditionCategory] ?? []).map((v) => v.value)
-      const fromClassifiedTags = tags.filter((t) => t.category === category).map((t) => t.label)
+      const fromVocab = (vocab[category] ?? []).map((v) => v.value)
+      const fromClassifiedTags = tags
+        .filter((t) => t.category === category)
+        .map((t) => t.label)
       return Array.from(new Set([...fromVocab, ...fromClassifiedTags]))
     }
     if (category === 'custom') return customOptions
     return [] // user
   }
 
-  function creatableFor(_category: ConditionCategory, matchType: ConditionItem['match_type']) {
+  function creatableFor(
+    _category: ConditionCategory,
+    matchType: ConditionItem['match_type'],
+  ) {
     // "vocabulary" means "match anything currently known" — no free text to
     // enter. Every other match type stays creatable: vocabulary suggestions
     // may simply not be synced yet, and shouldn't block typing a value.
@@ -238,7 +258,9 @@ export default function RuleModal({
 
   function toggleJoin(i: number) {
     setConditions((cs) =>
-      cs.map((c, idx) => (idx === i ? { ...c, join: c.join === 'AND' ? 'OR' : 'AND' } : c)),
+      cs.map((c, idx) =>
+        idx === i ? { ...c, join: c.join === 'AND' ? 'OR' : 'AND' } : c,
+      ),
     )
   }
 
@@ -285,7 +307,12 @@ export default function RuleModal({
       const join: 'AND' | 'OR' | null = conditions.length === 0 ? null : 'OR'
       const next = [
         ...conditions,
-        { category: p.category, match_type: p.match_type, match_value: p.match_value, join },
+        {
+          category: p.category,
+          match_type: p.match_type,
+          match_value: p.match_value,
+          join,
+        },
       ]
       setConditions(next)
     } else {
@@ -316,9 +343,10 @@ export default function RuleModal({
         filename_template: form.filename_template || null,
         conditions: conditions.map((c, i) => ({ ...c, join: i === 0 ? null : c.join })),
       }
-      const saved = editing && initial
-        ? await api.updateRule(initial.id, body)
-        : await api.createRule(body)
+      const saved =
+        editing && initial
+          ? await api.updateRule(initial.id, body)
+          : await api.createRule(body)
       onSaved(saved)
       onClose()
     } catch (e) {
@@ -352,7 +380,7 @@ export default function RuleModal({
         <div className="space-y-2">
           <select
             className={inputCls}
-            value={regexIsCustom ? CUSTOM : regexPick?.pattern ?? ''}
+            value={regexIsCustom ? CUSTOM : (regexPick?.pattern ?? '')}
             onChange={(e) => {
               const v = e.target.value
               updateBlock(i, { match_value: v === CUSTOM ? c.match_value || '' : v })
@@ -366,7 +394,9 @@ export default function RuleModal({
             ))}
             <option value={CUSTOM}>{t('ruleModal.customRegex')}</option>
           </select>
-          {regexPick?.hint && <p className="text-[11px] text-zinc-500">{regexPick.hint}</p>}
+          {regexPick?.hint && (
+            <p className="text-[11px] text-zinc-500">{regexPick.hint}</p>
+          )}
           {regexIsCustom && (
             <textarea
               className={inputCls + ' font-mono'}
@@ -385,25 +415,35 @@ export default function RuleModal({
         placeholder={
           c.match_type === 'regex'
             ? t('ruleModal.pickOrTypePattern')
-            : t('ruleModal.selectCategoryPlaceholder', { category: categoryLabel(c.category).toLowerCase() })
+            : t('ruleModal.selectCategoryPlaceholder', {
+                category: categoryLabel(c.category).toLowerCase(),
+              })
         }
         options={optionsFor(c.category)}
         selected={selected}
         onChange={(next) => applyBlockSelection(i, selected, next)}
         multiple={c.match_type === 'list'}
         creatable={creatableFor(c.category, c.match_type)}
-        searchPlaceholder={c.match_type === 'regex' ? t('ruleModal.searchOrTypePattern') : t('ruleModal.searchOrAdd')}
+        searchPlaceholder={
+          c.match_type === 'regex'
+            ? t('ruleModal.searchOrTypePattern')
+            : t('ruleModal.searchOrAdd')
+        }
       />
     )
   }
 
   return (
     <Modal
-      title={editing ? t('ruleModal.editTitle', { name: initial!.name }) : t('ruleModal.newTitle')}
+      title={
+        editing
+          ? t('ruleModal.editTitle', { name: initial.name })
+          : t('ruleModal.newTitle')
+      }
       onClose={onClose}
       size="xl"
     >
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={(e) => void submit(e)} className="space-y-4">
         <Field label={t('ruleModal.name')}>
           <input
             className={inputCls}
@@ -470,15 +510,15 @@ export default function RuleModal({
                 <span className="text-xs text-zinc-500">{t('ruleModal.noPresets')}</span>
               )}
             </div>
-            <p className="mt-2 text-[11px] text-zinc-500">
-              {t('ruleModal.presetHint')}
-            </p>
+            <p className="mt-2 text-[11px] text-zinc-500">{t('ruleModal.presetHint')}</p>
           </div>
         )}
 
         <div className="space-y-3 border-t border-zinc-800 pt-4">
           <div>
-            <h3 className="text-sm font-semibold text-zinc-200">{t('ruleModal.conditions')}</h3>
+            <h3 className="text-sm font-semibold text-zinc-200">
+              {t('ruleModal.conditions')}
+            </h3>
             <p className="text-xs text-zinc-500">
               <Trans
                 i18nKey="ruleModal.conditionsHintChain"
@@ -502,7 +542,9 @@ export default function RuleModal({
                         onClick={() => toggleJoin(i)}
                         className="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-semibold text-indigo-300 hover:bg-zinc-700"
                       >
-                        {c.join === 'AND' ? t('conditions.joinAnd') : t('conditions.joinOr')}
+                        {c.join === 'AND'
+                          ? t('conditions.joinAnd')
+                          : t('conditions.joinOr')}
                       </button>
                     </div>
                   )}
@@ -563,11 +605,17 @@ export default function RuleModal({
                               })
                             }
                           >
-                            <option value="list">{t('ruleModal.matchTypeListOption')}</option>
-                            <option value="exact">{t('ruleModal.matchTypeExactOption')}</option>
+                            <option value="list">
+                              {t('ruleModal.matchTypeListOption')}
+                            </option>
+                            <option value="exact">
+                              {t('ruleModal.matchTypeExactOption')}
+                            </option>
                             <option value="regex">{t('ruleModal.matchTypeRegex')}</option>
                             {RICH.has(c.category) && (
-                              <option value="vocabulary">{t('ruleModal.matchTypeVocabulary')}</option>
+                              <option value="vocabulary">
+                                {t('ruleModal.matchTypeVocabulary')}
+                              </option>
                             )}
                           </select>
                         </Field>
@@ -579,7 +627,9 @@ export default function RuleModal({
                               <button
                                 key={src}
                                 type="button"
-                                onClick={() => updateBlock(i, { source: src === 'tag' ? null : src })}
+                                onClick={() =>
+                                  updateBlock(i, { source: src === 'tag' ? null : src })
+                                }
                                 className={
                                   'rounded-md border px-3 py-1 text-xs ' +
                                   ((c.source ?? 'tag') === src
@@ -587,7 +637,9 @@ export default function RuleModal({
                                     : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800')
                                 }
                               >
-                                {src === 'tag' ? t('ruleModal.sourceTag') : t('ruleModal.sourceNative')}
+                                {src === 'tag'
+                                  ? t('ruleModal.sourceTag')
+                                  : t('ruleModal.sourceNative')}
                               </button>
                             ))}
                           </div>
@@ -598,7 +650,9 @@ export default function RuleModal({
                           </p>
                         </Field>
                       )}
-                      <Field label={t('ruleModal.value')}>{renderConditionValue(i)}</Field>
+                      <Field label={t('ruleModal.value')}>
+                        {renderConditionValue(i)}
+                      </Field>
                     </div>
                   </div>
                 </div>
@@ -615,7 +669,9 @@ export default function RuleModal({
               ) : (
                 !allCategoriesUsed && (
                   <div className="flex items-center gap-2 pt-1">
-                    <span className="text-xs text-zinc-500">{t('ruleModal.addAnotherCondition')}</span>
+                    <span className="text-xs text-zinc-500">
+                      {t('ruleModal.addAnotherCondition')}
+                    </span>
                     <button
                       type="button"
                       onClick={() => addCondition('AND')}
@@ -639,10 +695,10 @@ export default function RuleModal({
 
         <div className="space-y-3 border-t border-zinc-800 pt-4">
           <div>
-            <h3 className="text-sm font-semibold text-zinc-200">{t('ruleModal.settings')}</h3>
-            <p className="text-xs text-zinc-500">
-              {t('ruleModal.settingsHint')}
-            </p>
+            <h3 className="text-sm font-semibold text-zinc-200">
+              {t('ruleModal.settings')}
+            </h3>
+            <p className="text-xs text-zinc-500">{t('ruleModal.settingsHint')}</p>
           </div>
 
           <Field label={t('ruleModal.dirTemplate')}>
@@ -690,7 +746,9 @@ export default function RuleModal({
 
         {previewOpen && (
           <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-            <h4 className="mb-2 text-xs font-semibold text-zinc-400">{t('ruleModal.livePreview')}</h4>
+            <h4 className="mb-2 text-xs font-semibold text-zinc-400">
+              {t('ruleModal.livePreview')}
+            </h4>
             <PreviewPanel rule={previewRule} appId={previewAppId} />
           </div>
         )}
@@ -730,7 +788,11 @@ export default function RuleModal({
               disabled={busy}
               className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              {busy ? t('ruleModal.saving') : editing ? t('ruleModal.saveRule') : t('ruleModal.createRule')}
+              {busy
+                ? t('ruleModal.saving')
+                : editing
+                  ? t('ruleModal.saveRule')
+                  : t('ruleModal.createRule')}
             </button>
           </div>
         </div>

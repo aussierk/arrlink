@@ -32,7 +32,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let detail = res.statusText
     try {
-      const body = await res.json()
+      const body = (await res.json()) as { detail?: unknown }
       detail =
         typeof body.detail === 'string'
           ? body.detail

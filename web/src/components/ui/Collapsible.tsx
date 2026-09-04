@@ -45,9 +45,7 @@ export default function Collapsible({
           )}
           {title}
         </span>
-        {!isOpen && badge && (
-          <span className="text-xs text-zinc-500">{badge}</span>
-        )}
+        {!isOpen && badge && <span className="text-xs text-zinc-500">{badge}</span>}
       </button>
       {isOpen && <div className="mt-3 space-y-3">{children}</div>}
     </div>

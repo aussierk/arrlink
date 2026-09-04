@@ -88,13 +88,11 @@ export default function AppModal({
   return (
     <Modal
       title={
-        editing
-          ? t('appModal.editTitle', { name: initial!.name })
-          : t('appModal.addTitle')
+        editing ? t('appModal.editTitle', { name: initial.name }) : t('appModal.addTitle')
       }
       onClose={onClose}
     >
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={(e) => void submit(e)} className="space-y-3">
         <Field label={t('appModal.name')}>
           <input
             className={inputCls}

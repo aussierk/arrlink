@@ -16,7 +16,10 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    api.me().then(setMe).catch(() => setFailed(true))
+    api
+      .me()
+      .then(setMe)
+      .catch(() => setFailed(true))
   }, [])
 
   if (failed) {

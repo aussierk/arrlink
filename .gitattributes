@@ -1,0 +1,15 @@
+# Normalize line endings: text files are LF in the repo and in every working
+# tree (checkout), regardless of a contributor's core.autocrlf setting. Keeps
+# Prettier (endOfLine: lf) and the pre-commit hooks green on Windows.
+* text=auto eol=lf
+
+# Explicit binary markers so a future asset isn't line-ending mangled.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary

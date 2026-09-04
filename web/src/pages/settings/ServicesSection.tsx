@@ -180,21 +180,21 @@ export default function ServicesSection() {
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => testRow(a.id)}
+                      onClick={() => void testRow(a.id)}
                       className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
                     >
                       <Plug className="size-3.5" />
                       {t('settingsServices.test')}
                     </button>
                     <button
-                      onClick={() => importRow(a.id)}
+                      onClick={() => void importRow(a.id)}
                       className="flex items-center gap-1 rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
                     >
                       <Download className="size-3.5" />
                       {t('settingsServices.importTags')}
                     </button>
                     <button
-                      onClick={() => rescanRow(a.id)}
+                      onClick={() => void rescanRow(a.id)}
                       className="flex items-center gap-1 rounded px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40"
                     >
                       <RefreshCw className="size-3.5" />
