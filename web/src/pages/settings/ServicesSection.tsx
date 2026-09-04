@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Download, Pencil, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import AppModal from '../../components/AppModal'
-import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
 import { api, fmtTime, type AppItem } from '../../lib/api'
+import { useConfirm } from '../../lib/useConfirm'
+import { useToast } from '../../lib/useToast'
 
 /**
  * Connect Radarr and Sonarr — test the connection, import tags, and rescan
@@ -13,9 +14,9 @@ import { api, fmtTime, type AppItem } from '../../lib/api'
  */
 export default function ServicesSection() {
   const { t } = useTranslation()
+  const confirm = useConfirm()
+  const toast = useToast()
   const [apps, setApps] = useState<AppItem[]>([])
-  const [err, setErr] = useState<string | null>(null)
-  const [ok, setOk] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<AppItem | null>(null)
   const [rowMsg, setRowMsg] = useState<Record<number, string>>({})
@@ -24,9 +25,9 @@ export default function ServicesSection() {
     try {
       setApps(await api.listApps())
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load()
@@ -43,13 +44,18 @@ export default function ServicesSection() {
   }
 
   async function remove(a: AppItem) {
-    if (!confirm(t('settingsServices.deleteConfirm', { name: a.name }))) return
+    const ok = await confirm({
+      title: t('settingsServices.deleteTitle'),
+      message: t('settingsServices.deleteConfirm', { name: a.name }),
+      variant: 'danger',
+    })
+    if (!ok) return
     try {
       await api.deleteApp(a.id)
-      setOk(t('settingsServices.deletedMsg', { name: a.name }))
+      toast.success(t('settingsServices.deletedMsg', { name: a.name }))
       await load()
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
   }
 
@@ -118,9 +124,6 @@ export default function ServicesSection() {
           {t('settingsServices.addService')}
         </Button>
       </div>
-
-      <Alert variant="error">{err}</Alert>
-      <Alert variant="success">{ok}</Alert>
 
       <div className="overflow-hidden rounded-lg border border-line">
         <table className="w-full text-sm">

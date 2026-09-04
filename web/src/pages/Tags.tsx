@@ -10,6 +10,8 @@ import {
 } from '../lib/api'
 import { useBeforeUnloadGuard } from '../lib/unsavedGuard'
 import Button from '../components/ui/Button'
+import { useConfirm } from '../lib/useConfirm'
+import { useToast } from '../lib/useToast'
 
 const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
   'genre',
@@ -27,11 +29,11 @@ const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
  */
 export default function Tags() {
   const { t } = useTranslation()
+  const confirm = useConfirm()
+  const toast = useToast()
   const [apps, setApps] = useState<AppItem[]>([])
   const [appId, setAppId] = useState<number | null>(null)
   const [tags, setTags] = useState<TagItem[]>([])
-  const [imported, setImported] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   // Category edits are staged here, not saved on select — the row's
@@ -50,9 +52,9 @@ export default function Tags() {
       if (appId === null && a.length > 0) setAppId(a[0].id)
       if (appId !== null && !a.some((x) => x.id === appId)) setAppId(null)
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [appId])
+  }, [appId, toast])
 
   const loadTags = useCallback(async () => {
     if (appId === null) return
@@ -60,9 +62,9 @@ export default function Tags() {
       setTags(await api.listTags(appId))
       setPendingEdits({})
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [appId])
+  }, [appId, toast])
 
   useEffect(() => {
     void loadApps()
@@ -84,12 +86,12 @@ export default function Tags() {
       setPendingEdits({})
       return true
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
       return false
     } finally {
       setSaving(false)
     }
-  }, [pendingEdits, appId])
+  }, [pendingEdits, appId, toast])
 
   // Blocks any in-app navigation away from this page (sidebar, SettingsNav,
   // browser back/forward) while there's something unsaved — react-router's
@@ -99,18 +101,27 @@ export default function Tags() {
   const blocker = useBlocker(hasPending)
   useEffect(() => {
     if (blocker.state !== 'blocked') return
-    const shouldSave = window.confirm(
-      'You have unsaved tag classification changes. Save them before leaving this page?',
-    )
-    if (!shouldSave) {
-      blocker.proceed()
-      return
-    }
-    void saveTagEdits().then((ok) => {
-      if (ok) blocker.proceed()
-      else blocker.reset() // save failed -- stay so the error is visible
+    let cancelled = false
+    void confirm({
+      title: t('tags.unsaved.title'),
+      message: t('tags.unsaved.leaveMessage'),
+      confirmLabel: t('tags.unsaved.save'),
+      cancelLabel: t('tags.unsaved.discard'),
+    }).then((save) => {
+      if (cancelled) return
+      if (!save) {
+        blocker.proceed()
+        return
+      }
+      void saveTagEdits().then((ok) => {
+        if (ok) blocker.proceed()
+        else blocker.reset() // save failed -- stay so the error is visible
+      })
     })
-  }, [blocker, saveTagEdits])
+    return () => {
+      cancelled = true
+    }
+  }, [blocker, saveTagEdits, confirm, t])
   useBeforeUnloadGuard(hasPending)
 
   function stageTagCategory(tagId: number, category: ConditionCategory | null) {
@@ -128,10 +139,13 @@ export default function Tags() {
 
   async function switchApp(nextId: number) {
     if (hasPending) {
-      const shouldSave = window.confirm(
-        'You have unsaved tag classification changes. Save them before switching services?',
-      )
-      if (shouldSave) {
+      const save = await confirm({
+        title: t('tags.unsaved.title'),
+        message: t('tags.unsaved.switchMessage'),
+        confirmLabel: t('tags.unsaved.save'),
+        cancelLabel: t('tags.unsaved.discard'),
+      })
+      if (save) {
         const ok = await saveTagEdits()
         if (!ok) return // stay put so the error (and the edits) are still visible
       } else {
@@ -144,14 +158,12 @@ export default function Tags() {
   async function doImport() {
     if (appId === null) return
     setBusy(true)
-    setErr(null)
-    setImported(null)
     try {
       const r = await api.importTags(appId)
-      setImported(t('tags.appTags.imported', { count: r.imported }))
+      toast.success(t('tags.appTags.imported', { count: r.imported }))
       await loadTags()
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     } finally {
       setBusy(false)
     }
@@ -159,12 +171,6 @@ export default function Tags() {
 
   return (
     <div className="space-y-6">
-      {err && (
-        <div className="rounded-md border border-danger-line bg-danger-bg p-3 text-sm text-danger-fg">
-          {err}
-        </div>
-      )}
-
       {/* ------------------------------ App tags --------------------------- */}
       <div className="flex items-end gap-3">
         <div>
@@ -201,12 +207,6 @@ export default function Tags() {
             : t('tags.appTags.saveChanges', { count: Object.keys(pendingEdits).length })}
         </button>
       </div>
-
-      {imported && (
-        <div className="rounded-md border border-success-line bg-success-bg p-3 text-sm text-success-fg">
-          {imported}
-        </div>
-      )}
 
       <div className="overflow-hidden rounded-lg border border-line">
         <table className="w-full text-sm">

@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import PreviewPanel from '../components/PreviewPanel'
 import RuleModal from '../components/RuleModal'
 import Button from '../components/ui/Button'
+import { useConfirm } from '../lib/useConfirm'
+import { useToast } from '../lib/useToast'
 import { api, type AppItem, type ConditionItem, type RuleItem } from '../lib/api'
 import { REGEX_PICKS } from '../lib/tagOptions'
 import i18n from '../i18n'
@@ -91,10 +93,10 @@ function matchCell(r: RuleItem) {
  */
 export default function Rules() {
   const { t } = useTranslation()
+  const confirm = useConfirm()
+  const toast = useToast()
   const [rules, setRules] = useState<RuleItem[]>([])
   const [apps, setApps] = useState<AppItem[]>([])
-  const [err, setErr] = useState<string | null>(null)
-  const [ok, setOk] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<RuleItem | null>(null)
   const [previewFor, setPreviewFor] = useState<RuleItem | null>(null)
@@ -112,9 +114,9 @@ export default function Rules() {
       setRules(r)
       setApps(a)
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load()
@@ -134,17 +136,18 @@ export default function Rules() {
     const links = await api
       .listLinks({ rule_id: r.id, status: 'active', limit: 1 })
       .catch(() => ({ total: 0 }))
-    const msg =
+    const message =
       links.total > 0
         ? t('rules.deleteConfirmWithLinks', { name: r.name, count: links.total })
         : t('rules.deleteConfirm', { name: r.name })
-    if (!confirm(msg)) return
+    if (!(await confirm({ title: t('rules.deleteTitle'), message, variant: 'danger' })))
+      return
     try {
       await api.deleteRule(r.id)
-      setOk(t('rules.deletedMsg', { name: r.name }))
+      toast.success(t('rules.deletedMsg', { name: r.name }))
       await load()
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
   }
 
@@ -160,16 +163,6 @@ export default function Rules() {
         </Button>
       </div>
 
-      {err && (
-        <div className="rounded-md border border-danger-line bg-danger-bg p-3 text-sm text-danger-fg">
-          {err}
-        </div>
-      )}
-      {ok && (
-        <div className="rounded-md border border-success-line bg-success-bg p-3 text-sm text-success-fg">
-          {ok}
-        </div>
-      )}
       {vocabWarnings.length > 0 && (
         <div className="space-y-1 rounded-md border border-warning-line bg-warning-bg p-3 text-xs text-warning-fg">
           {vocabWarnings.map((w, i) => (

@@ -4,9 +4,11 @@ import { Link } from 'react-router-dom'
 import LinksPanel from '../components/LinksPanel'
 import Card from '../components/ui/Card'
 import { api, fmtTime, type AppItem, type Health, type Me } from '../lib/api'
+import { useToast } from '../lib/useToast'
 
 export default function Dashboard() {
   const { t } = useTranslation()
+  const toast = useToast()
   const [health, setHealth] = useState<Health | null>(null)
   const [me, setMe] = useState<Me | null>(null)
   const [apps, setApps] = useState<AppItem[]>([])
@@ -15,7 +17,6 @@ export default function Dashboard() {
     stale_links: number
     orphaned_rules: string[]
   } | null>(null)
-  const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -30,9 +31,9 @@ export default function Dashboard() {
       setApps(a)
       setLinksCount(s)
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load()
@@ -45,12 +46,6 @@ export default function Dashboard() {
         <p className="text-sm text-fg-subtle">{t('dashboard.subtitle')}</p>
       </div>
 
-      {err && (
-        <div className="rounded-md border border-danger-line bg-danger-bg p-3 text-sm text-danger-fg">
-          {err}
-        </div>
-      )}
-
       {linksCount && linksCount.orphaned_rules.length > 0 && (
         <div className="rounded-md border border-warning-line bg-warning-bg p-3 text-sm text-warning-fg">
           <p className="font-medium">
@@ -61,9 +56,8 @@ export default function Dashboard() {
           </p>
           <p className="mt-1 text-warning-fg/70">
             <Trans i18nKey="dashboard.orphanedHint">
-              Edit the rules, or set{' '}
-              <code className="rounded bg-black/30 px-1">allowed_roots</code> to include
-              their destination in Settings.
+              Edit the rules, or add their destination to{' '}
+              <code className="rounded bg-black/30 px-1">allowed_roots</code> in Settings.
             </Trans>
           </p>
         </div>

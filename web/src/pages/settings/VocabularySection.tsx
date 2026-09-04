@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api, type AppItem } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Field from '../../components/ui/Field'
-import Alert from '../../components/ui/Alert'
+import { useToast } from '../../lib/useToast'
 import SubSection from '../../components/ui/SubSection'
 import Button from '../../components/ui/Button'
 
@@ -17,12 +17,11 @@ import Button from '../../components/ui/Button'
  */
 export default function VocabularySection() {
   const { t } = useTranslation()
+  const toast = useToast()
   const [apps, setApps] = useState<AppItem[]>([])
   const [apiKey, setApiKey] = useState('')
   const [apiKeySet, setApiKeySet] = useState(false)
   const [defaultKeyConfigured, setDefaultKeyConfigured] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [ok, setOk] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -33,67 +32,59 @@ export default function VocabularySection() {
       setApiKeySet(tmdb.api_key_set)
       setDefaultKeyConfigured(tmdb.default_key_configured)
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load()
   }, [load])
 
   async function saveKey() {
-    setErr(null)
-    setOk(null)
     try {
       await api.putTmdbSettings(apiKey)
-      setOk(t('settingsVocab.keySaved'))
+      toast.success(t('settingsVocab.keySaved'))
       await load()
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
   }
 
   async function refreshTmdb() {
-    setErr(null)
-    setOk(null)
     setBusy('tmdb')
     try {
       const r = await api.importTmdbVocabulary()
-      setOk(
+      toast.success(
         t('settingsVocab.tmdbRefreshed', {
           count: Object.values(r.imported).reduce((a, b) => a + b, 0),
         }),
       )
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     } finally {
       setBusy(null)
     }
   }
 
   async function refreshTrash(appType: 'radarr' | 'sonarr') {
-    setErr(null)
-    setOk(null)
     setBusy(`trash-${appType}`)
     try {
       const r = await api.importTrashVocabulary(appType)
-      setOk(t('settingsVocab.trashRefreshed', { count: r.imported, appType }))
+      toast.success(t('settingsVocab.trashRefreshed', { count: r.imported, appType }))
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     } finally {
       setBusy(null)
     }
   }
 
   async function syncApp(appId: number) {
-    setErr(null)
-    setOk(null)
     setBusy(`app-${appId}`)
     try {
       await api.syncAppVocabulary(appId)
-      setOk(t('settingsVocab.appSynced'))
+      toast.success(t('settingsVocab.appSynced'))
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     } finally {
       setBusy(null)
     }
@@ -105,9 +96,6 @@ export default function VocabularySection() {
         <h3 className="text-sm font-semibold text-fg">{t('settingsVocab.title')}</h3>
         <p className="text-xs text-fg-subtle">{t('settingsVocab.subtitle')}</p>
       </div>
-
-      <Alert variant="error">{err}</Alert>
-      <Alert variant="success">{ok}</Alert>
 
       <SubSection
         title={t('settingsVocab.tmdbTitle')}

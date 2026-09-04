@@ -6,7 +6,7 @@ import { TMDB_CERTIFICATION_COUNTRIES } from '../../lib/countries'
 import i18n from '../../i18n'
 import Toggle from '../../components/ui/Toggle'
 import Field from '../../components/ui/Field'
-import Alert from '../../components/ui/Alert'
+import { useToast } from '../../lib/useToast'
 import SubSection from '../../components/ui/SubSection'
 import Button from '../../components/ui/Button'
 
@@ -39,8 +39,7 @@ function timezoneOptions(current: string): string[] {
  */
 export default function GeneralSection() {
   const { t } = useTranslation()
-  const [err, setErr] = useState<string | null>(null)
-  const [ok, setOk] = useState<string | null>(null)
+  const toast = useToast()
 
   const [unlink, setUnlink] = useState(true)
   const [fsFallback, setFsFallback] = useState('skip')
@@ -81,9 +80,9 @@ export default function GeneralSection() {
       setLogLevel(logging.log_level)
       setLogSizeLimitMb(logging.log_size_limit_mb)
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load()
@@ -95,14 +94,12 @@ export default function GeneralSection() {
   }
 
   async function save() {
-    setErr(null)
-    setOk(null)
     const roots = rootsText
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
     if (roots.length === 0) {
-      setErr(t('settingsGeneral.rootsEmptyErr'))
+      toast.error(t('settingsGeneral.rootsEmptyErr'))
       return
     }
     try {
@@ -121,10 +118,10 @@ export default function GeneralSection() {
         }),
       ])
       setDisplayTimezone(timezone)
-      setOk(t('settingsGeneral.saved'))
+      toast.success(t('settingsGeneral.saved'))
       await load()
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
   }
 
@@ -134,9 +131,6 @@ export default function GeneralSection() {
         <h3 className="text-sm font-semibold text-fg">{t('settingsGeneral.title')}</h3>
         <p className="text-xs text-fg-subtle">{t('settingsGeneral.subtitle')}</p>
       </div>
-
-      <Alert variant="error">{err}</Alert>
-      <Alert variant="success">{ok}</Alert>
 
       <SubSection title={t('settingsGeneral.applicationSectionTitle')}>
         <Field label={t('settingsGeneral.appTitle')}>

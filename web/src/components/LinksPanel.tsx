@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type AppItem, type LinkItem } from '../lib/api'
 import Button from './ui/Button'
+import { useToast } from '../lib/useToast'
 
 /**
  * Links panel: browse, filter, remove, and repair the hardlinks ArrLink
@@ -11,14 +12,13 @@ const PAGE_SIZE = 100
 
 export default function LinksPanel() {
   const { t } = useTranslation()
+  const toast = useToast()
   const [links, setLinks] = useState<LinkItem[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [apps, setApps] = useState<AppItem[]>([])
   const [appId, setAppId] = useState('')
   const [status, setStatus] = useState('active')
-  const [err, setErr] = useState<string | null>(null)
-  const [repairMsg, setRepairMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -32,9 +32,9 @@ export default function LinksPanel() {
       setLinks(r.items)
       setTotal(r.total)
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [appId, status, offset])
+  }, [appId, status, offset, toast])
 
   useEffect(() => {
     api
@@ -53,13 +53,12 @@ export default function LinksPanel() {
 
   async function repair() {
     setBusy(true)
-    setRepairMsg(null)
     try {
       const r = await api.repairLinks()
-      setRepairMsg(t('linksTable.repaired', { fixed: r.fixed, failed: r.failed }))
+      toast.success(t('linksTable.repaired', { fixed: r.fixed, failed: r.failed }))
       await load()
     } catch (e) {
-      setRepairMsg(t('linksTable.repairFailed', { error: String(e) }))
+      toast.error(t('linksTable.repairFailed', { error: String(e) }))
     } finally {
       setBusy(false)
     }
@@ -70,7 +69,7 @@ export default function LinksPanel() {
       await api.deleteLink(id)
       await load()
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
   }
 
@@ -105,17 +104,6 @@ export default function LinksPanel() {
           {t('common.refresh')}
         </Button>
       </div>
-
-      {repairMsg && (
-        <div className="rounded-md border border-ring/40 bg-accent-bg p-2 text-sm text-accent">
-          {repairMsg}
-        </div>
-      )}
-      {err && (
-        <div className="rounded-md border border-danger-line bg-danger-bg p-2 text-sm text-danger-fg">
-          {err}
-        </div>
-      )}
 
       <div className="max-h-96 overflow-auto rounded-lg border border-line">
         <table className="w-full text-sm">

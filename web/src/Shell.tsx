@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 import { api, setDisplayTimezone, type Me } from './lib/api'
 import { useDocumentTitle } from './lib/useDocumentTitle'
+import { ConfirmProvider } from './lib/useConfirm'
+import { ToastProvider } from './lib/useToast'
 import ThemeToggle from './components/ui/ThemeToggle'
 
 // Links live on the Dashboard (not a standalone tab). Apps live under Settings → Services.
@@ -27,7 +29,6 @@ const nav = [
  * regardless of which nav surface (this sidebar, SettingsNav, the browser
  * back button) triggered it. See pages/Tags.tsx. */
 export default function Shell() {
-  const { t } = useTranslation()
   const [me, setMe] = useState<Me | null>(null)
 
   useEffect(() => {
@@ -42,6 +43,17 @@ export default function Shell() {
 
   useDocumentTitle(me?.app_title)
 
+  return (
+    <ToastProvider>
+      <ConfirmProvider>
+        <ShellLayout me={me} />
+      </ConfirmProvider>
+    </ToastProvider>
+  )
+}
+
+function ShellLayout({ me }: { me: Me | null }) {
+  const { t } = useTranslation()
   return (
     <div className="flex min-h-screen">
       <a

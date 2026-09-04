@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Combobox,
   ComboboxButton,
@@ -24,7 +25,7 @@ export default function TagSelect({
   onChange,
   multiple = true,
   creatable = false,
-  searchPlaceholder = 'Search…',
+  searchPlaceholder,
 }: {
   placeholder: string
   options: string[]
@@ -34,6 +35,7 @@ export default function TagSelect({
   creatable?: boolean
   searchPlaceholder?: string
 }) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
 
   const q = query.trim().toLowerCase()
@@ -78,14 +80,16 @@ export default function TagSelect({
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={searchPlaceholder}
+              placeholder={searchPlaceholder ?? t('tagSelect.search')}
               className="w-full rounded border border-line-strong bg-sunken px-2 py-1 text-sm text-fg outline-none focus:border-ring"
             />
           </div>
         )}
         <div className="max-h-56 overflow-y-auto p-1">
           {filtered.length === 0 && !canCreate && (
-            <p className="px-2 py-1.5 text-xs text-fg-subtle">No matches.</p>
+            <p className="px-2 py-1.5 text-xs text-fg-subtle">
+              {t('tagSelect.noMatches')}
+            </p>
           )}
           {filtered.map((o) => (
             <ComboboxOption
@@ -107,7 +111,7 @@ export default function TagSelect({
               className="flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-accent data-focus:bg-accent-bg"
             >
               <Plus className="size-3.5" />
-              Add “{query.trim()}”
+              {t('tagSelect.add', { value: query.trim() })}
             </ComboboxOption>
           )}
         </div>

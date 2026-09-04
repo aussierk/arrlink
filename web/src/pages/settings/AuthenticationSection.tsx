@@ -3,7 +3,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { api } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Field from '../../components/ui/Field'
-import Alert from '../../components/ui/Alert'
+import { useToast } from '../../lib/useToast'
 import SubSection from '../../components/ui/SubSection'
 import Toggle from '../../components/ui/Toggle'
 import Button from '../../components/ui/Button'
@@ -27,8 +27,7 @@ function parseList(text: string): string[] {
  */
 export default function AuthenticationSection() {
   const { t } = useTranslation()
-  const [err, setErr] = useState<string | null>(null)
-  const [ok, setOk] = useState<string | null>(null)
+  const toast = useToast()
 
   const [passwordEnabled, setPasswordEnabled] = useState(false)
   const [uiUsername, setUiUsername] = useState('admin')
@@ -60,17 +59,15 @@ export default function AuthenticationSection() {
       setGroupsText(((s['oidc_allowed_groups'] as string[] | undefined) ?? []).join(', '))
       setEmailsText(((s['oidc_allowed_emails'] as string[] | undefined) ?? []).join(', '))
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load()
   }, [load])
 
   async function save() {
-    setErr(null)
-    setOk(null)
     try {
       await api.updateAuthSettings({
         password_enabled: passwordEnabled,
@@ -84,10 +81,10 @@ export default function AuthenticationSection() {
       })
       await api.setSetting('oidc_allowed_groups', parseList(groupsText))
       await api.setSetting('oidc_allowed_emails', parseList(emailsText))
-      setOk(t('settingsAuth.saved'))
+      toast.success(t('settingsAuth.saved'))
       await load()
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
   }
 
@@ -97,9 +94,6 @@ export default function AuthenticationSection() {
         <h3 className="text-sm font-semibold text-fg">{t('settingsAuth.title')}</h3>
         <p className="text-xs text-fg-subtle">{t('settingsAuth.subtitle')}</p>
       </div>
-
-      <Alert variant="error">{err}</Alert>
-      <Alert variant="success">{ok}</Alert>
 
       <SubSection title={t('settingsAuth.passwordTitle')}>
         <Field label={t('settingsAuth.enablePassword')}>

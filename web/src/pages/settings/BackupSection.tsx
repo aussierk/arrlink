@@ -5,7 +5,7 @@ import { api, fmtTime, type BackupInfo } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Toggle from '../../components/ui/Toggle'
 import Field from '../../components/ui/Field'
-import Alert from '../../components/ui/Alert'
+import { useToast } from '../../lib/useToast'
 import SubSection from '../../components/ui/SubSection'
 import Button from '../../components/ui/Button'
 
@@ -31,13 +31,12 @@ function fmtSize(bytes: number): string {
  */
 export default function BackupSection() {
   const { t } = useTranslation()
+  const toast = useToast()
   const [backups, setBackups] = useState<BackupInfo[]>([])
   const [enabled, setEnabled] = useState(true)
   const [retentionDays, setRetentionDays] = useState(7)
   const [intervalHours, setIntervalHours] = useState(24)
   const [eventsRetention, setEventsRetention] = useState(DEFAULT_EVENTS_RETENTION)
-  const [err, setErr] = useState<string | null>(null)
-  const [ok, setOk] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -56,36 +55,34 @@ export default function BackupSection() {
         (settings['events_retention'] as number | undefined) ?? DEFAULT_EVENTS_RETENTION,
       )
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load()
   }, [load])
 
   async function runNow() {
-    setErr(null)
-    setOk(null)
     setRunning(true)
     try {
       const r = await api.runBackup()
       if (r.ok) {
-        setOk(t('settingsBackup.runOk', { name: r.path.split('/').pop() ?? r.path }))
+        toast.success(
+          t('settingsBackup.runOk', { name: r.path.split('/').pop() ?? r.path }),
+        )
         await load()
       } else {
-        setErr(t('settingsBackup.runFailed', { error: r.error }))
+        toast.error(t('settingsBackup.runFailed', { error: r.error }))
       }
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     } finally {
       setRunning(false)
     }
   }
 
   async function saveSettings() {
-    setErr(null)
-    setOk(null)
     setSaving(true)
     try {
       await api.putBackupSettings({
@@ -94,10 +91,10 @@ export default function BackupSection() {
         interval_hours: intervalHours,
       })
       await api.setSetting('events_retention', eventsRetention)
-      setOk(t('settingsBackup.settingsSaved'))
+      toast.success(t('settingsBackup.settingsSaved'))
       await load()
     } catch (e) {
-      setErr(String(e))
+      toast.error(String(e))
     } finally {
       setSaving(false)
     }
@@ -109,9 +106,6 @@ export default function BackupSection() {
         <h3 className="text-sm font-semibold text-fg">{t('settingsBackup.title')}</h3>
         <p className="text-xs text-fg-subtle">{t('settingsBackup.subtitle')}</p>
       </div>
-
-      <Alert variant="error">{err}</Alert>
-      <Alert variant="success">{ok}</Alert>
 
       <SubSection
         title={t('settingsBackup.listTitle')}
