@@ -121,7 +121,7 @@ export default function BackupSection() {
         ) : (
           <div className="overflow-hidden rounded-md border border-line">
             <table className="w-full text-sm">
-              <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
+              <thead className="bg-surface text-left text-xs font-semibold text-fg-muted">
                 <tr>
                   <th scope="col" className="px-3 py-1.5">
                     {t('settingsBackup.colName')}

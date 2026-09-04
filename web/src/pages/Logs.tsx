@@ -49,7 +49,7 @@ export default function Logs() {
         {/* No min-width: only 3 columns, so the message can wrap on a phone
             instead of forcing a horizontal scroll that hides it. */}
         <table className="w-full text-sm">
-          <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
+          <thead className="bg-surface text-left text-xs font-semibold text-fg-muted">
             <tr>
               <th scope="col" className="px-3 py-2">
                 {t('logs.colTime')}

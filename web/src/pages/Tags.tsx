@@ -252,7 +252,7 @@ export default function Tags() {
 
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-2xl text-sm">
-          <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
+          <thead className="bg-surface text-left text-xs font-semibold text-fg-muted">
             <tr>
               <SortHeader
                 label={t('tags.appTags.colTag')}

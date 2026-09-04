@@ -29,7 +29,7 @@ export default function SortHeader({
       <button
         type="button"
         onClick={() => onSort(columnKey)}
-        className="inline-flex items-center gap-1 rounded uppercase tracking-wide hover:text-fg focus-visible:focus-ring"
+        className="inline-flex items-center gap-1 rounded hover:text-fg focus-visible:focus-ring"
       >
         {label}
         <Icon className={`size-3 ${active ? 'text-accent' : 'text-fg-faint'}`} />

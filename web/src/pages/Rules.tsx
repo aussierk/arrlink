@@ -506,7 +506,7 @@ export default function Rules() {
 
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-3xl text-sm">
-          <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
+          <thead className="bg-surface text-left text-xs font-semibold text-fg-muted">
             <tr>
               <th scope="col" className="w-8 px-3 py-2">
                 <input
@@ -531,20 +531,20 @@ export default function Rules() {
                 dir={sortDir}
                 onSort={toggleSort}
               />
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colCategory')}
+              <th scope="col" className="px-3 py-2 text-center">
+                {t('rules.colEnabled')}
               </th>
               <th scope="col" className="px-3 py-2">
                 {t('rules.colType')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colCategory')}
               </th>
               <th scope="col" className="px-3 py-2">
                 {t('rules.colValue')}
               </th>
               <th scope="col" className="px-3 py-2">
                 {t('rules.colDirTemplate')}
-              </th>
-              <th scope="col" className="px-3 py-2 text-center">
-                {t('rules.colEnabled')}
               </th>
             </tr>
           </thead>
@@ -593,6 +593,25 @@ export default function Rules() {
                   <td className="px-3 py-2 align-top text-fg-muted">
                     {serviceLabel(r.app_name, r.app_type_scope)}
                   </td>
+                  <td className="px-3 py-2 align-top text-center">
+                    {r.enabled ? (
+                      <Check
+                        className="mx-auto size-4 text-success-fg"
+                        aria-label={t('rules.colEnabled')}
+                      />
+                    ) : (
+                      <span className="text-fg-faint" aria-hidden="true">
+                        —
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      {rows.map((cr) => (
+                        <div key={cr.key}>{cr.type}</div>
+                      ))}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 align-top text-xs">
                     <div className="flex flex-col gap-0.5">
                       {rows.map((cr) => (
@@ -606,31 +625,12 @@ export default function Rules() {
                   <td className="px-3 py-2 align-top text-xs">
                     <div className="flex flex-col gap-0.5">
                       {rows.map((cr) => (
-                        <div key={cr.key}>{cr.type}</div>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      {rows.map((cr) => (
                         <div key={cr.key}>{cr.value}</div>
                       ))}
                     </div>
                   </td>
                   <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-soft">
                     {r.dir_template}
-                  </td>
-                  <td className="px-3 py-2 align-top text-center">
-                    {r.enabled ? (
-                      <Check
-                        className="mx-auto size-4 text-success-fg"
-                        aria-label={t('rules.colEnabled')}
-                      />
-                    ) : (
-                      <span className="text-fg-faint" aria-hidden="true">
-                        —
-                      </span>
-                    )}
                   </td>
                 </tr>
               )
