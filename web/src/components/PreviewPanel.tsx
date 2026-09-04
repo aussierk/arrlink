@@ -99,7 +99,7 @@ export default function PreviewPanel({
         )}
       </div>
       {err && <p className="text-xs text-danger-fg">{err}</p>}
-      {data && data.sample.length > 0 && (
+      {data?.sample && data.sample.length > 0 && (
         <div className="overflow-x-auto rounded-md border border-line">
           <table className="w-full text-xs">
             <thead className="bg-surface text-left text-fg-subtle">
@@ -127,7 +127,7 @@ export default function PreviewPanel({
           </table>
         </div>
       )}
-      {data && data.errors.length > 0 && (
+      {data?.errors && data.errors.length > 0 && (
         <div className="rounded-md border border-warning-line bg-warning-bg p-2">
           {data.errors.map((e, i) => (
             <p key={i} className="text-xs text-warning-fg">
@@ -140,7 +140,7 @@ export default function PreviewPanel({
           ))}
         </div>
       )}
-      {data && data.total === 0 && data.errors.length === 0 && (
+      {data && data.total === 0 && !data.errors?.length && (
         <p className="text-xs text-fg-faint">{t('previewPanel.noMatches')}</p>
       )}
     </div>

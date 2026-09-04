@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Eye, EyeOff, Pencil, Trash2 } from 'lucide-react'
 import PreviewPanel from '../components/PreviewPanel'
 import RuleModal from '../components/RuleModal'
 import Button from '../components/ui/Button'
@@ -11,10 +12,26 @@ import { api, type AppItem, type ConditionItem, type RuleItem } from '../lib/api
 import { REGEX_PICKS } from '../lib/tagOptions'
 import i18n from '../i18n'
 
+const filterCls =
+  'w-56 rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg outline-none focus:border-ring focus-visible:focus-ring'
+
 const RULE_SORT: Record<string, (r: RuleItem) => string | number> = {
   name: (r) => r.name.toLowerCase(),
   app: (r) => r.app_name ?? r.app_type_scope ?? '',
   priority: (r) => r.priority,
+}
+
+/** Lowercased text blob for the filter box to match against. */
+function ruleHaystack(r: RuleItem): string {
+  return [
+    r.name,
+    r.app_name ?? r.app_type_scope ?? '',
+    r.dir_template,
+    r.filename_template ?? '',
+    ...r.conditions.flatMap((c) => [c.category, c.match_value]),
+  ]
+    .join(' ')
+    .toLowerCase()
 }
 
 const CATEGORY_LABEL_KEY: Record<string, string> = {
@@ -38,22 +55,13 @@ function conditionValue(c: ConditionItem) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-    const shown = tags.slice(0, 3)
-    const more = tags.length - shown.length
+    const shown = tags.slice(0, 3).join(', ')
+    const more = tags.length - Math.min(tags.length, 3)
     return (
-      <span className="flex flex-wrap items-center gap-1">
-        {shown.map((tag) => (
-          <span
-            key={tag}
-            className="rounded-full border border-line-strong bg-surface px-1.5 py-0.5 text-xs text-fg-soft"
-          >
-            {tag}
-          </span>
-        ))}
+      <span className="text-fg-soft">
+        {shown}
         {more > 0 && (
-          <span className="text-xs text-fg-subtle">
-            {t('rules.matchMore', { count: more })}
-          </span>
+          <span className="text-fg-subtle"> {t('rules.matchMore', { count: more })}</span>
         )}
       </span>
     )
@@ -61,31 +69,31 @@ function conditionValue(c: ConditionItem) {
   if (c.match_type === 'regex') {
     const pick = REGEX_PICKS.find((p) => p.pattern === c.match_value)
     return (
-      <span className={pick ? '' : 'break-all font-mono text-xs'}>
+      <span className={pick ? 'text-fg-soft' : 'break-all font-mono text-fg-soft'}>
         {pick ? pick.label : c.match_value}
       </span>
     )
   }
-  return <span>{c.match_value}</span>
+  return <span className="text-fg-soft">{c.match_value}</span>
 }
 
-/** Render a rule's whole AND/OR condition chain compactly for the table. */
+/** One condition per line: [JOIN] Category  values. Kept plain-text (no pills)
+ * so a dense table row stays one predictable height per condition. */
 function matchCell(r: RuleItem) {
   const t = i18n.t
   return (
-    <span className="flex flex-wrap items-center gap-1 text-xs">
+    <span className="flex flex-col gap-0.5 text-xs">
       {r.conditions.map((c, i) => (
-        <span key={i} className="flex items-center gap-1">
+        <span key={i} className="flex items-baseline gap-1.5">
           {i > 0 && (
-            <span className="rounded bg-fill px-1 text-xs font-semibold text-accent">
+            <span className="rounded bg-fill px-1 text-[10px] font-semibold text-accent">
               {c.join === 'AND' ? t('conditions.joinAnd') : t('conditions.joinOr')}
             </span>
           )}
-          <span className="text-fg-subtle">
+          <span className="whitespace-nowrap text-fg-subtle">
             {CATEGORY_LABEL_KEY[c.category]
               ? t(CATEGORY_LABEL_KEY[c.category])
-              : c.category}{' '}
-            ·
+              : c.category}
           </span>
           {conditionValue(c)}
         </span>
@@ -109,12 +117,17 @@ export default function Rules() {
   const [editing, setEditing] = useState<RuleItem | null>(null)
   const [previewFor, setPreviewFor] = useState<RuleItem | null>(null)
   const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
+  const [filter, setFilter] = useState('')
   const {
     sorted: sortedRules,
     sortKey,
     sortDir,
     toggleSort,
   } = useSort(rules, RULE_SORT, 'priority')
+  const q = filter.trim().toLowerCase()
+  const visibleRules = q
+    ? sortedRules.filter((r) => ruleHaystack(r).includes(q))
+    : sortedRules
 
   const previewAppId = (r: { app_scope: number | null; app_type_scope: string | null }) =>
     r.app_scope ??
@@ -177,6 +190,21 @@ export default function Rules() {
         </Button>
       </div>
 
+      {rules.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            className={filterCls}
+            placeholder={t('rules.filterPlaceholder')}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          <span className="text-xs text-fg-subtle">
+            {t('rules.countShown', { shown: visibleRules.length, total: rules.length })}
+          </span>
+        </div>
+      )}
+
       {vocabWarnings.length > 0 && (
         <div className="space-y-1 rounded-md border border-warning-line bg-warning-bg p-3 text-xs text-warning-fg">
           {vocabWarnings.map((w, i) => (
@@ -186,7 +214,7 @@ export default function Rules() {
       )}
 
       <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full min-w-4xl text-sm">
+        <table className="w-full min-w-3xl text-sm">
           <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
               <SortHeader
@@ -219,21 +247,25 @@ export default function Rules() {
                 dir={sortDir}
                 onSort={toggleSort}
               />
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colPreview')}
-              </th>
               <th scope="col" className="px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {sortedRules.length === 0 && (
+            {rules.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
+                <td colSpan={7} className="px-3 py-6 text-center text-fg-subtle">
                   {t('rules.empty')}
                 </td>
               </tr>
             )}
-            {sortedRules.map((r) => (
+            {rules.length > 0 && visibleRules.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-center text-fg-subtle">
+                  {t('rules.noMatch', { query: filter.trim() })}
+                </td>
+              </tr>
+            )}
+            {visibleRules.map((r) => (
               <tr key={r.id} className="bg-sunken/40">
                 <td className="px-3 py-2 font-medium">
                   {r.name}
@@ -249,44 +281,63 @@ export default function Rules() {
                         ? t('ruleModal.allSonarr')
                         : t('rules.any'))}
                 </td>
-                <td className="px-3 py-2 text-xs">{matchCell(r)}</td>
-                <td className="px-3 py-2 font-mono text-xs text-fg-soft">
+                <td className="px-3 py-2 align-top text-xs">{matchCell(r)}</td>
+                <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-soft">
                   {r.dir_template}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-fg-subtle">
+                <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-subtle">
                   {r.filename_template ?? t('rules.sourceFilename')}
                 </td>
-                <td className="px-3 py-2 text-xs text-fg-muted">
+                <td className="px-3 py-2 align-top text-xs whitespace-nowrap text-fg-muted">
                   {t('rules.priorityLabel', { priority: r.priority })}
                   {r.unlink_on_mismatch ? t('rules.unlinkSuffix') : ''}
                 </td>
-                <td className="px-3 py-2">
-                  <button
-                    onClick={() => setPreviewFor(previewFor?.id === r.id ? null : r)}
-                    className="rounded px-2 py-1 text-xs text-accent hover:bg-accent-bg"
-                  >
-                    {previewFor?.id === r.id ? t('rules.hide') : t('rules.preview')}
-                  </button>
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
-                      {t('rules.edit')}
-                    </Button>
-                    <Button
-                      variant="danger-ghost"
-                      size="sm"
-                      onClick={() => void remove(r)}
+                <td className="px-3 py-2 align-top">
+                  <div className="flex items-center justify-end gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewFor(previewFor?.id === r.id ? null : r)}
+                      aria-label={t('rules.previewRule', { name: r.name })}
+                      title={
+                        previewFor?.id === r.id ? t('rules.hide') : t('rules.preview')
+                      }
+                      className={`rounded p-1.5 transition-colors focus-visible:focus-ring ${
+                        previewFor?.id === r.id
+                          ? 'bg-accent-bg text-accent'
+                          : 'text-fg-subtle hover:bg-fill hover:text-fg'
+                      }`}
                     >
-                      {t('rules.delete')}
-                    </Button>
+                      {previewFor?.id === r.id ? (
+                        <EyeOff className="size-4" />
+                      ) : (
+                        <Eye className="size-4" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(r)}
+                      aria-label={t('rules.editRule', { name: r.name })}
+                      title={t('rules.edit')}
+                      className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-fill hover:text-fg focus-visible:focus-ring"
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void remove(r)}
+                      aria-label={t('rules.deleteRule', { name: r.name })}
+                      title={t('rules.delete')}
+                      className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger-fg focus-visible:focus-ring"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
                   </div>
                 </td>
               </tr>
             ))}
             {previewFor && (
               <tr className="bg-surface/40">
-                <td colSpan={8} className="px-3 py-3">
+                <td colSpan={7} className="px-3 py-3">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                     {t('rules.previewHeading', { name: previewFor.name })}
                   </h4>
