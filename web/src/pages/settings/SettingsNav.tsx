@@ -19,7 +19,7 @@ const items = [
 export default function SettingsNav() {
   const { t } = useTranslation()
   return (
-    <nav className="flex flex-wrap gap-1 border-b border-zinc-800">
+    <nav className="flex flex-wrap gap-1 border-b border-line">
       {items.map((i) => (
         <NavLink
           key={i.to}
@@ -27,8 +27,8 @@ export default function SettingsNav() {
           className={({ isActive }) =>
             `flex items-center gap-2 border-b-2 px-3 py-2 text-sm transition-colors ${
               isActive
-                ? 'border-indigo-500 text-indigo-300'
-                : 'border-transparent text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                ? 'border-ring text-accent'
+                : 'border-transparent text-fg-muted hover:border-line-strong hover:text-fg'
             }`
           }
         >

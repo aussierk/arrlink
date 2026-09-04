@@ -5,6 +5,8 @@ import { inputCls } from '../../lib/ui'
 import Field from '../../components/ui/Field'
 import Alert from '../../components/ui/Alert'
 import SubSection from '../../components/ui/SubSection'
+import Toggle from '../../components/ui/Toggle'
+import Button from '../../components/ui/Button'
 
 function parseList(text: string): string[] {
   return text
@@ -92,8 +94,8 @@ export default function AuthenticationSection() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-zinc-200">{t('settingsAuth.title')}</h3>
-        <p className="text-xs text-zinc-500">{t('settingsAuth.subtitle')}</p>
+        <h3 className="text-sm font-semibold text-fg">{t('settingsAuth.title')}</h3>
+        <p className="text-xs text-fg-subtle">{t('settingsAuth.subtitle')}</p>
       </div>
 
       <Alert variant="error">{err}</Alert>
@@ -101,11 +103,7 @@ export default function AuthenticationSection() {
 
       <SubSection title={t('settingsAuth.passwordTitle')}>
         <Field label={t('settingsAuth.enablePassword')}>
-          <input
-            type="checkbox"
-            checked={passwordEnabled}
-            onChange={(e) => setPasswordEnabled(e.target.checked)}
-          />
+          <Toggle checked={passwordEnabled} onChange={setPasswordEnabled} />
         </Field>
         <Field label={t('settingsAuth.username')}>
           <input
@@ -121,7 +119,7 @@ export default function AuthenticationSection() {
             <>
               {t('settingsAuth.uiPassword')}
               {uiPasswordSet && (
-                <span className="text-zinc-600">{t('settingsAuth.setBlankToKeep')}</span>
+                <span className="text-fg-faint">{t('settingsAuth.setBlankToKeep')}</span>
               )}
             </>
           }
@@ -143,27 +141,19 @@ export default function AuthenticationSection() {
 
       <SubSection title={t('settingsAuth.oidcTitle')}>
         <Field label={t('settingsAuth.enableOidc')}>
-          <input
-            type="checkbox"
-            checked={oidcEnabled}
-            onChange={(e) => setOidcEnabled(e.target.checked)}
-          />
+          <Toggle checked={oidcEnabled} onChange={setOidcEnabled} />
         </Field>
         <Field
           label={
             <>
               {t('settingsAuth.autoLoginLabel')}
-              <span className="mt-0.5 block text-xs text-zinc-600">
+              <span className="mt-0.5 block text-xs text-fg-faint">
                 {t('settingsAuth.autoLoginHint')}
               </span>
             </>
           }
         >
-          <input
-            type="checkbox"
-            checked={autoLogin}
-            onChange={(e) => setAutoLogin(e.target.checked)}
-          />
+          <Toggle checked={autoLogin} onChange={setAutoLogin} />
         </Field>
         <Field label={t('settingsAuth.oidcIssuer')}>
           <input
@@ -186,7 +176,7 @@ export default function AuthenticationSection() {
             <>
               {t('settingsAuth.clientSecret')}
               {oidcClientSecretSet && (
-                <span className="text-zinc-600">{t('settingsAuth.setBlankToKeep')}</span>
+                <span className="text-fg-faint">{t('settingsAuth.setBlankToKeep')}</span>
               )}
             </>
           }
@@ -204,10 +194,10 @@ export default function AuthenticationSection() {
             autoComplete="new-password"
           />
         </Field>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-fg-subtle">
           <Trans i18nKey="settingsAuth.allowListHint">
             Allowed for sign-in: any user whose email is in the email list{' '}
-            <span className="text-zinc-400">or</span> whose group is in the group list.
+            <span className="text-fg-muted">or</span> whose group is in the group list.
             Both empty = anyone who can sign in with the provider may use ArrLink.
           </Trans>
         </p>
@@ -230,12 +220,7 @@ export default function AuthenticationSection() {
       </SubSection>
 
       <div className="flex justify-end">
-        <button
-          onClick={() => void save()}
-          className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          {t('settingsAuth.save')}
-        </button>
+        <Button onClick={() => void save()}>{t('settingsAuth.save')}</Button>
       </div>
     </div>
   )

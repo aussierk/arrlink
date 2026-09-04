@@ -24,7 +24,7 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
 
   if (failed) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-8 text-sm text-red-300">
+      <div className="flex min-h-screen items-center justify-center p-8 text-sm text-danger-fg">
         {t('loginPage.apiUnreachable')}
       </div>
     )
@@ -32,7 +32,7 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
 
   if (!me) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-zinc-500">
+      <div className="flex min-h-screen items-center justify-center text-sm text-fg-subtle">
         {t('loginPage.checking')}
       </div>
     )

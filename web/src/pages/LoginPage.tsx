@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, readAuthErrorCookie, setDisplayTimezone, type Me } from '../lib/api'
 import { inputCls } from '../lib/ui'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
+import Button from '../components/ui/Button'
 
 /** Only accept a same-origin relative path — mirrors the backend's own
  * open-redirect guard on the OIDC callback's next_path. A prefix check
@@ -111,7 +112,7 @@ export default function LoginPage() {
 
   if (apiError) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-8 text-sm text-red-300">
+      <div className="flex min-h-screen items-center justify-center p-8 text-sm text-danger-fg">
         {t('loginPage.apiUnreachable')}
       </div>
     )
@@ -119,7 +120,7 @@ export default function LoginPage() {
 
   if (!me || me.authenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-zinc-500">
+      <div className="flex min-h-screen items-center justify-center text-sm text-fg-subtle">
         {t('loginPage.checking')}
       </div>
     )
@@ -127,7 +128,7 @@ export default function LoginPage() {
 
   if (autoRedirect) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-zinc-500">
+      <div className="flex min-h-screen items-center justify-center text-sm text-fg-subtle">
         {t('loginPage.redirecting')}
       </div>
     )
@@ -137,39 +138,39 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-8">
       <div className="w-full max-w-sm space-y-4">
         <div className="text-center">
-          <h1 className="text-lg font-semibold text-zinc-100">{me.app_title}</h1>
-          <p className="text-sm text-zinc-500">{t('loginPage.title')}</p>
+          <h1 className="text-lg font-semibold text-fg">{me.app_title}</h1>
+          <p className="text-sm text-fg-subtle">{t('loginPage.title')}</p>
         </div>
 
         {authError && (
-          <div className="rounded-md border border-red-900 bg-red-950/40 p-2 text-center text-sm text-red-300">
+          <div className="rounded-md border border-danger-line bg-danger-bg p-2 text-center text-sm text-danger-fg">
             {authError}
           </div>
         )}
 
         {me.oidc_enabled && (
-          <button
+          <Button
+            className="w-full py-2"
             onClick={() =>
               window.location.assign(`/api/auth/login?next=${encodeURIComponent(next)}`)
             }
-            className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
           >
             {t('loginPage.ssoButton')}
-          </button>
+          </Button>
         )}
 
         {me.oidc_enabled && me.password_enabled && (
-          <div className="flex items-center gap-3 text-xs text-zinc-600">
-            <div className="h-px flex-1 bg-zinc-800" />
+          <div className="flex items-center gap-3 text-xs text-fg-faint">
+            <div className="h-px flex-1 bg-fill" />
             {t('loginPage.orDivider')}
-            <div className="h-px flex-1 bg-zinc-800" />
+            <div className="h-px flex-1 bg-fill" />
           </div>
         )}
 
         {me.password_enabled && (
           <form onSubmit={(e) => void submitPassword(e)} className="space-y-2">
             <label className="block text-sm">
-              <span className="mb-1 block text-zinc-400">
+              <span className="mb-1 block text-fg-muted">
                 {t('loginPage.usernameLabel')}
               </span>
               <input
@@ -184,7 +185,7 @@ export default function LoginPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-zinc-400">
+              <span className="mb-1 block text-fg-muted">
                 {t('loginPage.passwordLabel')}
               </span>
               <input
@@ -196,14 +197,15 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
-            {pwError && <p className="text-sm text-red-400">{pwError}</p>}
-            <button
+            {pwError && <p className="text-sm text-danger-fg">{pwError}</p>}
+            <Button
               type="submit"
-              disabled={submitting}
-              className="w-full rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+              variant="secondary"
+              className="w-full py-2"
+              loading={submitting}
             >
               {t('loginPage.passwordSubmit')}
-            </button>
+            </Button>
           </form>
         )}
       </div>

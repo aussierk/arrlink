@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, fmtTime, type LogEntry } from '../lib/api'
+import Button from '../components/ui/Button'
 
 export default function Logs() {
   const { t } = useTranslation()
@@ -44,10 +45,10 @@ export default function Logs() {
       <div className="flex items-end gap-3">
         <div>
           <h2 className="text-xl font-semibold">{t('logs.title')}</h2>
-          <p className="text-sm text-zinc-500">{t('logs.subtitle')}</p>
+          <p className="text-sm text-fg-subtle">{t('logs.subtitle')}</p>
         </div>
         <select
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200"
+          className="rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg"
           value={level}
           onChange={(e) => setLevel(e.target.value)}
         >
@@ -56,13 +57,10 @@ export default function Logs() {
           <option value="warn">{t('logs.warn')}</option>
           <option value="info">{t('logs.info')}</option>
         </select>
-        <button
-          onClick={() => void load()}
-          className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900"
-        >
+        <Button variant="secondary" onClick={() => void load()}>
           {t('common.refresh')}
-        </button>
-        <label className="flex items-center gap-2 text-sm text-zinc-300">
+        </Button>
+        <label className="flex items-center gap-2 text-sm text-fg-soft">
           <input
             type="checkbox"
             checked={live}
@@ -73,47 +71,53 @@ export default function Logs() {
       </div>
 
       {err && (
-        <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <div className="rounded-md border border-danger-line bg-danger-bg p-3 text-sm text-danger-fg">
           {err}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-zinc-800">
+      <div className="overflow-hidden rounded-lg border border-line">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
+          <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
-              <th className="px-3 py-2">{t('logs.colTime')}</th>
-              <th className="px-3 py-2">{t('logs.colLevel')}</th>
-              <th className="px-3 py-2">{t('logs.colMessage')}</th>
+              <th scope="col" className="px-3 py-2">
+                {t('logs.colTime')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('logs.colLevel')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('logs.colMessage')}
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800">
+          <tbody className="divide-y divide-line">
             {logs.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={3} className="px-3 py-6 text-center text-fg-subtle">
                   {t('logs.empty')}
                 </td>
               </tr>
             )}
             {logs.map((l) => (
-              <tr key={l.id} className="bg-zinc-950/40">
-                <td className="whitespace-nowrap px-3 py-2 text-zinc-400">
+              <tr key={l.id} className="bg-sunken/40">
+                <td className="whitespace-nowrap px-3 py-2 text-fg-muted">
                   {fmtTime(l.ts)}
                 </td>
                 <td className="px-3 py-2">
                   <span
                     className={
                       l.level === 'error'
-                        ? 'text-red-400'
+                        ? 'text-danger-fg'
                         : l.level === 'warn'
-                          ? 'text-amber-400'
-                          : 'text-zinc-400'
+                          ? 'text-warning-fg'
+                          : 'text-fg-muted'
                     }
                   >
                     {l.level}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-zinc-200">{l.message}</td>
+                <td className="px-3 py-2 text-fg">{l.message}</td>
               </tr>
             ))}
           </tbody>

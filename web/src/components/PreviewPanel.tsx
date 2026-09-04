@@ -53,7 +53,7 @@ export default function PreviewPanel({
   }, [])
 
   if (appId === null) {
-    return <p className="text-xs text-zinc-600">{t('previewPanel.pickApp')}</p>
+    return <p className="text-xs text-fg-faint">{t('previewPanel.pickApp')}</p>
   }
 
   return (
@@ -62,7 +62,7 @@ export default function PreviewPanel({
         <button
           onClick={() => void run()}
           disabled={busy}
-          className="rounded-md border border-indigo-500/50 px-3 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40 disabled:opacity-50"
+          className="rounded-md border border-ring/50 px-3 py-1 text-xs text-accent hover:bg-accent-bg disabled:opacity-50"
         >
           {busy
             ? t('previewPanel.previewing')
@@ -73,12 +73,12 @@ export default function PreviewPanel({
         <button
           onClick={() => void run(true)}
           disabled={busy}
-          className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-900 disabled:opacity-50"
+          className="rounded-md border border-line-strong px-3 py-1 text-xs text-fg-soft hover:bg-surface disabled:opacity-50"
         >
           {busy ? t('previewPanel.refreshing') : t('previewPanel.refreshFromApp')}
         </button>
         {data && (
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-fg-subtle">
             {t('previewPanel.filesWouldLink', {
               count: data.total,
               time: new Date(stamp).toLocaleTimeString(undefined, {
@@ -98,23 +98,29 @@ export default function PreviewPanel({
           </span>
         )}
       </div>
-      {err && <p className="text-xs text-red-400">{err}</p>}
+      {err && <p className="text-xs text-danger-fg">{err}</p>}
       {data && data.sample.length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-zinc-800">
+        <div className="overflow-x-auto rounded-md border border-line">
           <table className="w-full text-xs">
-            <thead className="bg-zinc-900 text-left text-zinc-500">
+            <thead className="bg-surface text-left text-fg-subtle">
               <tr>
-                <th className="px-2 py-1">{t('previewPanel.item')}</th>
-                <th className="px-2 py-1">{t('previewPanel.source')}</th>
-                <th className="px-2 py-1">{t('previewPanel.wouldLinkTo')}</th>
+                <th scope="col" className="px-2 py-1">
+                  {t('previewPanel.item')}
+                </th>
+                <th scope="col" className="px-2 py-1">
+                  {t('previewPanel.source')}
+                </th>
+                <th scope="col" className="px-2 py-1">
+                  {t('previewPanel.wouldLinkTo')}
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800/60">
+            <tbody className="divide-y divide-line/60">
               {data.sample.map((s, i) => (
                 <tr key={i}>
-                  <td className="px-2 py-1 text-zinc-300">{s.item_title}</td>
-                  <td className="px-2 py-1 font-mono text-zinc-500">{s.src_path}</td>
-                  <td className="px-2 py-1 font-mono text-emerald-300">{s.dst_path}</td>
+                  <td className="px-2 py-1 text-fg-soft">{s.item_title}</td>
+                  <td className="px-2 py-1 font-mono text-fg-subtle">{s.src_path}</td>
+                  <td className="px-2 py-1 font-mono text-success-fg">{s.dst_path}</td>
                 </tr>
               ))}
             </tbody>
@@ -122,9 +128,9 @@ export default function PreviewPanel({
         </div>
       )}
       {data && data.errors.length > 0 && (
-        <div className="rounded-md border border-amber-900/60 bg-amber-950/20 p-2">
+        <div className="rounded-md border border-warning-line bg-warning-bg p-2">
           {data.errors.map((e, i) => (
-            <p key={i} className="text-xs text-amber-300">
+            <p key={i} className="text-xs text-warning-fg">
               {t('previewPanel.errorLine', {
                 item: e.item_title,
                 src: e.src_path,
@@ -135,7 +141,7 @@ export default function PreviewPanel({
         </div>
       )}
       {data && data.total === 0 && data.errors.length === 0 && (
-        <p className="text-xs text-zinc-600">{t('previewPanel.noMatches')}</p>
+        <p className="text-xs text-fg-faint">{t('previewPanel.noMatches')}</p>
       )}
     </div>
   )

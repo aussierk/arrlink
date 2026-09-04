@@ -5,6 +5,7 @@ import { inputCls } from '../../lib/ui'
 import Field from '../../components/ui/Field'
 import Alert from '../../components/ui/Alert'
 import SubSection from '../../components/ui/SubSection'
+import Button from '../../components/ui/Button'
 
 /**
  * Vocabulary sources (genre/certification/quality/language/collection):
@@ -101,10 +102,8 @@ export default function VocabularySection() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-zinc-200">
-          {t('settingsVocab.title')}
-        </h3>
-        <p className="text-xs text-zinc-500">{t('settingsVocab.subtitle')}</p>
+        <h3 className="text-sm font-semibold text-fg">{t('settingsVocab.title')}</h3>
+        <p className="text-xs text-fg-subtle">{t('settingsVocab.subtitle')}</p>
       </div>
 
       <Alert variant="error">{err}</Alert>
@@ -113,18 +112,19 @@ export default function VocabularySection() {
       <SubSection
         title={t('settingsVocab.tmdbTitle')}
         header={
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void refreshTmdb()}
             disabled={busy === 'tmdb'}
-            className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
           >
             {busy === 'tmdb'
               ? t('settingsVocab.refreshing')
               : t('settingsVocab.refreshNow')}
-          </button>
+          </Button>
         }
       >
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-fg-subtle">
           {defaultKeyConfigured
             ? t('settingsVocab.tmdbDefaultConfigured')
             : t('settingsVocab.tmdbNoDefault')}
@@ -134,7 +134,7 @@ export default function VocabularySection() {
             <>
               {t('settingsVocab.tmdbKeyOverride')}{' '}
               {apiKeySet && (
-                <span className="text-zinc-600">{t('settingsVocab.setBlankToKeep')}</span>
+                <span className="text-fg-faint">{t('settingsVocab.setBlankToKeep')}</span>
               )}
             </>
           }
@@ -153,56 +153,55 @@ export default function VocabularySection() {
           />
         </Field>
         <div className="flex justify-end">
-          <button
-            onClick={() => void saveKey()}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
-          >
+          <Button size="sm" onClick={() => void saveKey()}>
             {t('settingsVocab.saveKey')}
-          </button>
+          </Button>
         </div>
       </SubSection>
 
       <SubSection title={t('settingsVocab.trashTitle')}>
-        <p className="text-xs text-zinc-500">{t('settingsVocab.trashHint')}</p>
+        <p className="text-xs text-fg-subtle">{t('settingsVocab.trashHint')}</p>
         <div className="flex gap-2">
           {(['radarr', 'sonarr'] as const).map((appType) => (
-            <button
+            <Button
               key={appType}
+              variant="secondary"
+              size="sm"
               onClick={() => void refreshTrash(appType)}
               disabled={busy === `trash-${appType}`}
-              className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
             >
               {busy === `trash-${appType}`
                 ? t('settingsVocab.refreshing')
                 : t('settingsVocab.trashRefreshButton', { appType })}
-            </button>
+            </Button>
           ))}
         </div>
       </SubSection>
 
       <SubSection title={t('settingsVocab.instanceTitle')}>
-        <p className="text-xs text-zinc-500">{t('settingsVocab.instanceHint')}</p>
+        <p className="text-xs text-fg-subtle">{t('settingsVocab.instanceHint')}</p>
         <div className="space-y-1">
           {apps.length === 0 && (
-            <p className="text-xs text-zinc-600">{t('settingsVocab.noApps')}</p>
+            <p className="text-xs text-fg-faint">{t('settingsVocab.noApps')}</p>
           )}
           {apps.map((a) => (
             <div
               key={a.id}
-              className="flex items-center justify-between text-sm text-zinc-300"
+              className="flex items-center justify-between text-sm text-fg-soft"
             >
               <span>
-                {a.name} <span className="text-xs text-zinc-500">({a.type})</span>
+                {a.name} <span className="text-xs text-fg-subtle">({a.type})</span>
               </span>
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => void syncApp(a.id)}
                 disabled={busy === `app-${a.id}`}
-                className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
               >
                 {busy === `app-${a.id}`
                   ? t('settingsVocab.refreshing')
                   : t('settingsVocab.syncNow')}
-              </button>
+              </Button>
             </div>
           ))}
         </div>

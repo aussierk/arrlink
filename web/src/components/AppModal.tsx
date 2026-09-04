@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plug } from 'lucide-react'
 import Modal from './Modal'
+import Button from './ui/Button'
 import Toggle from './ui/Toggle'
 import Field from './ui/Field'
 import Alert from './ui/Alert'
@@ -129,7 +130,7 @@ export default function AppModal({
             <>
               {t('appModal.apiKey')}
               {editing && (
-                <span className="text-zinc-600">{t('appModal.apiKeyKeepCurrent')}</span>
+                <span className="text-fg-faint">{t('appModal.apiKeyKeepCurrent')}</span>
               )}
             </>
           }
@@ -162,41 +163,35 @@ export default function AppModal({
         </Field>
 
         {testResult && (
-          <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p
+            className={`text-xs ${testResult.ok ? 'text-success-fg' : 'text-danger-fg'}`}
+          >
             {testResult.message}
           </p>
         )}
         <Alert variant="error">{err}</Alert>
 
         <div className="flex items-center gap-2">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={() => void test()}
             disabled={testing || !form.url || !form.api_key}
-            className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
           >
             <Plug className="size-4" />
             {testing ? t('appModal.testing') : t('appModal.testConnection')}
-          </button>
+          </Button>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
-            >
+            <Button type="button" variant="secondary" onClick={onClose}>
               {t('appModal.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-            >
+            </Button>
+            <Button type="submit" loading={busy}>
               {busy
                 ? t('appModal.saving')
                 : editing
                   ? t('appModal.saveChanges')
                   : t('appModal.addApp')}
-            </button>
+            </Button>
           </div>
         </div>
       </form>

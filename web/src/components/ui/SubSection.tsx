@@ -18,7 +18,7 @@ export default function SubSection({
     <div className="space-y-3">
       {(title || header) && (
         <div className="flex items-center justify-between gap-3">
-          {title && <h4 className="text-sm font-medium text-zinc-200">{title}</h4>}
+          {title && <h4 className="text-sm font-medium text-fg">{title}</h4>}
           {header}
         </div>
       )}

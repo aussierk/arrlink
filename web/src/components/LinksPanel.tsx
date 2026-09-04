@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type AppItem, type LinkItem } from '../lib/api'
+import Button from './ui/Button'
 
 /**
  * Links panel: browse, filter, remove, and repair the hardlinks ArrLink
@@ -77,7 +78,7 @@ export default function LinksPanel() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <select
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200"
+          className="rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg"
           value={appId}
           onChange={(e) => setAppId(e.target.value)}
         >
@@ -89,7 +90,7 @@ export default function LinksPanel() {
           ))}
         </select>
         <select
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200"
+          className="rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
@@ -97,78 +98,82 @@ export default function LinksPanel() {
           <option value="stale">{t('linksTable.stale')}</option>
           <option value="">{t('linksTable.all')}</option>
         </select>
-        <button
-          onClick={() => void repair()}
-          disabled={busy}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-        >
+        <Button onClick={() => void repair()} disabled={busy} loading={busy}>
           {busy ? t('linksTable.repairing') : t('linksTable.repairMissing')}
-        </button>
-        <button
-          onClick={() => void load()}
-          className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900"
-        >
+        </Button>
+        <Button variant="secondary" onClick={() => void load()}>
           {t('common.refresh')}
-        </button>
+        </Button>
       </div>
 
       {repairMsg && (
-        <div className="rounded-md border border-indigo-900 bg-indigo-950/40 p-2 text-sm text-indigo-300">
+        <div className="rounded-md border border-ring/40 bg-accent-bg p-2 text-sm text-accent">
           {repairMsg}
         </div>
       )}
       {err && (
-        <div className="rounded-md border border-red-900 bg-red-950/40 p-2 text-sm text-red-300">
+        <div className="rounded-md border border-danger-line bg-danger-bg p-2 text-sm text-danger-fg">
           {err}
         </div>
       )}
 
-      <div className="max-h-96 overflow-auto rounded-lg border border-zinc-800">
+      <div className="max-h-96 overflow-auto rounded-lg border border-line">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
+          <thead className="sticky top-0 bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
-              <th className="px-3 py-2">{t('linksTable.colApp')}</th>
-              <th className="px-3 py-2">{t('linksTable.colRule')}</th>
-              <th className="px-3 py-2">{t('linksTable.colSource')}</th>
-              <th className="px-3 py-2">{t('linksTable.colLinkedTo')}</th>
-              <th className="px-3 py-2">{t('linksTable.colStatus')}</th>
-              <th className="px-3 py-2" />
+              <th scope="col" className="px-3 py-2">
+                {t('linksTable.colApp')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('linksTable.colRule')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('linksTable.colSource')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('linksTable.colLinkedTo')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('linksTable.colStatus')}
+              </th>
+              <th scope="col" className="px-3 py-2" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800">
+          <tbody className="divide-y divide-line">
             {links.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={6} className="px-3 py-6 text-center text-fg-subtle">
                   {t('linksTable.empty')}
                 </td>
               </tr>
             )}
             {links.map((l) => (
-              <tr key={l.id} className="bg-zinc-950/40">
-                <td className="px-3 py-2 text-zinc-300">
+              <tr key={l.id} className="bg-sunken/40">
+                <td className="px-3 py-2 text-fg-soft">
                   {l.app_type} · {l.app_name}
                 </td>
-                <td className="px-3 py-2 text-zinc-400">{l.rule_name}</td>
-                <td className="px-3 py-2 font-mono text-xs text-zinc-500">
+                <td className="px-3 py-2 text-fg-muted">{l.rule_name}</td>
+                <td className="px-3 py-2 font-mono text-xs text-fg-subtle">
                   {l.src_path}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-emerald-300">
+                <td className="px-3 py-2 font-mono text-xs text-success-fg">
                   {l.dst_path}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {l.status === 'active' ? (
-                    <span className="text-emerald-400">{t('linksTable.active')}</span>
+                    <span className="text-success-fg">{t('linksTable.active')}</span>
                   ) : (
-                    <span className="text-amber-400">{l.status}</span>
+                    <span className="text-warning-fg">{l.status}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <button
+                  <Button
+                    variant="danger-ghost"
+                    size="sm"
                     onClick={() => void remove(l.id)}
-                    className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
                   >
                     {t('linksTable.remove')}
-                  </button>
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -177,7 +182,7 @@ export default function LinksPanel() {
       </div>
 
       {total > 0 && (
-        <div className="flex items-center justify-between text-xs text-zinc-500">
+        <div className="flex items-center justify-between text-xs text-fg-subtle">
           <span>
             {t('linksTable.showingRange', {
               from: offset + 1,
@@ -186,20 +191,22 @@ export default function LinksPanel() {
             })}
           </span>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
               disabled={offset === 0}
-              className="rounded border border-zinc-700 px-3 py-1 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
             >
               {t('common.prev')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setOffset(offset + PAGE_SIZE)}
               disabled={offset + PAGE_SIZE >= total}
-              className="rounded border border-zinc-700 px-3 py-1 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
             >
               {t('common.next')}
-            </button>
+            </Button>
           </div>
         </div>
       )}

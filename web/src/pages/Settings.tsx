@@ -10,7 +10,7 @@ export default function Settings() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">{t('settings.title')}</h2>
-        <p className="text-sm text-zinc-500">{t('settings.subtitle')}</p>
+        <p className="text-sm text-fg-subtle">{t('settings.subtitle')}</p>
       </div>
 
       <SettingsNav />

@@ -13,7 +13,7 @@ export default function Alert({
   if (!children) return null
   const cls =
     variant === 'error'
-      ? 'border-red-900 bg-red-950/40 text-red-300'
-      : 'border-emerald-900 bg-emerald-950/40 text-emerald-300'
+      ? 'border-danger-line bg-danger-bg text-danger-fg'
+      : 'border-success-line bg-success-bg text-success-fg'
   return <div className={`rounded-md border p-3 text-sm ${cls}`}>{children}</div>
 }

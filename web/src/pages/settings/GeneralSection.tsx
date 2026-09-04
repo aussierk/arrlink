@@ -8,6 +8,7 @@ import Toggle from '../../components/ui/Toggle'
 import Field from '../../components/ui/Field'
 import Alert from '../../components/ui/Alert'
 import SubSection from '../../components/ui/SubSection'
+import Button from '../../components/ui/Button'
 
 const LOG_LEVELS = ['debug', 'info', 'warning', 'error']
 
@@ -130,10 +131,8 @@ export default function GeneralSection() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-zinc-200">
-          {t('settingsGeneral.title')}
-        </h3>
-        <p className="text-xs text-zinc-500">{t('settingsGeneral.subtitle')}</p>
+        <h3 className="text-sm font-semibold text-fg">{t('settingsGeneral.title')}</h3>
+        <p className="text-xs text-fg-subtle">{t('settingsGeneral.subtitle')}</p>
       </div>
 
       <Alert variant="error">{err}</Alert>
@@ -198,12 +197,12 @@ export default function GeneralSection() {
 
       <SubSection title={t('settingsGeneral.networkTitle')}>
         <Field label={t('settingsGeneral.bindAddress')}>
-          <span className="text-zinc-300">{bindAddress}</span>
+          <span className="text-fg-soft">{bindAddress}</span>
         </Field>
         <Field label={t('settingsGeneral.port')}>
-          <span className="text-zinc-300">{port}</span>
+          <span className="text-fg-soft">{port}</span>
         </Field>
-        <p className="text-xs text-zinc-600">{t('settingsGeneral.networkHint')}</p>
+        <p className="text-xs text-fg-faint">{t('settingsGeneral.networkHint')}</p>
       </SubSection>
 
       <SubSection title={t('settingsGeneral.loggingTitle')}>
@@ -224,7 +223,7 @@ export default function GeneralSection() {
           label={
             <>
               {t('settingsGeneral.logSizeLimit')}
-              <span className="mt-0.5 block text-xs text-zinc-600">
+              <span className="mt-0.5 block text-xs text-fg-faint">
                 {t('settingsGeneral.logSizeLimitHint')}
               </span>
             </>
@@ -264,7 +263,7 @@ export default function GeneralSection() {
           label={
             <>
               {t('settingsGeneral.allowedRoots')}{' '}
-              <span className="text-zinc-600">
+              <span className="text-fg-faint">
                 {t('settingsGeneral.allowedRootsHint')}
               </span>
             </>
@@ -278,7 +277,7 @@ export default function GeneralSection() {
           />
         </Field>
 
-        <p className="text-xs text-zinc-600">
+        <p className="text-xs text-fg-faint">
           <Trans
             i18nKey="settingsGeneral.footnote"
             components={[
@@ -291,12 +290,7 @@ export default function GeneralSection() {
       </SubSection>
 
       <div className="flex justify-end">
-        <button
-          onClick={() => void save()}
-          className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          {t('settingsGeneral.save')}
-        </button>
+        <Button onClick={() => void save()}>{t('settingsGeneral.save')}</Button>
       </div>
     </div>
   )

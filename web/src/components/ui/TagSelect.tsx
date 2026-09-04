@@ -79,32 +79,32 @@ export default function TagSelect({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-left text-sm text-zinc-100 outline-none focus:border-indigo-500"
+        className="flex w-full items-center justify-between gap-2 rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-left text-sm text-fg outline-none focus:border-ring"
       >
         {selected.length === 0 ? (
-          <span className="text-zinc-500">{placeholder}</span>
+          <span className="text-fg-subtle">{placeholder}</span>
         ) : (
           <span className="flex flex-wrap items-center gap-1 overflow-hidden">
-            <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-200">
+            <span className="rounded-full border border-line-strong bg-surface px-2 py-0.5 text-xs text-fg">
               {selected[0]}
             </span>
             {selected.length > 1 && (
-              <span className="text-xs text-zinc-500">+{selected.length - 1} more</span>
+              <span className="text-xs text-fg-subtle">+{selected.length - 1} more</span>
             )}
           </span>
         )}
         <ChevronDown
-          className={`size-4 shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`size-4 shrink-0 text-fg-subtle transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
       {open && (
-        <div className="absolute z-10 mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 shadow-xl">
+        <div className="absolute z-10 mt-1 w-full rounded-md border border-line-strong bg-surface shadow-xl">
           {(creatable || options.length > 6) && (
-            <div className="border-b border-zinc-800 p-1.5">
+            <div className="border-b border-line p-1.5">
               <input
                 autoFocus
-                className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                className="w-full rounded border border-line-strong bg-sunken px-2 py-1 text-sm text-fg outline-none focus:border-ring"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={searchPlaceholder}
@@ -119,7 +119,7 @@ export default function TagSelect({
           )}
           <div className="max-h-56 overflow-y-auto p-1">
             {filtered.length === 0 && !canCreate && (
-              <p className="px-2 py-1.5 text-xs text-zinc-500">No matches.</p>
+              <p className="px-2 py-1.5 text-xs text-fg-subtle">No matches.</p>
             )}
             {filtered.map((o) => {
               const on = selected.includes(o)
@@ -129,7 +129,7 @@ export default function TagSelect({
                   type="button"
                   onClick={() => toggle(o)}
                   className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm ${
-                    on ? 'text-indigo-300' : 'text-zinc-200 hover:bg-zinc-800'
+                    on ? 'text-accent' : 'text-fg hover:bg-fill'
                   }`}
                 >
                   {o}
@@ -141,7 +141,7 @@ export default function TagSelect({
               <button
                 type="button"
                 onClick={create}
-                className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-indigo-300 hover:bg-indigo-950/40"
+                className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-accent hover:bg-accent-bg"
               >
                 <Plus className="size-3.5" />
                 Add “{query.trim()}”

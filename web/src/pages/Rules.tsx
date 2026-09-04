@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import PreviewPanel from '../components/PreviewPanel'
 import RuleModal from '../components/RuleModal'
+import Button from '../components/ui/Button'
 import { api, type AppItem, type ConditionItem, type RuleItem } from '../lib/api'
 import { REGEX_PICKS } from '../lib/tagOptions'
 import i18n from '../i18n'
@@ -34,13 +35,13 @@ function conditionValue(c: ConditionItem) {
         {shown.map((tag) => (
           <span
             key={tag}
-            className="rounded-full border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[11px] text-zinc-300"
+            className="rounded-full border border-line-strong bg-surface px-1.5 py-0.5 text-[11px] text-fg-soft"
           >
             {tag}
           </span>
         ))}
         {more > 0 && (
-          <span className="text-[11px] text-zinc-500">
+          <span className="text-[11px] text-fg-subtle">
             {t('rules.matchMore', { count: more })}
           </span>
         )}
@@ -66,11 +67,11 @@ function matchCell(r: RuleItem) {
       {r.conditions.map((c, i) => (
         <span key={i} className="flex items-center gap-1">
           {i > 0 && (
-            <span className="rounded bg-zinc-800 px-1 text-[10px] font-semibold text-indigo-300">
+            <span className="rounded bg-fill px-1 text-[10px] font-semibold text-accent">
               {c.join === 'AND' ? t('conditions.joinAnd') : t('conditions.joinOr')}
             </span>
           )}
-          <span className="text-zinc-500">
+          <span className="text-fg-subtle">
             {CATEGORY_LABEL_KEY[c.category]
               ? t(CATEGORY_LABEL_KEY[c.category])
               : c.category}{' '}
@@ -152,65 +153,76 @@ export default function Rules() {
       <div className="flex items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">{t('rules.title')}</h2>
-          <p className="text-sm text-zinc-500">{t('rules.subtitle')}</p>
+          <p className="text-sm text-fg-subtle">{t('rules.subtitle')}</p>
         </div>
-        <button
-          onClick={openNew}
-          className="shrink-0 whitespace-nowrap rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
-        >
+        <Button onClick={openNew} className="shrink-0 whitespace-nowrap">
           {t('rules.addRule')}
-        </button>
+        </Button>
       </div>
 
       {err && (
-        <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <div className="rounded-md border border-danger-line bg-danger-bg p-3 text-sm text-danger-fg">
           {err}
         </div>
       )}
       {ok && (
-        <div className="rounded-md border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">
+        <div className="rounded-md border border-success-line bg-success-bg p-3 text-sm text-success-fg">
           {ok}
         </div>
       )}
       {vocabWarnings.length > 0 && (
-        <div className="space-y-1 rounded-md border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-300">
+        <div className="space-y-1 rounded-md border border-warning-line bg-warning-bg p-3 text-xs text-warning-fg">
           {vocabWarnings.map((w, i) => (
             <p key={i}>{w}</p>
           ))}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-zinc-800">
+      <div className="overflow-hidden rounded-lg border border-line">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
+          <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
-              <th className="px-3 py-2">{t('rules.colName')}</th>
-              <th className="px-3 py-2">{t('rules.colApp')}</th>
-              <th className="px-3 py-2">{t('rules.colMatch')}</th>
-              <th className="px-3 py-2">{t('rules.colDirTemplate')}</th>
-              <th className="px-3 py-2">{t('rules.colFilename')}</th>
-              <th className="px-3 py-2">{t('rules.colFlags')}</th>
-              <th className="px-3 py-2">{t('rules.colPreview')}</th>
-              <th className="px-3 py-2" />
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colName')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colApp')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colMatch')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colDirTemplate')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colFilename')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colFlags')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colPreview')}
+              </th>
+              <th scope="col" className="px-3 py-2" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800">
+          <tbody className="divide-y divide-line">
             {rules.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
                   {t('rules.empty')}
                 </td>
               </tr>
             )}
             {rules.map((r) => (
-              <tr key={r.id} className="bg-zinc-950/40">
+              <tr key={r.id} className="bg-sunken/40">
                 <td className="px-3 py-2 font-medium">
                   {r.name}
                   {!r.enabled && (
-                    <span className="ml-2 text-xs text-zinc-500">{t('rules.off')}</span>
+                    <span className="ml-2 text-xs text-fg-subtle">{t('rules.off')}</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-zinc-400">
+                <td className="px-3 py-2 text-fg-muted">
                   {r.app_name ??
                     (r.app_type_scope === 'radarr'
                       ? t('ruleModal.allRadarr')
@@ -219,46 +231,44 @@ export default function Rules() {
                         : t('rules.any'))}
                 </td>
                 <td className="px-3 py-2 text-xs">{matchCell(r)}</td>
-                <td className="px-3 py-2 font-mono text-xs text-zinc-300">
+                <td className="px-3 py-2 font-mono text-xs text-fg-soft">
                   {r.dir_template}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-zinc-500">
+                <td className="px-3 py-2 font-mono text-xs text-fg-subtle">
                   {r.filename_template ?? t('rules.sourceFilename')}
                 </td>
-                <td className="px-3 py-2 text-xs text-zinc-400">
+                <td className="px-3 py-2 text-xs text-fg-muted">
                   {t('rules.priorityLabel', { priority: r.priority })}
                   {r.unlink_on_mismatch ? t('rules.unlinkSuffix') : ''}
                 </td>
                 <td className="px-3 py-2">
                   <button
                     onClick={() => setPreviewFor(previewFor?.id === r.id ? null : r)}
-                    className="rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
+                    className="rounded px-2 py-1 text-xs text-accent hover:bg-accent-bg"
                   >
                     {previewFor?.id === r.id ? t('rules.hide') : t('rules.preview')}
                   </button>
                 </td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => openEdit(r)}
-                      className="rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
                       {t('rules.edit')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="danger-ghost"
+                      size="sm"
                       onClick={() => void remove(r)}
-                      className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
                     >
                       {t('rules.delete')}
-                    </button>
+                    </Button>
                   </div>
                 </td>
               </tr>
             ))}
             {previewFor && (
-              <tr className="bg-zinc-900/40">
+              <tr className="bg-surface/40">
                 <td colSpan={8} className="px-3 py-3">
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                     {t('rules.previewHeading', { name: previewFor.name })}
                   </h4>
                   <PreviewPanel
@@ -282,7 +292,7 @@ export default function Rules() {
         </table>
       </div>
 
-      <p className="text-xs text-zinc-600">{t('rules.footer')}</p>
+      <p className="text-xs text-fg-faint">{t('rules.footer')}</p>
 
       {modalOpen && (
         <RuleModal

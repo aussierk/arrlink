@@ -31,16 +31,16 @@ export default function Modal({
       onMouseDown={onClose}
     >
       <div
-        className={`w-full rounded-lg border border-zinc-800 bg-zinc-900 shadow-xl ${
+        className={`w-full rounded-lg border border-line bg-surface shadow-xl ${
           size === 'xl' ? 'max-w-4xl' : 'max-w-2xl'
         }`}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-          <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <h3 className="text-sm font-semibold text-fg">{title}</h3>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-200"
+            className="text-fg-subtle hover:text-fg"
             aria-label={t('modal.close')}
           >
             ✕

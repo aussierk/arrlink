@@ -9,6 +9,7 @@ import {
   type TagItem,
 } from '../lib/api'
 import { useBeforeUnloadGuard } from '../lib/unsavedGuard'
+import Button from '../components/ui/Button'
 
 const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
   'genre',
@@ -159,7 +160,7 @@ export default function Tags() {
   return (
     <div className="space-y-6">
       {err && (
-        <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <div className="rounded-md border border-danger-line bg-danger-bg p-3 text-sm text-danger-fg">
           {err}
         </div>
       )}
@@ -168,11 +169,11 @@ export default function Tags() {
       <div className="flex items-end gap-3">
         <div>
           <h2 className="text-lg font-semibold">{t('tags.appTags.title')}</h2>
-          <p className="text-sm text-zinc-500">{t('tags.appTags.subtitle')}</p>
+          <p className="text-sm text-fg-subtle">{t('tags.appTags.subtitle')}</p>
         </div>
         {apps.length > 0 && (
           <select
-            className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200"
+            className="rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg"
             value={appId ?? ''}
             onChange={(e) => void switchApp(Number(e.target.value))}
           >
@@ -183,17 +184,17 @@ export default function Tags() {
             ))}
           </select>
         )}
-        <button
+        <Button
           onClick={() => void doImport()}
           disabled={appId === null || busy}
-          className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+          loading={busy}
         >
           {busy ? t('tags.appTags.importing') : t('tags.appTags.importTags')}
-        </button>
+        </Button>
         <button
           onClick={() => void saveTagEdits()}
           disabled={!hasPending || saving}
-          className="ml-auto rounded-md border border-amber-500/50 px-4 py-1.5 text-sm font-medium text-amber-300 hover:bg-amber-950/40 disabled:opacity-40"
+          className="ml-auto rounded-md border border-warning-fg/50 px-4 py-1.5 text-sm font-medium text-warning-fg hover:bg-warning-bg disabled:opacity-40"
         >
           {saving
             ? t('tags.appTags.saving')
@@ -202,26 +203,36 @@ export default function Tags() {
       </div>
 
       {imported && (
-        <div className="rounded-md border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">
+        <div className="rounded-md border border-success-line bg-success-bg p-3 text-sm text-success-fg">
           {imported}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-zinc-800">
+      <div className="overflow-hidden rounded-lg border border-line">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
+          <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
-              <th className="px-3 py-2">{t('tags.appTags.colTag')}</th>
-              <th className="px-3 py-2">{t('tags.appTags.colCategory')}</th>
-              <th className="px-3 py-2">{t('tags.appTags.colInUse')}</th>
-              <th className="px-3 py-2">{t('tags.appTags.colRules')}</th>
-              <th className="px-3 py-2">{t('tags.appTags.colImported')}</th>
+              <th scope="col" className="px-3 py-2">
+                {t('tags.appTags.colTag')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('tags.appTags.colCategory')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('tags.appTags.colInUse')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('tags.appTags.colRules')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('tags.appTags.colImported')}
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800">
+          <tbody className="divide-y divide-line">
             {tags.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={5} className="px-3 py-6 text-center text-fg-subtle">
                   {appId === null
                     ? t('tags.appTags.connectFirst')
                     : t('tags.appTags.emptyImport')}
@@ -232,14 +243,12 @@ export default function Tags() {
               const isPending = tag.id in pendingEdits
               const shown = isPending ? pendingEdits[tag.id] : tag.category
               return (
-                <tr key={tag.id} className="bg-zinc-950/40">
-                  <td className="px-3 py-2 font-mono text-xs text-zinc-200">
-                    {tag.label}
-                  </td>
+                <tr key={tag.id} className="bg-sunken/40">
+                  <td className="px-3 py-2 font-mono text-xs text-fg">{tag.label}</td>
                   <td className="px-3 py-2">
                     <select
-                      className={`rounded-md border bg-zinc-950 px-2 py-1 text-xs text-zinc-200 ${
-                        isPending ? 'border-amber-500' : 'border-zinc-700'
+                      className={`rounded-md border bg-sunken px-2 py-1 text-xs text-fg ${
+                        isPending ? 'border-warning-fg' : 'border-line-strong'
                       }`}
                       value={shown ?? ''}
                       onChange={(e) =>
@@ -257,20 +266,20 @@ export default function Tags() {
                       ))}
                     </select>
                     {isPending && (
-                      <span className="ml-1.5 text-[11px] text-amber-400">
+                      <span className="ml-1.5 text-[11px] text-warning-fg">
                         {t('tags.appTags.unsaved')}
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-zinc-400">{tag.count}</td>
-                  <td className="px-3 py-2 text-zinc-400">
+                  <td className="px-3 py-2 text-fg-muted">{tag.count}</td>
+                  <td className="px-3 py-2 text-fg-muted">
                     {tag.rule_count > 0 ? (
-                      <span className="text-indigo-300">{tag.rule_count}</span>
+                      <span className="text-accent">{tag.rule_count}</span>
                     ) : (
-                      <span className="text-zinc-600">—</span>
+                      <span className="text-fg-faint">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-zinc-500">{fmtTime(tag.imported_at)}</td>
+                  <td className="px-3 py-2 text-fg-subtle">{fmtTime(tag.imported_at)}</td>
                 </tr>
               )
             })}

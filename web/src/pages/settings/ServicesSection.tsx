@@ -3,6 +3,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { Download, Pencil, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import AppModal from '../../components/AppModal'
 import Alert from '../../components/ui/Alert'
+import Button from '../../components/ui/Button'
 import { api, fmtTime, type AppItem } from '../../lib/api'
 
 /**
@@ -109,118 +110,122 @@ export default function ServicesSection() {
     <div className="space-y-4">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-200">
-            {t('settingsServices.title')}
-          </h3>
-          <p className="text-xs text-zinc-500">{t('settingsServices.subtitle')}</p>
+          <h3 className="text-sm font-semibold text-fg">{t('settingsServices.title')}</h3>
+          <p className="text-xs text-fg-subtle">{t('settingsServices.subtitle')}</p>
         </div>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
-        >
+        <Button onClick={openNew}>
           <Plus className="size-4" />
           {t('settingsServices.addService')}
-        </button>
+        </Button>
       </div>
 
       <Alert variant="error">{err}</Alert>
       <Alert variant="success">{ok}</Alert>
 
-      <div className="overflow-hidden rounded-lg border border-zinc-800">
+      <div className="overflow-hidden rounded-lg border border-line">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
+          <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
-              <th className="px-3 py-2">{t('settingsServices.colName')}</th>
-              <th className="px-3 py-2">{t('settingsServices.colType')}</th>
-              <th className="px-3 py-2">{t('settingsServices.colUrl')}</th>
-              <th className="px-3 py-2">{t('settingsServices.colApiKey')}</th>
-              <th className="px-3 py-2">{t('settingsServices.colPoll')}</th>
-              <th className="px-3 py-2">{t('settingsServices.colLastPoll')}</th>
-              <th className="px-3 py-2">{t('settingsServices.colActions')}</th>
-              <th className="px-3 py-2" />
+              <th scope="col" className="px-3 py-2">
+                {t('settingsServices.colName')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('settingsServices.colType')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('settingsServices.colUrl')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('settingsServices.colApiKey')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('settingsServices.colPoll')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('settingsServices.colLastPoll')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('settingsServices.colActions')}
+              </th>
+              <th scope="col" className="px-3 py-2" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800">
+          <tbody className="divide-y divide-line">
             {apps.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
                   <Trans i18nKey="settingsServices.empty">
                     No services yet — click{' '}
-                    <span className="text-indigo-400">Add service</span>.
+                    <span className="text-accent">Add service</span>.
                   </Trans>
                 </td>
               </tr>
             )}
             {apps.map((a) => (
-              <tr key={a.id} className="bg-zinc-950/40">
+              <tr key={a.id} className="bg-sunken/40">
                 <td className="px-3 py-2 font-medium">
                   {a.name}
                   {!a.enabled && (
-                    <span className="ml-2 text-xs text-zinc-500">
+                    <span className="ml-2 text-xs text-fg-subtle">
                       {t('settingsServices.disabled')}
                     </span>
                   )}
                 </td>
                 <td className="px-3 py-2">{a.type}</td>
-                <td className="px-3 py-2 text-zinc-400">{a.url}</td>
-                <td className="px-3 py-2 font-mono text-xs text-zinc-500">
+                <td className="px-3 py-2 text-fg-muted">{a.url}</td>
+                <td className="px-3 py-2 font-mono text-xs text-fg-subtle">
                   {a.api_key_masked}
                 </td>
                 <td className="px-3 py-2">
                   {a.poll_interval_s}
                   {t('settingsServices.pollSuffix')}
                 </td>
-                <td className="px-3 py-2 text-zinc-400">
+                <td className="px-3 py-2 text-fg-muted">
                   {a.last_error ? (
-                    <span className="text-red-400">{a.last_error}</span>
+                    <span className="text-danger-fg">{a.last_error}</span>
                   ) : (
                     fmtTime(a.last_poll_at)
                   )}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => void testRow(a.id)}
-                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => void testRow(a.id)}>
                       <Plug className="size-3.5" />
                       {t('settingsServices.test')}
-                    </button>
+                    </Button>
                     <button
                       onClick={() => void importRow(a.id)}
-                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-950/40"
+                      className="flex items-center gap-1 rounded px-2.5 py-1 text-xs text-accent transition-colors hover:bg-accent-bg focus-visible:focus-ring"
                     >
                       <Download className="size-3.5" />
                       {t('settingsServices.importTags')}
                     </button>
                     <button
                       onClick={() => void rescanRow(a.id)}
-                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40"
+                      className="flex items-center gap-1 rounded px-2.5 py-1 text-xs text-success-fg transition-colors hover:bg-success-bg focus-visible:focus-ring"
                     >
                       <RefreshCw className="size-3.5" />
                       {t('settingsServices.rescan')}
                     </button>
                     {rowMsg[a.id] && (
-                      <span className="text-xs text-zinc-500">{rowMsg[a.id]}</span>
+                      <span className="text-xs text-fg-subtle">{rowMsg[a.id]}</span>
                     )}
                   </div>
                 </td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => openEdit(a)}
-                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>
                       <Pencil className="size-3.5" />
                       {t('settingsServices.edit')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="danger-ghost"
+                      size="sm"
                       onClick={() => void remove(a)}
-                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
                     >
                       <Trash2 className="size-3.5" />
                       {t('settingsServices.delete')}
-                    </button>
+                    </Button>
                   </div>
                 </td>
               </tr>

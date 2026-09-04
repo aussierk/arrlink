@@ -4,6 +4,7 @@ import { Sparkles, Trash2 } from 'lucide-react'
 import i18n from '../i18n'
 import Modal from './Modal'
 import PreviewPanel from './PreviewPanel'
+import Button from './ui/Button'
 import Toggle from './ui/Toggle'
 import TagSelect from './ui/TagSelect'
 import Field from './ui/Field'
@@ -367,7 +368,7 @@ export default function RuleModal({
     if (c.match_type === 'vocabulary') {
       const known = optionsFor(c.category)
       return (
-        <p className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-400">
+        <p className="rounded-md border border-line bg-sunken/40 px-3 py-2 text-xs text-fg-muted">
           {t('ruleModal.vocabularyMatchHint', { count: known.length })}
         </p>
       )
@@ -395,7 +396,7 @@ export default function RuleModal({
             <option value={CUSTOM}>{t('ruleModal.customRegex')}</option>
           </select>
           {regexPick?.hint && (
-            <p className="text-[11px] text-zinc-500">{regexPick.hint}</p>
+            <p className="text-[11px] text-fg-subtle">{regexPick.hint}</p>
           )}
           {regexIsCustom && (
             <textarea
@@ -489,8 +490,8 @@ export default function RuleModal({
         </Field>
 
         {(form.app_scope !== null || form.app_type_scope !== null) && (
-          <div className="rounded-md border border-indigo-500/30 bg-indigo-950/20 p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-300">
+          <div className="rounded-md border border-ring/30 bg-accent-bg p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-accent">
               <Sparkles className="size-3.5" />
               {t('ruleModal.startFromPreset')}
             </div>
@@ -501,34 +502,32 @@ export default function RuleModal({
                   type="button"
                   onClick={() => applyPreset(p)}
                   title={p.dir_template}
-                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 hover:border-indigo-500 hover:text-indigo-300"
+                  className="rounded-md border border-line-strong bg-surface px-2.5 py-1 text-xs text-fg hover:border-ring hover:text-accent"
                 >
                   {p.name}
                 </button>
               ))}
               {presets.length === 0 && (
-                <span className="text-xs text-zinc-500">{t('ruleModal.noPresets')}</span>
+                <span className="text-xs text-fg-subtle">{t('ruleModal.noPresets')}</span>
               )}
             </div>
-            <p className="mt-2 text-[11px] text-zinc-500">{t('ruleModal.presetHint')}</p>
+            <p className="mt-2 text-[11px] text-fg-subtle">{t('ruleModal.presetHint')}</p>
           </div>
         )}
 
-        <div className="space-y-3 border-t border-zinc-800 pt-4">
+        <div className="space-y-3 border-t border-line pt-4">
           <div>
-            <h3 className="text-sm font-semibold text-zinc-200">
-              {t('ruleModal.conditions')}
-            </h3>
-            <p className="text-xs text-zinc-500">
+            <h3 className="text-sm font-semibold text-fg">{t('ruleModal.conditions')}</h3>
+            <p className="text-xs text-fg-subtle">
               <Trans
                 i18nKey="ruleModal.conditionsHintChain"
-                components={[<span className="font-mono text-zinc-400" key="genre" />]}
+                components={[<span className="font-mono text-fg-muted" key="genre" />]}
               />
             </p>
           </div>
 
           {form.app_scope === null && form.app_type_scope === null ? (
-            <div className="rounded-md border border-dashed border-zinc-700 p-4 text-center text-sm text-zinc-500">
+            <div className="rounded-md border border-dashed border-line-strong p-4 text-center text-sm text-fg-subtle">
               {t('ruleModal.selectServiceFirst')}
             </div>
           ) : (
@@ -540,7 +539,7 @@ export default function RuleModal({
                       <button
                         type="button"
                         onClick={() => toggleJoin(i)}
-                        className="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-semibold text-indigo-300 hover:bg-zinc-700"
+                        className="rounded bg-fill px-2 py-0.5 text-[11px] font-semibold text-accent hover:bg-line-strong"
                       >
                         {c.join === 'AND'
                           ? t('conditions.joinAnd')
@@ -548,16 +547,16 @@ export default function RuleModal({
                       </button>
                     </div>
                   )}
-                  <div className="rounded-md border border-zinc-800 bg-zinc-950/30 p-3">
+                  <div className="rounded-md border border-line bg-sunken/30 p-3">
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="text-sm font-medium text-zinc-200">
+                      <span className="text-sm font-medium text-fg">
                         {t('ruleModal.conditionNumber', { number: i + 1 })}
                       </span>
                       <button
                         type="button"
                         onClick={() => removeCondition(i)}
                         disabled={conditions.length <= 1}
-                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 hover:bg-red-950/40 disabled:opacity-30"
+                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-danger-fg hover:bg-danger-bg disabled:opacity-30"
                       >
                         <Trash2 className="size-3.5" />
                         {t('ruleModal.removeCondition')}
@@ -633,8 +632,8 @@ export default function RuleModal({
                                 className={
                                   'rounded-md border px-3 py-1 text-xs ' +
                                   ((c.source ?? 'tag') === src
-                                    ? 'border-indigo-500 bg-indigo-950/40 text-indigo-300'
-                                    : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800')
+                                    ? 'border-ring bg-accent-bg text-accent'
+                                    : 'border-line-strong text-fg-muted hover:bg-fill')
                                 }
                               >
                                 {src === 'tag'
@@ -643,7 +642,7 @@ export default function RuleModal({
                               </button>
                             ))}
                           </div>
-                          <p className="mt-1 text-[11px] text-zinc-500">
+                          <p className="mt-1 text-[11px] text-fg-subtle">
                             {(c.source ?? 'tag') === 'native'
                               ? t('ruleModal.sourceNativeHint')
                               : t('ruleModal.sourceTagHint')}
@@ -662,27 +661,27 @@ export default function RuleModal({
                 <button
                   type="button"
                   onClick={() => addCondition(null)}
-                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
+                  className="rounded-md border border-line-strong px-3 py-1.5 text-sm text-fg-soft hover:bg-fill"
                 >
                   {t('ruleModal.addConditionFirst')}
                 </button>
               ) : (
                 !allCategoriesUsed && (
                   <div className="flex items-center gap-2 pt-1">
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs text-fg-subtle">
                       {t('ruleModal.addAnotherCondition')}
                     </span>
                     <button
                       type="button"
                       onClick={() => addCondition('AND')}
-                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                      className="rounded-md border border-line-strong px-2.5 py-1 text-xs text-fg-soft hover:bg-fill"
                     >
                       {t('ruleModal.addAnd')}
                     </button>
                     <button
                       type="button"
                       onClick={() => addCondition('OR')}
-                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                      className="rounded-md border border-line-strong px-2.5 py-1 text-xs text-fg-soft hover:bg-fill"
                     >
                       {t('ruleModal.addOr')}
                     </button>
@@ -693,12 +692,10 @@ export default function RuleModal({
           )}
         </div>
 
-        <div className="space-y-3 border-t border-zinc-800 pt-4">
+        <div className="space-y-3 border-t border-line pt-4">
           <div>
-            <h3 className="text-sm font-semibold text-zinc-200">
-              {t('ruleModal.settings')}
-            </h3>
-            <p className="text-xs text-zinc-500">{t('ruleModal.settingsHint')}</p>
+            <h3 className="text-sm font-semibold text-fg">{t('ruleModal.settings')}</h3>
+            <p className="text-xs text-fg-subtle">{t('ruleModal.settingsHint')}</p>
           </div>
 
           <Field label={t('ruleModal.dirTemplate')}>
@@ -745,8 +742,8 @@ export default function RuleModal({
         </div>
 
         {previewOpen && (
-          <div className="rounded-md border border-zinc-800/70 bg-zinc-950/40 p-3">
-            <h4 className="mb-2 text-xs font-semibold text-zinc-400">
+          <div className="rounded-md border border-line/70 bg-sunken/40 p-3">
+            <h4 className="mb-2 text-xs font-semibold text-fg-muted">
               {t('ruleModal.livePreview')}
             </h4>
             <PreviewPanel rule={previewRule} appId={previewAppId} />
@@ -754,7 +751,7 @@ export default function RuleModal({
         )}
 
         {vocabWarnings.length > 0 && (
-          <div className="space-y-1 rounded-md border border-amber-900/60 bg-amber-950/20 p-2 text-xs text-amber-300">
+          <div className="space-y-1 rounded-md border border-warning-line bg-warning-bg p-2 text-xs text-warning-fg">
             {vocabWarnings.map((w, idx) => (
               <p key={idx}>{w}</p>
             ))}
@@ -762,38 +759,30 @@ export default function RuleModal({
         )}
 
         {err && (
-          <div className="rounded-md border border-red-900 bg-red-950/40 p-2 text-sm text-red-300">
+          <div className="rounded-md border border-danger-line bg-danger-bg p-2 text-sm text-danger-fg">
             {err}
           </div>
         )}
 
         <div className="flex items-center gap-2">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={() => setPreviewOpen((o) => !o)}
-            className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800"
           >
             {previewOpen ? t('ruleModal.hidePreview') : t('ruleModal.livePreviewButton')}
-          </button>
+          </Button>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800"
-            >
+            <Button type="button" variant="secondary" onClick={onClose}>
               {t('ruleModal.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-            >
+            </Button>
+            <Button type="submit" loading={busy}>
               {busy
                 ? t('ruleModal.saving')
                 : editing
                   ? t('ruleModal.saveRule')
                   : t('ruleModal.createRule')}
-            </button>
+            </Button>
           </div>
         </div>
       </form>

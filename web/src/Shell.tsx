@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { api, setDisplayTimezone, type Me } from './lib/api'
 import { useDocumentTitle } from './lib/useDocumentTitle'
+import ThemeToggle from './components/ui/ThemeToggle'
 
 // Links live on the Dashboard (not a standalone tab). Apps live under Settings → Services.
 const nav = [
@@ -43,12 +44,18 @@ export default function Shell() {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60 p-4">
+      <a
+        href="#main"
+        className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:left-3 focus-visible:top-3 focus-visible:z-50 focus-visible:rounded-md focus-visible:bg-primary focus-visible:px-3 focus-visible:py-1.5 focus-visible:text-sm focus-visible:text-primary-fg"
+      >
+        {t('a11y.skipToContent')}
+      </a>
+      <aside className="flex w-56 shrink-0 flex-col border-r border-line bg-surface/60 p-4">
         <div className="mb-8">
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-100">
+          <h1 className="text-lg font-semibold tracking-tight text-fg">
             {me?.app_title ?? t('app.name')}
           </h1>
-          <p className="text-xs text-zinc-500">{t('app.tagline')}</p>
+          <p className="text-xs text-fg-subtle">{t('app.tagline')}</p>
         </div>
         <nav className="space-y-1">
           {nav.map((i) => (
@@ -59,8 +66,8 @@ export default function Shell() {
               className={({ isActive }) =>
                 `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
                   isActive
-                    ? 'bg-indigo-600/20 text-indigo-300'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                    ? 'bg-accent-bg text-accent'
+                    : 'text-fg-muted hover:bg-fill hover:text-fg'
                 }`
               }
             >
@@ -69,21 +76,24 @@ export default function Shell() {
             </NavLink>
           ))}
         </nav>
-        {me?.email && (
-          <div className="mt-auto flex items-center justify-between gap-2 border-t border-zinc-800 pt-4">
-            <span className="truncate text-xs text-zinc-400" title={me.email ?? ''}>
-              {me.name || me.email}
-            </span>
-            <button
-              onClick={() => void api.logout()}
-              className="text-xs text-zinc-500 hover:text-red-400"
-            >
-              {t('app.signOut')}
-            </button>
-          </div>
-        )}
+        <div className="mt-auto flex flex-col gap-3 border-t border-line pt-4">
+          <ThemeToggle />
+          {me?.email && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-xs text-fg-muted" title={me.email ?? ''}>
+                {me.name || me.email}
+              </span>
+              <button
+                onClick={() => void api.logout()}
+                className="text-xs text-fg-subtle hover:text-danger-fg"
+              >
+                {t('app.signOut')}
+              </button>
+            </div>
+          )}
+        </div>
       </aside>
-      <main className="flex-1 p-8">
+      <main id="main" tabIndex={-1} className="flex-1 p-8">
         <Outlet />
       </main>
     </div>

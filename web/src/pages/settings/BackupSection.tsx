@@ -7,6 +7,7 @@ import Toggle from '../../components/ui/Toggle'
 import Field from '../../components/ui/Field'
 import Alert from '../../components/ui/Alert'
 import SubSection from '../../components/ui/SubSection'
+import Button from '../../components/ui/Button'
 
 const DEFAULT_EVENTS_RETENTION = 5000
 
@@ -105,10 +106,8 @@ export default function BackupSection() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-zinc-200">
-          {t('settingsBackup.title')}
-        </h3>
-        <p className="text-xs text-zinc-500">{t('settingsBackup.subtitle')}</p>
+        <h3 className="text-sm font-semibold text-fg">{t('settingsBackup.title')}</h3>
+        <p className="text-xs text-fg-subtle">{t('settingsBackup.subtitle')}</p>
       </div>
 
       <Alert variant="error">{err}</Alert>
@@ -117,36 +116,38 @@ export default function BackupSection() {
       <SubSection
         title={t('settingsBackup.listTitle')}
         header={
-          <button
-            onClick={() => void runNow()}
-            disabled={running}
-            className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-          >
+          <Button size="sm" onClick={() => void runNow()} disabled={running}>
             <RotateCw className={`size-3.5 ${running ? 'animate-spin' : ''}`} />
             {running ? t('settingsBackup.running') : t('settingsBackup.runNow')}
-          </button>
+          </Button>
         }
       >
         {backups.length === 0 ? (
-          <p className="text-xs text-zinc-600">{t('settingsBackup.noBackups')}</p>
+          <p className="text-xs text-fg-faint">{t('settingsBackup.noBackups')}</p>
         ) : (
-          <div className="overflow-hidden rounded-md border border-zinc-800">
+          <div className="overflow-hidden rounded-md border border-line">
             <table className="w-full text-sm">
-              <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-500">
+              <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
                 <tr>
-                  <th className="px-3 py-1.5">{t('settingsBackup.colName')}</th>
-                  <th className="px-3 py-1.5">{t('settingsBackup.colSize')}</th>
-                  <th className="px-3 py-1.5">{t('settingsBackup.colCreated')}</th>
+                  <th scope="col" className="px-3 py-1.5">
+                    {t('settingsBackup.colName')}
+                  </th>
+                  <th scope="col" className="px-3 py-1.5">
+                    {t('settingsBackup.colSize')}
+                  </th>
+                  <th scope="col" className="px-3 py-1.5">
+                    {t('settingsBackup.colCreated')}
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800">
+              <tbody className="divide-y divide-line">
                 {backups.map((b) => (
                   <tr key={b.name}>
-                    <td className="px-3 py-1.5 font-mono text-xs text-zinc-300">
+                    <td className="px-3 py-1.5 font-mono text-xs text-fg-soft">
                       {b.name}
                     </td>
-                    <td className="px-3 py-1.5 text-zinc-400">{fmtSize(b.size)}</td>
-                    <td className="px-3 py-1.5 text-zinc-400">{fmtTime(b.created_at)}</td>
+                    <td className="px-3 py-1.5 text-fg-muted">{fmtSize(b.size)}</td>
+                    <td className="px-3 py-1.5 text-fg-muted">{fmtTime(b.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -163,7 +164,7 @@ export default function BackupSection() {
           label={
             <>
               {t('settingsBackup.intervalHours')}
-              <span className="mt-0.5 block text-xs text-zinc-600">
+              <span className="mt-0.5 block text-xs text-fg-faint">
                 {t('settingsBackup.intervalHoursHint')}
               </span>
             </>
@@ -181,7 +182,7 @@ export default function BackupSection() {
           label={
             <>
               {t('settingsBackup.retentionDays')}
-              <span className="mt-0.5 block text-xs text-zinc-600">
+              <span className="mt-0.5 block text-xs text-fg-faint">
                 {t('settingsBackup.retentionDaysHint')}
               </span>
             </>
@@ -202,7 +203,7 @@ export default function BackupSection() {
           label={
             <>
               {t('settingsBackup.eventsRetention')}
-              <span className="mt-0.5 block text-xs text-zinc-600">
+              <span className="mt-0.5 block text-xs text-fg-faint">
                 {t('settingsBackup.eventsRetentionHint')}
               </span>
             </>
@@ -219,13 +220,9 @@ export default function BackupSection() {
       </SubSection>
 
       <div className="flex justify-end">
-        <button
-          onClick={() => void saveSettings()}
-          disabled={saving}
-          className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-        >
+        <Button onClick={() => void saveSettings()} loading={saving}>
           {saving ? t('settingsBackup.saving') : t('settingsBackup.save')}
-        </button>
+        </Button>
       </div>
     </div>
   )

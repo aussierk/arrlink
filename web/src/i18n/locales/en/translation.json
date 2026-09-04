@@ -17,6 +17,15 @@
     "prev": "Previous",
     "next": "Next"
   },
+  "a11y": {
+    "skipToContent": "Skip to content"
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "system": "System",
+    "dark": "Dark"
+  },
   "conditions": {
     "joinAnd": "AND",
     "joinOr": "OR"

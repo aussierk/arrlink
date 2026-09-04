@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import LinksPanel from '../components/LinksPanel'
+import Card from '../components/ui/Card'
 import { api, fmtTime, type AppItem, type Health, type Me } from '../lib/api'
 
 export default function Dashboard() {
@@ -41,22 +42,24 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">{t('dashboard.title')}</h2>
-        <p className="text-sm text-zinc-500">{t('dashboard.subtitle')}</p>
+        <p className="text-sm text-fg-subtle">{t('dashboard.subtitle')}</p>
       </div>
 
       {err && (
-        <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <div className="rounded-md border border-danger-line bg-danger-bg p-3 text-sm text-danger-fg">
           {err}
         </div>
       )}
 
       {linksCount && linksCount.orphaned_rules.length > 0 && (
-        <div className="rounded-md border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-300">
+        <div className="rounded-md border border-warning-line bg-warning-bg p-3 text-sm text-warning-fg">
           <p className="font-medium">
             {t('dashboard.orphanedRules', { count: linksCount.orphaned_rules.length })}
           </p>
-          <p className="mt-1 text-amber-200/80">{linksCount.orphaned_rules.join(', ')}</p>
-          <p className="mt-1 text-amber-200/60">
+          <p className="mt-1 text-warning-fg/80">
+            {linksCount.orphaned_rules.join(', ')}
+          </p>
+          <p className="mt-1 text-warning-fg/70">
             <Trans i18nKey="dashboard.orphanedHint">
               Edit the rules, or set{' '}
               <code className="rounded bg-black/30 px-1">allowed_roots</code> to include
@@ -67,14 +70,14 @@ export default function Dashboard() {
       )}
 
       {me && !me.password_enabled && !me.oidc_enabled && (
-        <div className="rounded-md border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-300">
+        <div className="rounded-md border border-warning-line bg-warning-bg p-3 text-sm text-warning-fg">
           <p className="font-medium">{t('dashboard.authDisabledWarning')}</p>
-          <p className="mt-1 text-amber-200/60">
+          <p className="mt-1 text-warning-fg/70">
             <Trans i18nKey="dashboard.authDisabledHint">
               Anyone who can reach this app can use it, with no login. Turn on password or
               OIDC login in{' '}
               <Link
-                className="underline hover:text-amber-100"
+                className="underline hover:text-warning-fg"
                 to="/settings/authentication"
               >
                 Settings → Authentication
@@ -91,26 +94,28 @@ export default function Dashboard() {
             <div className="space-y-1 text-sm">
               <p>
                 <span
-                  className={health.status === 'ok' ? 'text-emerald-400' : 'text-red-400'}
+                  className={
+                    health.status === 'ok' ? 'text-success-fg' : 'text-danger-fg'
+                  }
                 >
                   ● {health.status}
                 </span>
               </p>
-              <p className="text-zinc-400">
+              <p className="text-fg-muted">
                 {t('dashboard.version', { version: health.version })}
               </p>
-              <p className="text-zinc-400">
+              <p className="text-fg-muted">
                 {t('dashboard.schemaVersion', { version: health.schema_version })}
               </p>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">{t('common.loading')}</p>
+            <p className="text-sm text-fg-subtle">{t('common.loading')}</p>
           )}
         </Card>
         <Card title={t('dashboard.authCard')}>
           {me ? (
             <div className="space-y-1 text-sm">
-              <p className="text-zinc-300">
+              <p className="text-fg-soft">
                 {t('dashboard.authMethodsLine', {
                   methods:
                     [
@@ -121,21 +126,21 @@ export default function Dashboard() {
                       .join(', ') || t('dashboard.methodNone'),
                 })}
               </p>
-              <p className="text-zinc-500">{t('dashboard.signedIn')}</p>
+              <p className="text-fg-subtle">{t('dashboard.signedIn')}</p>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">{t('common.loading')}</p>
+            <p className="text-sm text-fg-subtle">{t('common.loading')}</p>
           )}
         </Card>
         <Card title={t('dashboard.appsCard')}>
           <p className="text-2xl font-semibold">{apps.length}</p>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-fg-subtle">
             {t('dashboard.appsConnectedCount', { count: apps.length })}
           </p>
         </Card>
         <Card title={t('dashboard.linksCard')}>
           <p className="text-2xl font-semibold">{linksCount?.active_links ?? 0}</p>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-fg-subtle">
             {t('dashboard.hardlinked')}
             {linksCount?.stale_links
               ? t('dashboard.staleSuffix', { count: linksCount.stale_links })
@@ -146,23 +151,23 @@ export default function Dashboard() {
 
       <Card title={t('dashboard.connectedApps')}>
         {apps.length === 0 ? (
-          <p className="text-sm text-zinc-500">{t('dashboard.noApps')}</p>
+          <p className="text-sm text-fg-subtle">{t('dashboard.noApps')}</p>
         ) : (
-          <ul className="divide-y divide-zinc-800">
+          <ul className="divide-y divide-line">
             {apps.map((a) => (
               <li key={a.id} className="flex items-center gap-3 py-2 text-sm">
                 <span
                   className={
                     a.type === 'radarr'
-                      ? 'rounded bg-rose-600/20 px-2 py-0.5 text-xs text-rose-300'
-                      : 'rounded bg-sky-600/20 px-2 py-0.5 text-xs text-sky-300'
+                      ? 'rounded bg-radarr-bg px-2 py-0.5 text-xs text-radarr-fg'
+                      : 'rounded bg-sonarr-bg px-2 py-0.5 text-xs text-sonarr-fg'
                   }
                 >
                   {a.type}
                 </span>
                 <span className="font-medium">{a.name}</span>
-                <span className="text-zinc-500">{a.url}</span>
-                <span className="ml-auto text-zinc-500">
+                <span className="text-fg-subtle">{a.url}</span>
+                <span className="ml-auto text-fg-subtle">
                   {t('dashboard.lastPoll', { time: fmtTime(a.last_poll_at) })}
                 </span>
               </li>
@@ -174,17 +179,6 @@ export default function Dashboard() {
       <Card title={t('dashboard.linksCard')}>
         <LinksPanel />
       </Card>
-    </div>
-  )
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-        {title}
-      </h3>
-      {children}
     </div>
   )
 }

@@ -31,21 +31,21 @@ export default function Collapsible({
   }
 
   return (
-    <div className="border-t border-zinc-800 pt-3 first:border-t-0 first:pt-0">
+    <div className="border-t border-line pt-3 first:border-t-0 first:pt-0">
       <button
         type="button"
         onClick={toggle}
         className="flex w-full items-center justify-between gap-3 text-left"
       >
-        <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-200">
+        <span className="flex items-center gap-1.5 text-sm font-medium text-fg">
           {isOpen ? (
-            <ChevronDown className="size-4 text-zinc-500" />
+            <ChevronDown className="size-4 text-fg-subtle" />
           ) : (
-            <ChevronRight className="size-4 text-zinc-500" />
+            <ChevronRight className="size-4 text-fg-subtle" />
           )}
           {title}
         </span>
-        {!isOpen && badge && <span className="text-xs text-zinc-500">{badge}</span>}
+        {!isOpen && badge && <span className="text-xs text-fg-subtle">{badge}</span>}
       </button>
       {isOpen && <div className="mt-3 space-y-3">{children}</div>}
     </div>
