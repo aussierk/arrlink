@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Eye, EyeOff, Pencil, Trash2 } from 'lucide-react'
-import PreviewPanel from '../components/PreviewPanel'
+import { Check } from 'lucide-react'
 import RuleModal from '../components/RuleModal'
 import Button from '../components/ui/Button'
 import SortHeader from '../components/ui/SortHeader'
@@ -11,9 +10,9 @@ import { useSort } from '../lib/useSort'
 import { useToast } from '../lib/useToast'
 import {
   api,
-  type AppItem,
   type ConditionCategory,
   type ConditionItem,
+  type RuleInput,
   type RuleItem,
 } from '../lib/api'
 import { REGEX_PICKS } from '../lib/tagOptions'
@@ -65,11 +64,12 @@ const CATEGORY_LABEL_KEY: Record<string, string> = {
   custom: 'rules.categoryLabel.custom',
 }
 
-/** Render one condition readably: exact as-is, list as count+chips, regex as a
- * friendly label when it's a known pattern (else a short mono snippet).
- * Not a component (used inline in a table cell builder), so it reads
- * translations off the i18next singleton instead of the useTranslation hook. */
-function conditionValue(c: ConditionItem) {
+/** Render one condition's match value readably: exact as-is, list as
+ * comma-joined text + "N more", regex as a friendly label when it's a known
+ * pattern (else a short mono snippet). Not a component (used inline in a
+ * table cell builder), so it reads translations off the i18next singleton
+ * instead of the useTranslation hook. */
+function conditionValueNode(c: ConditionItem): ReactNode {
   const t = i18n.t
   if (c.match_type === 'list') {
     const tags = c.match_value
@@ -98,45 +98,54 @@ function conditionValue(c: ConditionItem) {
   return <span className="text-fg-soft">{c.match_value}</span>
 }
 
-/** One condition per line: [JOIN] Category  values. Kept plain-text (no pills)
- * so a dense table row stays one predictable height per condition. */
-function matchCell(r: RuleItem) {
+type ConditionRow = {
+  key: number
+  join: ReactNode | null
+  category: ReactNode
+  type: ReactNode
+  value: ReactNode
+}
+
+/** One entry per condition, in order. The Category/Type/Value <td>s each map
+ * over this same array so their lines stay aligned across the row -- a
+ * multi-condition rule renders as one line per condition in every column. */
+function conditionRows(r: RuleItem): ConditionRow[] {
   const t = i18n.t
-  return (
-    <span className="flex flex-col gap-0.5 text-xs">
-      {r.conditions.map((c, i) => (
-        <span key={i} className="flex items-baseline gap-1.5">
-          {i > 0 && (
-            <span className="rounded bg-fill px-1 text-[10px] font-semibold text-accent">
-              {c.join === 'AND' ? t('conditions.joinAnd') : t('conditions.joinOr')}
-            </span>
-          )}
-          <span className="whitespace-nowrap text-fg-subtle">
-            {CATEGORY_LABEL_KEY[c.category]
-              ? t(CATEGORY_LABEL_KEY[c.category])
-              : c.category}
-          </span>
-          {conditionValue(c)}
+  return r.conditions.map((c, i) => ({
+    key: i,
+    join:
+      i > 0 ? (
+        <span className="rounded bg-fill px-1 text-[10px] font-semibold text-accent">
+          {c.join === 'AND' ? t('conditions.joinAnd') : t('conditions.joinOr')}
         </span>
-      ))}
-    </span>
-  )
+      ) : null,
+    category: (
+      <span className="whitespace-nowrap text-fg-subtle">
+        {CATEGORY_LABEL_KEY[c.category] ? t(CATEGORY_LABEL_KEY[c.category]) : c.category}
+      </span>
+    ),
+    type: (
+      <span className="whitespace-nowrap text-fg-subtle">
+        {t(MATCH_TYPE_LABEL_KEY[c.match_type])}
+      </span>
+    ),
+    value: conditionValueNode(c),
+  }))
 }
 
 /**
- * Rules: the single place to build and edit rules. "Add rule" opens the
- * rule modal, which includes a "start from a preset" quick-start. Each row can
- * be edited, previewed, or deleted.
+ * Rules: the single place to build and edit rules. "Add rule" opens the rule
+ * modal, which includes a "start from a preset" quick-start and its own Live
+ * Preview. A row's name can be double-clicked (or Enter'd, when focused) to
+ * edit it; checkboxes drive bulk enable/disable/delete for everything else.
  */
 export default function Rules() {
   const { t } = useTranslation()
   const confirm = useConfirm()
   const toast = useToast()
   const [rules, setRules] = useState<RuleItem[]>([])
-  const [apps, setApps] = useState<AppItem[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<RuleItem | null>(null)
-  const [previewFor, setPreviewFor] = useState<RuleItem | null>(null)
   const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
   const [filter, setFilter] = useState('')
   const [serviceFilter, setServiceFilter] = useState('')
@@ -144,12 +153,22 @@ export default function Rules() {
     ConditionItem['match_type'] | ''
   >('')
   const [categoryFilter, setCategoryFilter] = useState<ConditionCategory | ''>('')
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const selectAllRef = useRef<HTMLInputElement>(null)
+
+  // Whatever column is sorted becomes the primary key; rows that tie on it
+  // always fall back to priority order (the rule engine's real evaluation
+  // order) -- there's no visible Priority column, so `resetSort` below is
+  // the only way back to it once another header has been clicked.
   const {
     sorted: sortedRules,
     sortKey,
     sortDir,
     toggleSort,
-  } = useSort(rules, RULE_SORT, 'priority')
+    reset: resetSort,
+    isDefault: isDefaultSort,
+  } = useSort(rules, RULE_SORT, 'priority', 'asc', (r) => r.priority)
 
   function serviceLabel(appName: string | null, appTypeScope: string | null): string {
     return (
@@ -200,17 +219,62 @@ export default function Rules() {
     setCategoryFilter('')
   }
 
-  const previewAppId = (r: { app_scope: number | null; app_type_scope: string | null }) =>
-    r.app_scope ??
-    apps.find((a) => a.type === r.app_type_scope)?.id ??
-    apps[0]?.id ??
-    null
+  // A selection can outlive the filter that made it visible -- prune it down
+  // to still-visible rows whenever the filtered set actually changes (keyed
+  // on the id list, not the array reference, so this doesn't fire every render).
+  const visibleIdsKey = visibleRules.map((r) => r.id).join(',')
+  useEffect(() => {
+    const visibleIds = new Set(visibleRules.map((r) => r.id))
+    setSelectedIds((prev) => {
+      let changed = false
+      const next = new Set<number>()
+      for (const id of prev) {
+        if (visibleIds.has(id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleIdsKey])
+
+  const allVisibleSelected =
+    visibleRules.length > 0 && visibleRules.every((r) => selectedIds.has(r.id))
+  const someVisibleSelected = visibleRules.some((r) => selectedIds.has(r.id))
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected
+    }
+  }, [someVisibleSelected, allVisibleSelected])
+
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        for (const r of visibleRules) next.delete(r.id)
+      } else {
+        for (const r of visibleRules) next.add(r.id)
+      }
+      return next
+    })
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+  }
 
   const load = useCallback(async () => {
     try {
-      const [r, a] = await Promise.all([api.listRules(), api.listApps()])
-      setRules(r)
-      setApps(a)
+      setRules(await api.listRules())
     } catch (e) {
       toast.error(String(e))
     }
@@ -230,22 +294,79 @@ export default function Rules() {
     setModalOpen(true)
   }
 
-  async function remove(r: RuleItem) {
-    const links = await api
-      .listLinks({ rule_id: r.id, status: 'active', limit: 1 })
-      .catch(() => ({ total: 0 }))
-    const message =
-      links.total > 0
-        ? t('rules.deleteConfirmWithLinks', { name: r.name, count: links.total })
-        : t('rules.deleteConfirm', { name: r.name })
-    if (!(await confirm({ title: t('rules.deleteTitle'), message, variant: 'danger' })))
-      return
+  function ruleToInput(r: RuleItem, overrides?: Partial<RuleInput>): RuleInput {
+    return {
+      name: r.name,
+      app_scope: r.app_scope,
+      app_type_scope: r.app_type_scope,
+      conditions: r.conditions,
+      dir_template: r.dir_template,
+      filename_template: r.filename_template,
+      enabled: r.enabled,
+      unlink_on_mismatch: r.unlink_on_mismatch,
+      priority: r.priority,
+      ...overrides,
+    }
+  }
+
+  function bulkEditSingle() {
+    if (selectedIds.size !== 1) return
+    const [id] = selectedIds
+    const rule = rules.find((r) => r.id === id)
+    if (rule) openEdit(rule)
+  }
+
+  async function bulkSetEnabled(enabled: boolean) {
+    const ids = [...selectedIds]
+    setBulkBusy(true)
     try {
-      await api.deleteRule(r.id)
-      toast.success(t('rules.deletedMsg', { name: r.name }))
+      await Promise.all(
+        ids.map((id) => {
+          const rule = rules.find((r) => r.id === id)
+          return rule
+            ? api.updateRule(id, ruleToInput(rule, { enabled }))
+            : Promise.resolve()
+        }),
+      )
+      toast.success(
+        t(enabled ? 'rules.bulkEnabledMsg' : 'rules.bulkDisabledMsg', {
+          count: ids.length,
+        }),
+      )
+      clearSelection()
       await load()
     } catch (e) {
       toast.error(String(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function bulkDelete() {
+    const ids = [...selectedIds]
+    const ok = await confirm({
+      title: t('rules.deleteTitle'),
+      message: t('rules.bulkDeleteConfirm', { count: ids.length }),
+      variant: 'danger',
+    })
+    if (!ok) return
+    setBulkBusy(true)
+    try {
+      await Promise.all(ids.map((id) => api.deleteRule(id)))
+      toast.success(t('rules.bulkDeletedMsg', { count: ids.length }))
+      clearSelection()
+      await load()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  function handleNameKeyDown(e: React.KeyboardEvent, r: RuleItem) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      openEdit(r)
     }
   }
 
@@ -261,63 +382,119 @@ export default function Rules() {
         </Button>
       </div>
 
-      {rules.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="search"
-            className={filterCls}
-            placeholder={t('rules.filterPlaceholder')}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          <select
-            className={selectCls}
-            value={serviceFilter}
-            onChange={(e) => setServiceFilter(e.target.value)}
-          >
-            <option value="">{t('rules.serviceFilterAll')}</option>
-            {serviceOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select
-            className={selectCls}
-            value={matchTypeFilter}
-            onChange={(e) =>
-              setMatchTypeFilter(e.target.value as ConditionItem['match_type'] | '')
-            }
-          >
-            <option value="">{t('rules.matchTypeFilterAll')}</option>
-            {MATCH_TYPES.map((mt) => (
-              <option key={mt} value={mt}>
-                {t(MATCH_TYPE_LABEL_KEY[mt])}
-              </option>
-            ))}
-          </select>
-          <select
-            className={selectCls}
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as ConditionCategory | '')}
-          >
-            <option value="">{t('rules.categoryFilterAll')}</option>
-            {CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {t(CATEGORY_LABEL_KEY[cat])}
-              </option>
-            ))}
-          </select>
-          {hasActiveFilter && (
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
-              {t('rules.clearFilters')}
+      {rules.length > 0 &&
+        (selectedIds.size > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-md bg-accent-bg p-2">
+            <span className="px-1 text-xs font-medium text-accent">
+              {t('rules.selectedCount', { count: selectedIds.size })}
+            </span>
+            {selectedIds.size === 1 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={bulkEditSingle}
+                disabled={bulkBusy}
+              >
+                {t('rules.bulkEdit')}
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void bulkSetEnabled(true)}
+              disabled={bulkBusy}
+            >
+              {t('rules.bulkEnable')}
             </Button>
-          )}
-          <span className="text-xs text-fg-subtle">
-            {t('rules.countShown', { shown: visibleRules.length, total: rules.length })}
-          </span>
-        </div>
-      )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void bulkSetEnabled(false)}
+              disabled={bulkBusy}
+            >
+              {t('rules.bulkDisable')}
+            </Button>
+            <Button
+              variant="danger-ghost"
+              size="sm"
+              onClick={() => void bulkDelete()}
+              disabled={bulkBusy}
+            >
+              {t('rules.bulkDelete')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSelection}
+              disabled={bulkBusy}
+            >
+              {t('rules.clearSelection')}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              className={filterCls}
+              placeholder={t('rules.filterPlaceholder')}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <select
+              className={selectCls}
+              value={serviceFilter}
+              onChange={(e) => setServiceFilter(e.target.value)}
+            >
+              <option value="">{t('rules.serviceFilterAll')}</option>
+              {serviceOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={selectCls}
+              value={matchTypeFilter}
+              onChange={(e) =>
+                setMatchTypeFilter(e.target.value as ConditionItem['match_type'] | '')
+              }
+            >
+              <option value="">{t('rules.matchTypeFilterAll')}</option>
+              {MATCH_TYPES.map((mt) => (
+                <option key={mt} value={mt}>
+                  {t(MATCH_TYPE_LABEL_KEY[mt])}
+                </option>
+              ))}
+            </select>
+            <select
+              className={selectCls}
+              value={categoryFilter}
+              onChange={(e) =>
+                setCategoryFilter(e.target.value as ConditionCategory | '')
+              }
+            >
+              <option value="">{t('rules.categoryFilterAll')}</option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {t(CATEGORY_LABEL_KEY[cat])}
+                </option>
+              ))}
+            </select>
+            {hasActiveFilter && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                {t('rules.clearFilters')}
+              </Button>
+            )}
+            {!isDefaultSort && (
+              <Button variant="ghost" size="sm" onClick={resetSort}>
+                {t('rules.resetSort')}
+              </Button>
+            )}
+            <span className="text-xs text-fg-subtle">
+              {t('rules.countShown', { shown: visibleRules.length, total: rules.length })}
+            </span>
+          </div>
+        ))}
 
       {vocabWarnings.length > 0 && (
         <div className="space-y-1 rounded-md border border-warning-line bg-warning-bg p-3 text-xs text-warning-fg">
@@ -331,6 +508,15 @@ export default function Rules() {
         <table className="w-full min-w-3xl text-sm">
           <thead className="bg-surface text-left text-xs uppercase tracking-wide text-fg-subtle">
             <tr>
+              <th scope="col" className="w-8 px-3 py-2">
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  aria-label={t('rules.selectAll')}
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAll}
+                />
+              </th>
               <SortHeader
                 label={t('rules.colName')}
                 columnKey="name"
@@ -346,127 +532,109 @@ export default function Rules() {
                 onSort={toggleSort}
               />
               <th scope="col" className="px-3 py-2">
-                {t('rules.colMatch')}
+                {t('rules.colCategory')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colType')}
+              </th>
+              <th scope="col" className="px-3 py-2">
+                {t('rules.colValue')}
               </th>
               <th scope="col" className="px-3 py-2">
                 {t('rules.colDirTemplate')}
               </th>
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colFilename')}
+              <th scope="col" className="px-3 py-2 text-center">
+                {t('rules.colEnabled')}
               </th>
-              <SortHeader
-                label={t('rules.colFlags')}
-                columnKey="priority"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-              <th scope="col" className="px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {rules.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-fg-subtle">
+                <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
                   {t('rules.empty')}
                 </td>
               </tr>
             )}
             {rules.length > 0 && visibleRules.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-fg-subtle">
+                <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
                   {t('rules.noMatch')}
                 </td>
               </tr>
             )}
-            {visibleRules.map((r) => (
-              <tr key={r.id} className="bg-sunken/40">
-                <td className="px-3 py-2 align-top font-medium">
-                  {r.name}
-                  {!r.enabled && (
-                    <span className="ml-2 text-xs text-fg-subtle">{t('rules.off')}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 align-top text-fg-muted">
-                  {serviceLabel(r.app_name, r.app_type_scope)}
-                </td>
-                <td className="px-3 py-2 align-top text-xs">{matchCell(r)}</td>
-                <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-soft">
-                  {r.dir_template}
-                </td>
-                <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-subtle">
-                  {r.filename_template ?? t('rules.sourceFilename')}
-                </td>
-                <td className="px-3 py-2 align-top text-xs whitespace-nowrap text-fg-muted">
-                  {t('rules.priorityLabel', { priority: r.priority })}
-                  {r.unlink_on_mismatch ? t('rules.unlinkSuffix') : ''}
-                </td>
-                <td className="px-3 py-2 align-top">
-                  <div className="flex items-center justify-end gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewFor(previewFor?.id === r.id ? null : r)}
-                      aria-label={t('rules.previewRule', { name: r.name })}
-                      title={
-                        previewFor?.id === r.id ? t('rules.hide') : t('rules.preview')
-                      }
-                      className={`rounded p-1.5 transition-colors focus-visible:focus-ring ${
-                        previewFor?.id === r.id
-                          ? 'bg-accent-bg text-accent'
-                          : 'text-fg-subtle hover:bg-fill hover:text-fg'
-                      }`}
-                    >
-                      {previewFor?.id === r.id ? (
-                        <EyeOff className="size-4" />
-                      ) : (
-                        <Eye className="size-4" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(r)}
+            {visibleRules.map((r) => {
+              const rows = conditionRows(r)
+              return (
+                <tr
+                  key={r.id}
+                  className={`bg-sunken/40 ${r.enabled ? '' : 'opacity-60'}`}
+                >
+                  <td className="px-3 py-2 align-top">
+                    <input
+                      type="checkbox"
+                      aria-label={t('rules.selectRow', { name: r.name })}
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelected(r.id)}
+                    />
+                  </td>
+                  <td className="px-3 py-2 align-top font-medium">
+                    <span
+                      tabIndex={0}
+                      role="button"
                       aria-label={t('rules.editRule', { name: r.name })}
-                      title={t('rules.edit')}
-                      className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-fill hover:text-fg focus-visible:focus-ring"
+                      onDoubleClick={() => openEdit(r)}
+                      onKeyDown={(e) => handleNameKeyDown(e, r)}
+                      className="rounded focus-visible:focus-ring"
                     >
-                      <Pencil className="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void remove(r)}
-                      aria-label={t('rules.deleteRule', { name: r.name })}
-                      title={t('rules.delete')}
-                      className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-danger-bg hover:text-danger-fg focus-visible:focus-ring"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {previewFor && (
-              <tr className="bg-surface/40">
-                <td colSpan={7} className="px-3 py-3">
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                    {t('rules.previewHeading', { name: previewFor.name })}
-                  </h4>
-                  <PreviewPanel
-                    rule={{
-                      name: previewFor.name,
-                      app_scope: previewFor.app_scope,
-                      app_type_scope: previewFor.app_type_scope,
-                      conditions: previewFor.conditions,
-                      dir_template: previewFor.dir_template,
-                      filename_template: previewFor.filename_template,
-                      enabled: previewFor.enabled,
-                      unlink_on_mismatch: previewFor.unlink_on_mismatch,
-                      priority: previewFor.priority,
-                    }}
-                    appId={previewAppId(previewFor)}
-                  />
-                </td>
-              </tr>
-            )}
+                      {r.name}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 align-top text-fg-muted">
+                    {serviceLabel(r.app_name, r.app_type_scope)}
+                  </td>
+                  <td className="px-3 py-2 align-top text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      {rows.map((cr) => (
+                        <div key={cr.key} className="flex items-baseline gap-1.5">
+                          {cr.join}
+                          {cr.category}
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 align-top text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      {rows.map((cr) => (
+                        <div key={cr.key}>{cr.type}</div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 align-top text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      {rows.map((cr) => (
+                        <div key={cr.key}>{cr.value}</div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-soft">
+                    {r.dir_template}
+                  </td>
+                  <td className="px-3 py-2 align-top text-center">
+                    {r.enabled ? (
+                      <Check
+                        className="mx-auto size-4 text-success-fg"
+                        aria-label={t('rules.colEnabled')}
+                      />
+                    ) : (
+                      <span className="text-fg-faint" aria-hidden="true">
+                        —
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

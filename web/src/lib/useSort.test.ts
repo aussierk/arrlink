@@ -49,3 +49,50 @@ describe('useSort', () => {
     expect(result.current.sortDir).toBe('asc')
   })
 })
+
+describe('useSort tiebreaker + reset', () => {
+  type Prioritized = { name: string; priority: number }
+  const tied: Prioritized[] = [
+    { name: 'dup', priority: 3 },
+    { name: 'dup', priority: 1 },
+    { name: 'solo', priority: 2 },
+    { name: 'dup', priority: 2 },
+  ]
+  const tiedAcc = { name: (r: Prioritized) => r.name }
+
+  it('breaks ties on the primary column using the tiebreaker, ascending', () => {
+    const { result } = renderHook(() =>
+      useSort(tied, tiedAcc, 'name', 'asc', (r: Prioritized) => r.priority),
+    )
+    expect(result.current.sorted.map((r) => r.priority)).toEqual([1, 2, 3, 2])
+  })
+
+  it('tiebreaker stays ascending even when the primary direction is desc', () => {
+    const { result } = renderHook(() =>
+      useSort(tied, tiedAcc, 'name', 'asc', (r: Prioritized) => r.priority),
+    )
+    act(() => result.current.toggleSort('name')) // -> desc
+    // 'solo' now comes first (desc), then the three 'dup' rows still
+    // ascending by priority among themselves.
+    expect(result.current.sorted.map((r) => r.name)).toEqual([
+      'solo',
+      'dup',
+      'dup',
+      'dup',
+    ])
+    expect(
+      result.current.sorted.filter((r) => r.name === 'dup').map((r) => r.priority),
+    ).toEqual([1, 2, 3])
+  })
+
+  it('reset() restores the initial key/dir and isDefault reflects it', () => {
+    const { result } = renderHook(() => useSort(rows, acc, 'name', 'asc'))
+    expect(result.current.isDefault).toBe(true)
+    act(() => result.current.toggleSort('n'))
+    expect(result.current.isDefault).toBe(false)
+    act(() => result.current.reset())
+    expect(result.current.sortKey).toBe('name')
+    expect(result.current.sortDir).toBe('asc')
+    expect(result.current.isDefault).toBe(true)
+  })
+})
