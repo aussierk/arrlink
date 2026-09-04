@@ -167,7 +167,7 @@
     "colName": "Name",
     "colApp": "Service",
     "colMatch": "Match",
-    "colDirTemplate": "Dir template",
+    "colDirTemplate": "Directory template",
     "colFilename": "Filename",
     "colFlags": "Flags",
     "colPreview": "Preview",
@@ -229,7 +229,7 @@
     "general": "General",
     "services": "Services",
     "authentication": "Authentication",
-    "vocabulary": "Vocabulary",
+    "metadata": "Metadata providers",
     "backup": "Backup"
   },
   "settingsGeneral": {
@@ -325,8 +325,8 @@
     "save": "Save authentication"
   },
   "settingsVocab": {
-    "title": "Vocabulary",
-    "subtitle": "Known values per condition category (genre, certification, quality, language, collection), used for autocomplete suggestions and “match anything known” rule conditions. Everything below already refreshes automatically in the background — nothing here is a required setup step.",
+    "title": "Metadata providers",
+    "subtitle": "Where ArrLink gets the known values it suggests in rule conditions — TMDB genres and certifications, TRaSH Guides quality names, and each service's own quality profiles, languages, and collections. Everything here refreshes automatically in the background; nothing is a required setup step.",
     "keySaved": "TMDB key saved.",
     "tmdbTitle": "TMDB (genre & certification)",
     "tmdbDefaultConfigured": "A default TMDB key is configured for this deployment — genre and certification sync works with no setup.",
@@ -408,7 +408,7 @@
     "pickOrTypePattern": "Pick or type a pattern…",
     "settings": "Settings",
     "settingsHint": "These settings are applied when the conditions above are met.",
-    "dirTemplate": "Dir template",
+    "dirTemplate": "Directory template",
     "dirTemplatePlaceholder": "/media/movies/{$user}",
     "filenameTemplate": "Filename template",
     "filenameTemplatePlaceholder": "{$stem} (empty = keep source name)",

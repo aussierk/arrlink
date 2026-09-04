@@ -174,7 +174,7 @@ export default function Tags() {
       {/* ------------------------------ App tags --------------------------- */}
       <div className="flex items-end gap-3">
         <div>
-          <h2 className="text-lg font-semibold">{t('tags.appTags.title')}</h2>
+          <h2 className="text-xl font-semibold">{t('tags.appTags.title')}</h2>
           <p className="text-sm text-fg-subtle">{t('tags.appTags.subtitle')}</p>
         </div>
         {apps.length > 0 && (
@@ -266,7 +266,7 @@ export default function Tags() {
                       ))}
                     </select>
                     {isPending && (
-                      <span className="ml-1.5 text-[11px] text-warning-fg">
+                      <span className="ml-1.5 text-xs text-warning-fg">
                         {t('tags.appTags.unsaved')}
                       </span>
                     )}

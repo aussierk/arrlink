@@ -138,6 +138,19 @@
   --color-sonarr-bg: var(--sonarr-bg);
 }
 
+/* Type scale. The UI leans heavily on `text-sm` for body copy and `text-xs`
+   for secondary text; the stock 14px / 12px read small and cramped, so nudge
+   both (and their line-heights) up one step. Font size only — spacing is
+   untouched. Everything above `text-base` keeps the Tailwind defaults. */
+@theme {
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+}
+
 /* One consistent keyboard-focus treatment. Opt in with `focus-ring` on an
    interactive element (pair with `focus-visible:` so it only shows for
    keyboard users). */
@@ -153,4 +166,6 @@
 body {
   background-color: var(--color-canvas);
   color: var(--color-fg);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
 }

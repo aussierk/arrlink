@@ -150,6 +150,8 @@ export default function LinksPanel() {
                 <td className="px-3 py-2 text-xs">
                   {l.status === 'active' ? (
                     <span className="text-success-fg">{t('linksTable.active')}</span>
+                  ) : l.status === 'stale' ? (
+                    <span className="text-warning-fg">{t('linksTable.stale')}</span>
                   ) : (
                     <span className="text-warning-fg">{l.status}</span>
                   )}

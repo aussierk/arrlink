@@ -10,7 +10,11 @@ const items = [
     labelKey: 'settingsNav.authentication',
     icon: KeyRound,
   },
-  { to: '/settings/vocabulary', labelKey: 'settingsNav.vocabulary', icon: Library },
+  {
+    to: '/settings/metadata-providers',
+    labelKey: 'settingsNav.metadata',
+    icon: Library,
+  },
   { to: '/settings/backup', labelKey: 'settingsNav.backup', icon: HardDriveDownload },
 ] as const
 

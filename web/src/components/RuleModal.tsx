@@ -135,7 +135,7 @@ export default function RuleModal({
   const [presets, setPresets] = useState<PresetItem[]>([])
   // Known values per rich category (genre/language/quality/certification/
   // collection), backed by the DB vocabulary table — TMDB/TRaSH/instance
-  // synced automatically in the background (see Settings > Vocabulary).
+  // synced automatically in the background (see Settings > Metadata providers).
   const [vocab, setVocab] = useState<
     Partial<Record<ConditionCategory, VocabularyEntry[]>>
   >({})
@@ -395,9 +395,7 @@ export default function RuleModal({
             ))}
             <option value={CUSTOM}>{t('ruleModal.customRegex')}</option>
           </select>
-          {regexPick?.hint && (
-            <p className="text-[11px] text-fg-subtle">{regexPick.hint}</p>
-          )}
+          {regexPick?.hint && <p className="text-xs text-fg-subtle">{regexPick.hint}</p>}
           {regexIsCustom && (
             <textarea
               className={inputCls + ' font-mono'}
@@ -511,7 +509,7 @@ export default function RuleModal({
                 <span className="text-xs text-fg-subtle">{t('ruleModal.noPresets')}</span>
               )}
             </div>
-            <p className="mt-2 text-[11px] text-fg-subtle">{t('ruleModal.presetHint')}</p>
+            <p className="mt-2 text-xs text-fg-subtle">{t('ruleModal.presetHint')}</p>
           </div>
         )}
 
@@ -539,7 +537,7 @@ export default function RuleModal({
                       <button
                         type="button"
                         onClick={() => toggleJoin(i)}
-                        className="rounded bg-fill px-2 py-0.5 text-[11px] font-semibold text-accent hover:bg-line-strong"
+                        className="rounded bg-fill px-2 py-0.5 text-xs font-semibold text-accent hover:bg-line-strong"
                       >
                         {c.join === 'AND'
                           ? t('conditions.joinAnd')
@@ -642,7 +640,7 @@ export default function RuleModal({
                               </button>
                             ))}
                           </div>
-                          <p className="mt-1 text-[11px] text-fg-subtle">
+                          <p className="mt-1 text-xs text-fg-subtle">
                             {(c.source ?? 'tag') === 'native'
                               ? t('ruleModal.sourceNativeHint')
                               : t('ruleModal.sourceTagHint')}

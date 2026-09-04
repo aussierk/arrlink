@@ -37,13 +37,13 @@ function conditionValue(c: ConditionItem) {
         {shown.map((tag) => (
           <span
             key={tag}
-            className="rounded-full border border-line-strong bg-surface px-1.5 py-0.5 text-[11px] text-fg-soft"
+            className="rounded-full border border-line-strong bg-surface px-1.5 py-0.5 text-xs text-fg-soft"
           >
             {tag}
           </span>
         ))}
         {more > 0 && (
-          <span className="text-[11px] text-fg-subtle">
+          <span className="text-xs text-fg-subtle">
             {t('rules.matchMore', { count: more })}
           </span>
         )}
@@ -53,7 +53,7 @@ function conditionValue(c: ConditionItem) {
   if (c.match_type === 'regex') {
     const pick = REGEX_PICKS.find((p) => p.pattern === c.match_value)
     return (
-      <span className={pick ? '' : 'break-all font-mono text-[11px]'}>
+      <span className={pick ? '' : 'break-all font-mono text-xs'}>
         {pick ? pick.label : c.match_value}
       </span>
     )
@@ -69,7 +69,7 @@ function matchCell(r: RuleItem) {
       {r.conditions.map((c, i) => (
         <span key={i} className="flex items-center gap-1">
           {i > 0 && (
-            <span className="rounded bg-fill px-1 text-[10px] font-semibold text-accent">
+            <span className="rounded bg-fill px-1 text-xs font-semibold text-accent">
               {c.join === 'AND' ? t('conditions.joinAnd') : t('conditions.joinOr')}
             </span>
           )}

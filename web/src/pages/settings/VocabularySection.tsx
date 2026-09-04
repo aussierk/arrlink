@@ -8,12 +8,13 @@ import SubSection from '../../components/ui/SubSection'
 import Button from '../../components/ui/Button'
 
 /**
- * Vocabulary sources (genre/certification/quality/language/collection):
+ * Metadata providers (genre/certification/quality/language/collection):
  * everything here already refreshes automatically in the background
  * (TMDB genre/certification + TRaSH Guides quality naming on a daily
- * cadence, per-app quality profiles/languages/collections on every poll).
- * This section is status + an optional TMDB key override + "refresh now"
- * buttons for immediate feedback — nothing here is a required setup step.
+ * cadence, per-service quality profiles/languages/collections on every
+ * poll). This section is status + an optional TMDB key override + "refresh
+ * now" buttons for immediate feedback — nothing here is a required setup
+ * step.
  */
 export default function VocabularySection() {
   const { t } = useTranslation()

@@ -40,7 +40,11 @@ export const router = createBrowserRouter([
           { path: 'general', element: <GeneralSection /> },
           { path: 'services', element: <ServicesSection /> },
           { path: 'authentication', element: <AuthenticationSection /> },
-          { path: 'vocabulary', element: <VocabularySection /> },
+          { path: 'metadata-providers', element: <VocabularySection /> },
+          {
+            path: 'vocabulary',
+            element: <Navigate to="/settings/metadata-providers" replace />,
+          },
           { path: 'backup', element: <BackupSection /> },
         ],
       },
