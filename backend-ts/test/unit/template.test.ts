@@ -146,10 +146,17 @@ describe('path jail', () => {
 })
 
 describe('cross-platform root handling', () => {
-  it('sanitizes a Windows drive-letter absolute path, preserving the drive root', () => {
-    const d = sanitizeDirPath('C:/media/{x}/kids'.replace('{x}', 'movies'))
-    expect(d.startsWith('C:')).toBe(true)
-  })
+  // A Windows drive-letter path (e.g. C:/media/...) is only absolute on
+  // Windows -- path.isAbsolute correctly returns false for it on POSIX,
+  // where it's just an unusual relative segment. This test validates
+  // Windows-specific behavior, so it only makes sense to run there.
+  it.runIf(process.platform === 'win32')(
+    'sanitizes a Windows drive-letter absolute path, preserving the drive root',
+    () => {
+      const d = sanitizeDirPath('C:/media/movies/kids')
+      expect(d.startsWith('C:')).toBe(true)
+    },
+  )
 
   it('rejects a relative path regardless of platform', () => {
     expect(() => sanitizeDirPath('relative/path')).toThrow(TemplateError)
