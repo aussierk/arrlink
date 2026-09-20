@@ -1,9 +1,18 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createApp, type AppContext } from '../../src/app.js'
 import { loadSettings } from '../../src/config/env.js'
+
+// These tests need a real built `web/dist` (gitignored, produced by `npm run
+// build` in web/) -- skip gracefully rather than fail on a fresh checkout/CI
+// box that never built the frontend.
+const webDistDir = join(process.cwd(), '..', 'web', 'dist')
+const hasWebDist = existsSync(join(webDistDir, 'index.html'))
+const oneAsset = hasWebDist
+  ? readdirSync(join(webDistDir, 'assets')).find((f) => f.endsWith('.js'))
+  : undefined
 
 let dir: string
 let ctx: AppContext
@@ -19,9 +28,9 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-describe('static/SPA serving', () => {
+describe.skipIf(!hasWebDist)('static/SPA serving', () => {
   it('serves a real fingerprinted asset as-is', async () => {
-    const res = await ctx.app.inject({ method: 'GET', url: '/assets/index-CFwFUYUG.js' })
+    const res = await ctx.app.inject({ method: 'GET', url: `/assets/${oneAsset}` })
     expect(res.statusCode).toBe(200)
     expect(res.headers['content-type']).toContain('javascript')
   })
