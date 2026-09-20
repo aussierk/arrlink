@@ -12,6 +12,16 @@ import { findDist } from './find-dist.js'
 import { HttpError } from './http-error.js'
 import { registerHealthRoutes } from './api/health.js'
 import { registerAuthRoutes } from './api/auth.js'
+import { registerAppsRoutes } from './api/apps.js'
+import { registerTagsRoutes } from './api/tags.js'
+import { registerRulesRoutes } from './api/rules.js'
+import { registerSettingsRoutes } from './api/settings.js'
+import { registerLinksRoutes } from './api/links.js'
+import { registerPresetsRoutes } from './api/presets.js'
+import { registerBackupRoutes } from './api/backup.js'
+import { registerVocabularyRoutes } from './api/vocabulary.js'
+import { registerLogsRoutes } from './api/logs.js'
+import { Poller } from './core/poller.js'
 
 export interface AppContext {
   app: FastifyInstance
@@ -54,10 +64,25 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   const dist = findDist(here)
   registerSecurityHeaders(app, buildCsp(dist ? join(dist, 'index.html') : null))
 
+  const poller = new Poller(db, settings)
+  const routeOpts = { db, settingsStore, env: settings }
+
   registerHealthRoutes(app, { db })
-  registerAuthRoutes(app, { db, settingsStore, env: settings })
+  registerAuthRoutes(app, routeOpts)
+  registerAppsRoutes(app, { ...routeOpts, getPoller: () => poller })
+  registerTagsRoutes(app, routeOpts)
+  registerRulesRoutes(app, routeOpts)
+  registerSettingsRoutes(app, routeOpts)
+  registerLinksRoutes(app, routeOpts)
+  registerPresetsRoutes(app, routeOpts)
+  registerBackupRoutes(app, routeOpts)
+  registerVocabularyRoutes(app, routeOpts)
+  registerLogsRoutes(app, routeOpts)
+
+  poller.start()
 
   const close = async (): Promise<void> => {
+    poller.stop()
     await app.close()
     closeDb(db)
     await releaseInstanceLock(lockPath)

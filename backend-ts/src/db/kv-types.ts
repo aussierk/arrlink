@@ -15,6 +15,7 @@ export type SettingKey =
   | 'fs_fallback'
   | 'allowed_roots'
   | 'app_title'
+  | 'display_language'
   | 'display_timezone'
   | 'events_retention'
   | 'global_unlink_on_mismatch'

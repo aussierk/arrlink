@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { AdapterError, type Item, type MediaFile, type Tag } from '../arr/types.js'
 import { getAdapter } from '../arr/factory.js'
 import { normalizeFsFallback, type Settings } from '../config/env.js'
@@ -9,11 +9,11 @@ import {
   apps,
   links,
   rules as rulesTable,
-  tags as tagsTable,
   vocabulary,
 } from '../db/schema.js'
 import { logEvent } from '../db/events.js'
 import { SettingsStore } from '../db/settings-store.js'
+import { syncAppTags } from '../db/tags.js'
 import { removeLink, resolveFsFallback } from './fsutil.js'
 import { reconcile } from './linker.js'
 import type { Condition } from './matching.js'
@@ -353,7 +353,7 @@ export class Poller {
       return false
     }
 
-    this.storeTags(appId, tags)
+    syncAppTags(this.db, appId, tags)
     this.storeItems(appId, items, Date.now() / 1000)
     await this.syncInstanceVocabulary(appId, app.type, items)
     this.reconcileApp(appId, app.name, app.type, items)
@@ -367,31 +367,6 @@ export class Poller {
   }
 
   // -------------------------------------------------------------- storage
-
-  /** Full-replace: the poller's tag fetch is the app's complete vocabulary, so
-   * tags the app no longer reports are cleared. */
-  private storeTags(appId: number, tags: Tag[]): void {
-    const now = Date.now() / 1000
-    const labels = tags.map((t) => t.label)
-    if (labels.length > 0) {
-      this.db
-        .delete(tagsTable)
-        .where(and(eq(tagsTable.appId, appId), notInArray(tagsTable.label, labels)))
-        .run()
-    } else {
-      this.db.delete(tagsTable).where(eq(tagsTable.appId, appId)).run()
-    }
-    for (const t of tags) {
-      this.db
-        .insert(tagsTable)
-        .values({ appId, label: t.label, count: t.count, importedAt: now })
-        .onConflictDoUpdate({
-          target: [tagsTable.appId, tagsTable.label],
-          set: { count: t.count, importedAt: now },
-        })
-        .run()
-    }
-  }
 
   /** Diff the app's reported items/files against what's stored and persist the
    * delta, chunk-committing every STORE_COMMIT_BATCH rows to release the WAL

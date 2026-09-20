@@ -134,6 +134,25 @@ export function staticPrefix(template: string | null): string {
   return normalize((template || '').replace(PLACEHOLDER, 'x'))
 }
 
+/** Names of enabled rules whose dir template escapes the allowed roots. Used
+ * at startup and by the dashboard to surface legacy rules (e.g. after a
+ * root-default change) -- pure over a caller-supplied rule list, not DB-aware. */
+export function auditRuleRoots(
+  rules: Array<{ name: string; dirTemplate: string }>,
+  roots: string[],
+): string[] {
+  const bad: string[] = []
+  for (const rule of rules) {
+    try {
+      checkJail(staticPrefix(rule.dirTemplate), roots)
+    } catch (e) {
+      if (e instanceof TemplateError) bad.push(rule.name)
+      else throw e
+    }
+  }
+  return bad
+}
+
 export function buildContext(
   matchedConditions: ConditionMatch[],
   appName: string,

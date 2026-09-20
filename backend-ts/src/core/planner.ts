@@ -92,8 +92,8 @@ function nativeValues(it: PlannerItem): Record<string, string[]> {
 }
 
 /** Does this rule's scope cover the given app? */
-function ruleAppliesToApp(
-  rule: PlannerRule,
+export function ruleAppliesToApp(
+  rule: Pick<PlannerRule, 'appScope' | 'appTypeScope'>,
   appId: number | null,
   appType: string | null,
 ): boolean {
