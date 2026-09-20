@@ -289,6 +289,10 @@ describe('Poller.rescan', () => {
 
 describe('Poller.start/stop', () => {
   it('starts and stops without throwing, and stop is idempotent', () => {
+    // No mocked fetch here -- disable the app first so the supervisor loop's
+    // first tick finds nothing to poll. Otherwise a real pollOnce() kicks off
+    // in the background and can still be in flight when afterEach closes db.
+    db.update(apps).set({ enabled: 0 }).where(eq(apps.id, appId)).run()
     const poller = new Poller(db, settings)
     poller.start()
     expect(() => {
