@@ -1,5 +1,13 @@
+import { sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { planLinks, type PlannerItem, type PlannerRule } from '../../src/core/planner.js'
+
+// planLinks joins dirPath+filename with the native path module (this
+// backend targets native deployment on any host OS), so expected dst
+// paths are built the same way rather than hardcoded as POSIX literals.
+function P(...segments: string[]): string {
+  return segments.join(sep)
+}
 
 function rule(overrides: Partial<PlannerRule>): PlannerRule {
   return {
@@ -69,10 +77,12 @@ describe('planLinks', () => {
     const { planned, errors } = planLinks(rules, items, 'Radarr', 1, ['/linked'])
     expect(errors).toEqual([])
     const dsts = planned.map((p) => p.dstPath).sort()
-    expect(dsts).toEqual([
-      '/linked/movies/kids/Kids Movie.2019.mkv',
-      '/linked/movies/users/alice/Inception.2010.2160p.mkv',
-    ])
+    expect(dsts).toEqual(
+      [
+        P('', 'linked', 'movies', 'kids', 'Kids Movie.2019.mkv'),
+        P('', 'linked', 'movies', 'users', 'alice', 'Inception.2010.2160p.mkv'),
+      ].sort(),
+    )
 
     rules[0].enabled = false
     const second = planLinks(rules, items, 'Radarr', 1, ['/linked'])
@@ -176,10 +186,9 @@ describe('planLinks', () => {
       },
     ]
     const { planned } = planLinks(rules, items, 'Radarr', 1, ['/linked'])
-    expect(planned.map((p) => p.dstPath).sort()).toEqual([
-      '/linked/4k-hdr/t.mkv',
-      '/linked/4k-sdr/t.mkv',
-    ])
+    expect(planned.map((p) => p.dstPath).sort()).toEqual(
+      [P('', 'linked', '4k-hdr', 't.mkv'), P('', 'linked', '4k-sdr', 't.mkv')].sort(),
+    )
     expect(new Set(planned.map((p) => p.matchKey)).size).toBe(2)
   })
 

@@ -182,10 +182,12 @@ export function createLink(
   try {
     // O_NOFOLLOW is the TOCTOU guard: if `src` was swapped for a symlink
     // after the islink() check above, this open fails closed instead of
-    // silently following it. Only defined on POSIX -- production is
-    // Linux-only (see the Dockerfile), so this is always present there;
-    // it's simply absent on a Windows dev machine, where this function
-    // falls back to a plain open (dev-only gap, not a production one).
+    // silently following it. Only defined on POSIX. This backend also
+    // targets native Windows deployment (not just Docker/Linux), and
+    // Windows has no equivalent flag -- on Windows this is therefore a
+    // real, narrower defense-in-depth gap (not just a dev-machine
+    // artifact): the early isSymlink(src) check above is the only guard
+    // against a source-swapped-for-a-symlink race on that platform.
     const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)
     fd = openSync(src, flags)
   } catch (e) {

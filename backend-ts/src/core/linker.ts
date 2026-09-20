@@ -1,4 +1,4 @@
-import { dirname } from 'node:path/posix'
+import { dirname } from 'node:path'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Stats } from 'node:fs'
 import { scandirStats } from '../arr/scandir-stats.js'

@@ -1,25 +1,29 @@
-import { basename, extname, normalize, sep } from 'node:path/posix'
+import { basename, extname, isAbsolute, normalize, parse, sep } from 'node:path'
 import type { ConditionMatch } from './matching.js'
 
 /**
  * Template engine: dir + filename resolution, sanitization, and the path
  * jail. Ported from core/template.py.
  *
- * Deliberately uses `node:path/posix`, not the native `node:path` module:
- * destination paths always describe the production Linux container's
- * filesystem (the *arr apps' media mounts), regardless of what platform
- * this backend happens to run/test on. This is the inverse choice from
- * arr/scandir-stats.ts, and it matters here specifically because checkJail
- * is a security boundary -- a bare `startsWith` prefix check combined with
- * a host-native path module would open a jail-escape vector on any host
- * where the path separator isn't `/`. Do not swap this for native `path`.
+ * Unlike the Python original (Linux/Docker-only), this backend also
+ * targets native/bare-metal deployment on any host OS, so path handling
+ * here adapts to whatever platform it's actually running on via the
+ * native `node:path` module rather than forcing POSIX. This matters most
+ * in checkJail (a real security boundary): the traversal check below
+ * operates on raw, unnormalized path segments -- deliberately, so a
+ * literal `..` segment is always rejected before `path.normalize` ever
+ * gets a chance to silently collapse it away. The root prefix is derived
+ * once via `path.parse` (which does not normalize either), so this holds
+ * for POSIX roots, Windows drive-letter roots, and UNC roots alike.
  */
 
-// Default allowed root for destination paths. The container is expected to
-// see the *arr apps' media at /media (mounted read-only, mirroring the
-// apps) and to write its links under /media/linked -- on the same pool, so
-// hardlinks work. Override with the `allowed_roots` Setting if mounted
-// elsewhere.
+// Default allowed root for destination paths. On the common Docker/Linux
+// deployment the container sees the *arr apps' media at /media (mounted
+// read-only, mirroring the apps) and writes its links under /media/linked
+// -- on the same pool, so hardlinks work. This is still a valid
+// (root-relative) absolute path on Windows, but a native Windows/macOS
+// deployment should set the `allowed_roots` Setting to a real path (e.g.
+// `D:\media`) rather than relying on this default.
 export const DEFAULT_ROOTS = ['/media']
 
 // Characters that are unsafe in a path segment (Windows + POSIX + control).
@@ -90,21 +94,33 @@ export function resolveTemplate(template: string | null, ctx: TemplateContext): 
   return template.replace(PLACEHOLDER, (_whole, name: string) => resolveToken(name, ctx))
 }
 
-/** Turn a resolved (absolute) dir string into a safe absolute path. */
+/**
+ * Turn a resolved (absolute) dir string into a safe absolute path, native
+ * to whatever host this is running on (POSIX, Windows drive-letter, or
+ * UNC). `path.parse` (not `normalize`) gives the root without collapsing
+ * anything -- the segment loop below is what rejects a literal `..`, and
+ * it must see that segment before any normalization could remove it.
+ */
 export function sanitizeDirPath(resolved: string): string {
-  if (!resolved.startsWith('/')) {
+  if (!isAbsolute(resolved)) {
     throw new TemplateError('dir template must resolve to an absolute path')
   }
+  const { root } = parse(resolved)
+  const rest = resolved.slice(root.length)
   const parts: string[] = []
-  for (const raw of resolved.split('/')) {
+  for (const raw of rest.split(/[\\/]+/)) {
     if (raw === '' || raw === '.') continue
     if (raw === '..') throw new TemplateError("path traversal ('..') not allowed")
     const c = clean(raw)
     if (c) parts.push(c)
   }
-  if (parts.length === 0)
+  if (parts.length === 0) {
     throw new TemplateError('dir template resolved to an empty path')
-  return '/' + parts.join('/')
+  }
+  // Normalize the root's own separator style too (a root-relative `/`
+  // input on Windows carries a POSIX-style root from path.parse), so the
+  // returned path is consistently native throughout.
+  return root.replace(/[\\/]/g, sep) + parts.join(sep)
 }
 
 export function sanitizeFilename(resolved: string): string {

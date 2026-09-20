@@ -7,8 +7,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join as nativeJoin } from 'node:path'
-import { join } from 'node:path/posix'
+import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDb, openDb, type DbClient } from '../../src/db/client.js'
@@ -44,14 +43,11 @@ function makeFile(relPath: string): number {
 }
 
 beforeEach(() => {
-  // linker.ts deliberately uses node:path/posix (dst_paths are always
-  // POSIX in production -- see the plan's template.ts risk callout, which
-  // linker.ts inherits). Normalize the native tmp-dir path to forward
-  // slashes so every path built from it stays posix-parseable; Windows'
-  // fs APIs accept forward-slash paths interchangeably, so this doesn't
-  // affect the real file operations below.
-  const prefix = nativeJoin(tmpdir(), 'arrlink-linker-')
-  dir = mkdtempSync(prefix).replace(/\\/g, '/')
+  // linker.ts uses the native path module (this backend targets native
+  // deployment on any host OS, not just Docker/Linux -- see template.ts),
+  // so plain native path.join throughout is correct here, unlike the
+  // POSIX-forced version this test used to work around.
+  dir = mkdtempSync(join(tmpdir(), 'arrlink-linker-'))
   mediaDir = join(dir, 'media')
   linkedDir = join(dir, 'linked')
   mkdirSync(mediaDir, { recursive: true })

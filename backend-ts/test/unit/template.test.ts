@@ -1,3 +1,4 @@
+import { sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ConditionMatch } from '../../src/core/matching.js'
 import {
@@ -8,6 +9,14 @@ import {
   sanitizeDirPath,
   sanitizeFilename,
 } from '../../src/core/template.js'
+
+// Expected outputs are built with the native separator throughout: this
+// backend targets native deployment on any host OS (not just Docker/Linux),
+// so sanitizeDirPath/checkJail adapt to whatever platform they run on --
+// these tests validate that adaptation, not one hardcoded style.
+function P(...segments: string[]): string {
+  return segments.join(sep)
+}
 
 function matched(
   category: string,
@@ -44,7 +53,7 @@ describe('template placeholders', () => {
       '/media/movies/Inception.2010.2160p.mkv',
     )
     const { d } = resolve('/linked/{$app}/{$certification}/{$title} ({$year})', null, ctx)
-    expect(d).toBe('/linked/Radarr/PG-13/Inception (2010)')
+    expect(d).toBe(P('', 'linked', 'Radarr', 'PG-13', 'Inception (2010)'))
   })
 
   it('uses the regex capture group as the placeholder value, not the whole matched tag', () => {
@@ -57,7 +66,7 @@ describe('template placeholders', () => {
       '/media/movies/Inception.2010.2160p.mkv',
     )
     const { d, f } = resolve('/linked/movies/users/{$user}', null, ctx)
-    expect(d).toBe('/linked/movies/users/alice')
+    expect(d).toBe(P('', 'linked', 'movies', 'users', 'alice'))
     expect(f).toBe('Inception.2010.2160p.mkv') // source basename kept
   })
 
@@ -87,8 +96,9 @@ describe('template placeholders', () => {
       '/media/movies/T.mkv',
     )
     const { d } = resolve('/linked/{$custom}', null, ctx)
-    expect(d).toBe('/linked/a b c d e')
-    expect(d.split('/linked/')[1]).not.toContain('/')
+    expect(d).toBe(P('', 'linked', 'a b c d e'))
+    // no separator of either style leaked through into the sanitized segment
+    expect(d.slice(d.lastIndexOf(sep) + 1)).not.toMatch(/[\\/]/)
   })
 
   it('throws for an unknown placeholder', () => {
@@ -128,5 +138,21 @@ describe('path jail', () => {
   it('allows a real child path and the root itself', () => {
     expect(() => checkJail('/linked/movies/kids', ['/linked'])).not.toThrow()
     expect(() => checkJail('/linked', ['/linked'])).not.toThrow()
+  })
+
+  it('rejects escaping via a literal traversal segment even when mixed with the native separator', () => {
+    expect(() => sanitizeDirPath(`/linked${sep}..${sep}etc`)).toThrow(TemplateError)
+  })
+})
+
+describe('cross-platform root handling', () => {
+  it('sanitizes a Windows drive-letter absolute path, preserving the drive root', () => {
+    const d = sanitizeDirPath('C:/media/{x}/kids'.replace('{x}', 'movies'))
+    expect(d.startsWith('C:')).toBe(true)
+  })
+
+  it('rejects a relative path regardless of platform', () => {
+    expect(() => sanitizeDirPath('relative/path')).toThrow(TemplateError)
+    expect(() => sanitizeDirPath('relative\\path')).toThrow(TemplateError)
   })
 })

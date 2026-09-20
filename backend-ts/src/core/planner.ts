@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import type { Condition, ConditionMatch, ConditionsResult } from './matching.js'
 import { matchConditions } from './matching.js'
 import { TemplateError, resolveDestination } from './template.js'
@@ -175,7 +176,7 @@ export function planLinks(
             }
             throw e
           }
-          const dstPath = `${dirPath}/${filename}`
+          const dstPath = join(dirPath, filename)
           if (seenDstPaths.has(dstPath)) {
             // two matching tags resolved to the same destination (e.g. the
             // varying category isn't referenced by the template) -- one
