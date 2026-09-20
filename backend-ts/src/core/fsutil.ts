@@ -18,17 +18,11 @@ import {
 import type { SettingsStore } from '../db/settings-store.js'
 import { normalizeFsFallback, type FsFallbackMode } from '../config/env.js'
 
-/**
- * Filesystem primitives for the hardlinker. Ported from core/fsutil.py.
- *
- * All operations are defensive: we only ever create/remove entries that we
- * created ourselves (tracked in the `links` table), and we verify inodes
- * before deleting anything. The O_NOFOLLOW-guarded open + post-hoc inode
- * verification in createLink is a deliberate TOCTOU defense against a
- * source path being swapped for a symlink between the early islink() check
- * and the actual link() -- port every check here in the same order, and
- * don't "simplify" any of them away (see the plan's fsutil risk callout).
- */
+/** Filesystem primitives for the hardlinker. Ported from core/fsutil.py. We only
+ * ever create/remove entries we created ourselves, and verify inodes before
+ * deleting anything. createLink's O_NOFOLLOW-guarded open + post-hoc inode
+ * check is a TOCTOU defense against `src` being swapped for a symlink between
+ * the early isSymlink() check and the actual link(). */
 
 export interface LinkResult {
   ok: boolean
@@ -100,12 +94,8 @@ function errorDetail(e: unknown): string {
 
 const COPY_CHUNK_BYTES = 1024 * 1024
 
-/**
- * Copies from an already-open fd (the O_NOFOLLOW-verified source) to a
- * fresh file at `dst`, never reopening `src` by path -- reopening here
- * would reintroduce the TOCTOU window the fd-based open above exists to
- * close.
- */
+/** Copies from an already-open fd to `dst`, never reopening `src` by path --
+ * that would reintroduce the TOCTOU window the fd-based open closes. */
 function copyFromFd(srcFd: number, dst: string): void {
   const dstFd = openSync(dst, 'w')
   try {
@@ -123,14 +113,10 @@ function copyFromFd(srcFd: number, dst: string): void {
 }
 
 export interface CreateLinkDeps {
-  /** Override point for tests -- exercising the cross-device fallback branches needs a
-   * genuine cross-device mount otherwise (same limitation the Python test suite has, where
-   * it monkeypatches same_device for exactly this reason). Defaults to the real sameDevice. */
+  /** Test override -- exercising cross-device fallback needs a real cross-device mount otherwise. */
   sameDevice?: (a: string, b: string) => boolean | null
-  /** Override point for the TOCTOU regression test: simulates the early islink/isfile checks
-   * being bypassed (e.g. a race), so the test can confirm the O_NOFOLLOW-guarded open below is
-   * a real, independent defense and not the only thing standing between a symlink source and a
-   * created link. Defaults to the real checks. */
+  /** Test override -- simulates the early symlink/file checks being bypassed, to confirm
+   * O_NOFOLLOW is an independent defense, not the only guard. */
   isSymlink?: (path: string) => boolean
   isFile?: (path: string) => boolean
 }
@@ -180,14 +166,10 @@ export function createLink(
 
   let fd: number
   try {
-    // O_NOFOLLOW is the TOCTOU guard: if `src` was swapped for a symlink
-    // after the islink() check above, this open fails closed instead of
-    // silently following it. Only defined on POSIX. This backend also
-    // targets native Windows deployment (not just Docker/Linux), and
-    // Windows has no equivalent flag -- on Windows this is therefore a
-    // real, narrower defense-in-depth gap (not just a dev-machine
-    // artifact): the early isSymlink(src) check above is the only guard
-    // against a source-swapped-for-a-symlink race on that platform.
+    // O_NOFOLLOW: if `src` was swapped for a symlink after the isSymlink()
+    // check above, this open fails closed. POSIX-only -- on Windows (no
+    // equivalent flag), the early isSymlink(src) check is the only guard
+    // against that race.
     const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)
     fd = openSync(src, flags)
   } catch (e) {
@@ -231,11 +213,8 @@ export function createLink(
   }
 }
 
-/**
- * The effective cross-filesystem fallback mode. A runtime value set via
- * the `fs_fallback` Setting (Settings page) takes precedence over the
- * process/env default; both are normalized to a valid mode.
- */
+/** The effective cross-filesystem fallback mode; the `fs_fallback` Setting
+ * overrides the process/env default. */
 export function resolveFsFallback(
   db: SettingsStore | null,
   envDefault: FsFallbackMode = 'skip',
@@ -244,10 +223,8 @@ export function resolveFsFallback(
   return normalizeFsFallback(value, envDefault)
 }
 
-/**
- * Remove a link we created. Refuses symlinks; removes the dir entry only
- * (the file data survives via its other links / the source).
- */
+/** Remove a link we created. Refuses symlinks; removes the dir entry only
+ * (the file data survives via its other links / the source). */
 export function removeLink(dst: string): LinkResult {
   if (isSymlink(dst)) return fail(dst, 'refusing to remove a symlink')
   if (!lexists(dst)) return ok(dst) // already gone

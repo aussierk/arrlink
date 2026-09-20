@@ -8,24 +8,13 @@ import { links, rules as rulesTable } from '../db/schema.js'
 import { createLink, ensureDir, inodeOf, removeLink } from './fsutil.js'
 import type { PlannedLink } from './planner.js'
 
-/**
- * The hardlink reconciler. Ported from core/linker.py.
- *
- * Both passes interleave real hardlink creation/removal with their DB
- * writes. Chunked BEGIN/COMMIT (mirroring state.py's `transaction()` +
- * periodic `db.commit()`) keeps each batch atomic while still releasing
- * the WAL writer lock between chunks, so a concurrent API write isn't
- * starved -- and bounds a mid-loop failure's blast radius to one chunk;
- * the DB and filesystem stay consistent only up to the last committed
- * batch, and the next poll re-reconciles the rest (self-healing, by
- * design).
- */
+/** The hardlink reconciler. Ported from core/linker.py. Chunked BEGIN/COMMIT
+ * releases the WAL writer lock between batches and bounds a mid-loop failure
+ * to one batch; the next poll re-reconciles the rest. */
 
 export const DEFAULT_DELETE_AFTER = 3
 
-// Mutable (not a plain const) so tests can shrink it the same way Python's
-// test suite monkeypatches the module-level COMMIT_BATCH, to exercise the
-// chunked-commit behavior without needing hundreds of rows.
+// Mutable so tests can shrink it (mirrors Python's COMMIT_BATCH monkeypatch).
 export const RECONCILE_TUNABLES = { commitBatch: 500 }
 
 export interface ReconcileResult {
@@ -38,18 +27,13 @@ export interface ReconcileResult {
 type LinkRow = typeof links.$inferSelect
 type RuleRow = typeof rulesTable.$inferSelect
 
-/**
- * Inode from the pre-scanned scandirStats cache when the file was present
- * at scan time; otherwise a live inodeOf (the file is gone, was replaced,
- * or its directory couldn't be read).
- */
+/** Inode from the pre-scanned cache, else a live stat. */
 function cachedIno(path: string, cache: Map<string, Stats>): number | null {
   const st = cache.get(path)
   return st !== undefined ? st.ino : inodeOf(path)
 }
 
-/** Runs `fn` for each item, committing every `commitBatch` items instead of holding one
- * transaction for the whole pass (see the module doc for why). */
+/** Runs `fn` for each item, committing every `commitBatch` items instead of one big transaction. */
 function withChunkedCommits<T>(
   db: DbClient,
   items: T[],
@@ -91,12 +75,9 @@ export function reconcile(
     if (p.fileId !== null) planned.set(planKey(p.ruleId, p.fileId, p.matchKey), p)
   }
 
-  // Detect two different (rule, file) plans both wanting the same
-  // destination path -- e.g. two overlapping rules -- and name both rules
-  // explicitly. fsutil.createLink() would eventually catch this too (an
-  // inode mismatch when the second create attempt finds the first link
-  // already sitting at dst), but only as a generic "name collision" error
-  // with no indication of *which* rules are fighting over it.
+  // Flag two different rules planning the same dst_path, naming both --
+  // createLink() would eventually catch this too, but only as a generic
+  // "name collision" with no indication of which rules are fighting.
   const seenDsts = new Map<string, [number, number | null]>()
   for (const p of plan) {
     const prev = seenDsts.get(p.dstPath)
@@ -116,8 +97,7 @@ export function reconcile(
     .where(and(eq(links.appId, appId), inArray(links.status, ['active', 'stale'])))
     .all()
 
-  // One lookup for every rule referenced below, instead of a per-row query
-  // inside retire().
+  // One lookup for all rules, instead of a per-row query inside retire().
   const rulesById = new Map<number, RuleRow>(
     db
       .select()
@@ -126,11 +106,9 @@ export function reconcile(
       .map((r) => [r.id, r]),
   )
 
-  // Batch-stat every existing link's dst + src (and any planned src that
-  // lost its snapshot inode) with one directory listing per directory --
-  // collapses the per-link stat round trips below to ~one per directory.
-  // Snapshot is taken before pass 1 mutates anything; each entry is
-  // consulted once, for its own (unique-dst) link.
+  // Batch-stat every link's dst + src (plus any planned src missing its
+  // snapshot inode) with one directory listing per directory, taken before
+  // pass 1 mutates anything.
   const statCache = scandirStats([
     ...rows.map((r) => r.dstPath),
     ...rows.map((r) => r.srcPath),
@@ -310,13 +288,9 @@ function create(
   const r = createLink(p.srcPath, p.dstPath, fallback)
   if (r.ok) {
     res.created += 1
-    // A prior item/file at this exact destination that was grace-deleted
-    // (poller.ts) left behind a status='missing' row with item_id/file_id
-    // nulled out (so deleting its now-gone app_items/app_files row
-    // wouldn't cascade it away too). That row can never be reused by the
-    // INSERT below (NULL never equals NULL in the ON CONFLICT target), so
-    // without this it would sit forever as a dead "missing" entry once
-    // this destination is legitimately relinked.
+    // Clean up a dead grace-deleted row at this dst_path (item_id/file_id
+    // nulled out) -- NULL never equals NULL in the ON CONFLICT target below,
+    // so it would otherwise sit forever once this destination is relinked.
     db.delete(links)
       .where(
         and(

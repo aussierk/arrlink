@@ -126,12 +126,8 @@ export interface SweepStats {
   purged: number
 }
 
-/**
- * One sweep pass: refresh due sessions, purge expired ones. Returns stats
- * for the events log / tests. `clientFactory` is only invoked lazily (on
- * the first due session) so a sweep with nothing to do never touches the
- * OIDC provider.
- */
+/** One sweep pass: refresh due sessions, purge expired ones. `clientFactory` is
+ * lazy so a sweep with nothing to do never touches the OIDC provider. */
 export async function runSweep(
   db: DbClient,
   clientFactory: () => OidcTokenClient,

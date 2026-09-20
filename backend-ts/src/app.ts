@@ -16,24 +16,13 @@ import { registerAuthRoutes } from './api/auth.js'
 export interface AppContext {
   app: FastifyInstance
   db: DbClient
-  /**
-   * Closes the Fastify app, the DB connection, and releases the instance
-   * lock. Call exactly once per createApp() call (SIGTERM/SIGINT handler
-   * or test teardown) -- ported from main.py's lifespan `finally` block.
-   */
+  /** Closes the app, DB, and instance lock. Call exactly once per createApp() call. */
   close: () => Promise<void>
 }
 
-/**
- * Builds the Fastify app. Ported from main.py::create_app -- acquiring the
- * instance lock is a side effect of *calling* this function, not of
- * importing this module, for the same reason entrypoint.sh's Python
- * equivalent used `uvicorn --factory`: importing app.ts from a test file
- * (or from src/index.ts before main() runs) must never grab a real lock.
- *
- * Route registration is staged across the rollout plan; further routers,
- * background loops, and static/SPA serving land in later stages.
- */
+/** Builds the Fastify app. Acquiring the instance lock is a side effect of
+ * *calling* this function, not of importing this module -- importing app.ts
+ * from a test file must never grab a real lock. */
 export async function createApp(settings: Settings): Promise<AppContext> {
   const dbDir = dirname(settings.dbPath)
   const lockPath = await acquireInstanceLock(dbDir)
@@ -51,9 +40,7 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   const app = Fastify({ logger: false })
   await app.register(fastifyCookie)
 
-  // Mirrors web/src/lib/api.ts's `req()` helper, which parses `{ detail }`
-  // from a non-2xx JSON body -- HttpError is this backend's equivalent of
-  // FastAPI's HTTPException(status, detail).
+  // web/src/lib/api.ts's req() helper parses `{ detail }` from error bodies.
   app.setErrorHandler((err, _request, reply) => {
     if (err instanceof HttpError) {
       reply.code(err.status).send({ detail: err.detail })

@@ -17,15 +17,12 @@ import { eq, lt } from 'drizzle-orm'
 export const SESSION_COOKIE = 'arrlink_session'
 export const PASSWORD_COOKIE = 'arrlink_pw'
 
-// How long an initiated-but-never-completed OIDC login (state/verifier/nonce
-// row) stays valid. Anything older is treated as abandoned.
+// How long an initiated-but-never-completed OIDC login stays valid.
 const OIDC_LOGIN_TTL_S = 600
 
-// Error codes the callback itself ever sets on the arrlink_auth_error
-// cookie plus the handful an IdP's own `error` query param can legitimately
-// be (per OAuth2/OIDC core: RFC 6749 4.1.2.1, OIDC Core 3.1.2.6). Anything
-// else -- including arbitrary provider-supplied text -- is not trusted to
-// reach the UI verbatim; see sanitizeErrorCode().
+// Error codes we ever set on arrlink_auth_error, plus what an IdP's `error`
+// query param can legitimately be. Anything else is not trusted to reach
+// the UI verbatim; see sanitizeErrorCode().
 const KNOWN_AUTH_ERROR_CODES = new Set([
   'oidc_disabled',
   'missing_code',
@@ -146,13 +143,9 @@ function clearAuthCookies(reply: FastifyReply): void {
   reply.clearCookie(PASSWORD_COOKIE, { path: '/' })
 }
 
-/**
- * Check whichever credential cookie is present against its matching
- * session `kind` -- password and OIDC sessions share the `sessions` table
- * (dual-mode auth means both can be alive at once), so this also confirms
- * a token actually came from the flow its cookie claims, not just that
- * *some* valid token was found.
- */
+/** Checks whichever credential cookie is present against its matching session
+ * `kind` -- password and OIDC share the `sessions` table, so this confirms a
+ * token came from the flow its cookie claims, not just that some token was found. */
 function lookupSession(
   request: FastifyRequest,
   db: DbClient,
@@ -172,12 +165,8 @@ function lookupSession(
   return null
 }
 
-/**
- * Allow-list (Settings, editable at runtime). Empty = anyone authenticated.
- * A user is allowed if their email is in `oidc_allowed_emails` OR any of
- * their groups is in `oidc_allowed_groups` (union semantics).
- * Case-insensitive for both emails and group names.
- */
+/** Allow-list (Settings, editable at runtime). Empty = anyone authenticated.
+ * Allowed if email is in `oidc_allowed_emails` OR a group is in `oidc_allowed_groups`. */
 function allowed(db: SettingsStore, email: string, groups: string[]): boolean {
   const rawEmails = db.getSetting<string[]>('oidc_allowed_emails') ?? []
   const rawGroups = db.getSetting<string[]>('oidc_allowed_groups') ?? []
@@ -240,8 +229,8 @@ export function registerAuthRoutes(app: FastifyInstance, opts: AuthRouteOptions)
   })
 
   app.post('/api/auth/password', async (request, reply) => {
-    // Credentials arrive in the JSON body (never the query string), so
-    // they cannot leak into access logs or browser history.
+    // Credentials arrive in the body, never the query string, so they
+    // can't leak into access logs or browser history.
     const parsed = PasswordLoginSchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const body = parsed.data
@@ -259,14 +248,10 @@ export function registerAuthRoutes(app: FastifyInstance, opts: AuthRouteOptions)
       body.username.trim().toLowerCase(),
       expectedUsername.trim().toLowerCase(),
     )
-    // Always run verifyPassword (even while already locked) so a locked
-    // response costs the same Argon2id time as a normal wrong-password one
-    // -- skipping it would itself be a timing side channel revealing
-    // lockout state.
+    // Always run verifyPassword, even while locked -- skipping it would be
+    // a timing side channel revealing lockout state.
     const passwordOk = await verifyPassword(body.password, expectedPassword)
-    // Deliberately vague about which field was wrong (no username
-    // enumeration) -- and, for the same reason, a locked account gets the
-    // exact same response as a wrong password, not a distinguishable one.
+    // Deliberately vague about which field was wrong (no username enumeration).
     if (st.locked || !(usernameOk && passwordOk)) {
       lockout.recordFailure(db, lockoutKey)
       throw new HttpError(401, 'wrong username or password')
@@ -292,8 +277,7 @@ export function registerAuthRoutes(app: FastifyInstance, opts: AuthRouteOptions)
   })
 
   // Escape hatch for an admin locked out of password login who still has a
-  // valid session (e.g. via OIDC, or a password session issued before the
-  // lockout) -- clears the lockout immediately rather than waiting it out.
+  // valid session (e.g. via OIDC) -- clears the lockout immediately.
   app.post('/api/auth/password/unlock', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const auth = effectiveAuth(settingsStore, env)
@@ -313,10 +297,7 @@ export function registerAuthRoutes(app: FastifyInstance, opts: AuthRouteOptions)
     const verifier = randomBytes(48).toString('base64url')
     const challenge = b64UrlEncode(createHash('sha256').update(verifier).digest())
 
-    // Opportunistically sweep abandoned login attempts (never completed,
-    // so never deleted by the callback) each time a new one is started --
-    // cheap, and keeps the table from growing unbounded without a separate
-    // task.
+    // Opportunistically sweep abandoned login attempts each time a new one starts.
     db.delete(oidcLogins)
       .where(lt(oidcLogins.createdAt, Date.now() / 1000 - OIDC_LOGIN_TTL_S))
       .run()
@@ -350,8 +331,7 @@ export function registerAuthRoutes(app: FastifyInstance, opts: AuthRouteOptions)
     const query = request.query as { code?: string; state?: string; error?: string }
 
     if (!auth.oidcEnabled) {
-      // Defense in depth: an admin disabled OIDC while a login was
-      // mid-flight.
+      // Defense in depth: an admin disabled OIDC mid-flight.
       logEvent(db, 'warn', 'OIDC callback received while OIDC login is disabled')
       reply.setCookie('arrlink_auth_error', 'oidc_disabled', { maxAge: 60, path: '/' })
       return reply.redirect('/', 302)
@@ -396,8 +376,7 @@ export function registerAuthRoutes(app: FastifyInstance, opts: AuthRouteOptions)
       throw e
     }
 
-    // Validate nonce/exp from the id_token payload (no signature check --
-    // see auth/oidc.ts).
+    // Validate nonce/exp from the id_token payload (no signature check, see auth/oidc.ts).
     const idToken = tok.id_token
     if (typeof idToken === 'string') {
       const payload = ((): ReturnType<typeof decodeJwtPayload> | null => {

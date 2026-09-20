@@ -1,15 +1,8 @@
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-/**
- * Locates the built SPA bundle relative to this module.
- *
- * Repo layout:  <root>/backend-ts/src/app.ts (dev) or dist/app.js (built) + <root>/web/dist
- * Image layout: /app/dist/app.js                                        + /app/web/dist
- *
- * Ported from main.py::find_dist -- same two-candidate-parent-directory
- * search, adjusted for backend-ts's one-level-shallower module nesting.
- */
+/** Locates the built SPA bundle relative to this module: <root>/backend-ts/src or
+ * dist + <root>/web/dist (repo layout), or /app/dist + /app/web/dist (image layout). */
 export function findDist(here: string): string | null {
   const candidates = [
     join(dirname(here), '..', 'web', 'dist'),

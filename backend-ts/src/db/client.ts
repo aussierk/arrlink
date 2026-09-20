@@ -6,11 +6,8 @@ import * as schema from './schema.js'
 
 export type DbClient = ReturnType<typeof drizzle<typeof schema>>
 
-// Ported 1:1 from state.py::_init_connection. better-sqlite3 is
-// synchronous and single-connection-per-process, so unlike the Python
-// version there is no thread-local connection pool to manage here -- see
-// the plan's "Background jobs" section for why that's a simplification,
-// not a gap.
+// Ported 1:1 from state.py::_init_connection. better-sqlite3 is synchronous
+// and single-connection-per-process, so there's no thread-local pool to manage.
 export function openDb(dbPath: string): DbClient {
   mkdirSync(dirname(dbPath), { recursive: true })
   const sqlite = new Database(dbPath)

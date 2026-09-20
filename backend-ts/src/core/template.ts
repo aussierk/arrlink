@@ -3,37 +3,25 @@ import type { ConditionMatch } from './matching.js'
 
 /**
  * Template engine: dir + filename resolution, sanitization, and the path
- * jail. Ported from core/template.py.
- *
- * Unlike the Python original (Linux/Docker-only), this backend also
- * targets native/bare-metal deployment on any host OS, so path handling
- * here adapts to whatever platform it's actually running on via the
- * native `node:path` module rather than forcing POSIX. This matters most
- * in checkJail (a real security boundary): the traversal check below
- * operates on raw, unnormalized path segments -- deliberately, so a
- * literal `..` segment is always rejected before `path.normalize` ever
- * gets a chance to silently collapse it away. The root prefix is derived
- * once via `path.parse` (which does not normalize either), so this holds
- * for POSIX roots, Windows drive-letter roots, and UNC roots alike.
+ * jail. Ported from core/template.py. Uses native `node:path`, not forced
+ * POSIX, since this backend also targets native deployment on any host OS.
+ * checkJail's traversal check runs on raw, unnormalized segments so a
+ * literal `..` is rejected before `normalize` could collapse it away.
  */
 
-// Default allowed root for destination paths. On the common Docker/Linux
-// deployment the container sees the *arr apps' media at /media (mounted
-// read-only, mirroring the apps) and writes its links under /media/linked
-// -- on the same pool, so hardlinks work. This is still a valid
-// (root-relative) absolute path on Windows, but a native Windows/macOS
-// deployment should set the `allowed_roots` Setting to a real path (e.g.
-// `D:\media`) rather than relying on this default.
+// Default allowed root. Matches the common Docker/Linux setup (*arr media
+// mounted at /media, links written under /media/linked). Still valid
+// (root-relative) on Windows, but native Windows/macOS deployments should
+// set `allowed_roots` to a real path instead of relying on this default.
 export const DEFAULT_ROOTS = ['/media']
 
-// Characters that are unsafe in a path segment (Windows + POSIX + control).
-// eslint-disable-next-line no-control-regex -- intentional: Windows + POSIX + control chars are all unsafe in a path segment
+// Unsafe path-segment characters (Windows + POSIX + control).
+// eslint-disable-next-line no-control-regex -- intentional
 const ILLEGAL = /[\\/:*?"<>|\x00-\x1f]/g
 const WS = /\s+/g
 const PLACEHOLDER = /\{\$([A-Za-z0-9_]+)\}/g
 
-// Placeholder names that don't depend on a rule's own conditions -- always
-// valid regardless of which categories a given rule matches on.
+// Placeholders valid regardless of which categories a rule matches on.
 export const FIXED_PLACEHOLDERS = new Set([
   'app',
   'title',
@@ -94,13 +82,9 @@ export function resolveTemplate(template: string | null, ctx: TemplateContext): 
   return template.replace(PLACEHOLDER, (_whole, name: string) => resolveToken(name, ctx))
 }
 
-/**
- * Turn a resolved (absolute) dir string into a safe absolute path, native
- * to whatever host this is running on (POSIX, Windows drive-letter, or
- * UNC). `path.parse` (not `normalize`) gives the root without collapsing
- * anything -- the segment loop below is what rejects a literal `..`, and
- * it must see that segment before any normalization could remove it.
- */
+/** Turn a resolved (absolute) dir string into a safe, native absolute path
+ * (POSIX, Windows drive-letter, or UNC). `path.parse`, not `normalize`, gives
+ * the root without collapsing `..` before the traversal check below sees it. */
 export function sanitizeDirPath(resolved: string): string {
   if (!isAbsolute(resolved)) {
     throw new TemplateError('dir template must resolve to an absolute path')
@@ -117,9 +101,7 @@ export function sanitizeDirPath(resolved: string): string {
   if (parts.length === 0) {
     throw new TemplateError('dir template resolved to an empty path')
   }
-  // Normalize the root's own separator style too (a root-relative `/`
-  // input on Windows carries a POSIX-style root from path.parse), so the
-  // returned path is consistently native throughout.
+  // Normalize the root's separator too, so the result is consistently native.
   return root.replace(/[\\/]/g, sep) + parts.join(sep)
 }
 
@@ -145,11 +127,9 @@ export function checkJail(dirPath: string, roots: string[]): void {
   )
 }
 
-/**
- * Best-effort static prefix of a dir template (placeholders blanked). A
- * jail-check on this prefix is conservative: if the fixed part already
- * escapes the allowed roots, no placeholder value can ever fix it.
- */
+/** Best-effort static prefix of a dir template (placeholders blanked) -- a
+ * jail-check here is conservative: if the fixed part already escapes the
+ * allowed roots, no placeholder value can ever fix it. */
 export function staticPrefix(template: string | null): string {
   return normalize((template || '').replace(PLACEHOLDER, 'x'))
 }
@@ -181,10 +161,8 @@ export function buildContext(
   }
 }
 
-/**
- * Resolve a rule + item + file to (dirPath, filename). Throws TemplateError
- * on any invalid template or jail violation.
- */
+/** Resolve a rule + item + file to (dirPath, filename). Throws TemplateError
+ * on any invalid template or jail violation. */
 export function resolveDestination(
   dirTemplate: string,
   filenameTemplate: string | null,
@@ -202,9 +180,8 @@ export function resolveDestination(
   let filename: string
   if (filenameTemplate) {
     filename = sanitizeFilename(resolveTemplate(filenameTemplate, ctx))
-    // the real source extension is never dropped: if the resolved name
-    // doesn't already end with it, re-attach it (handles names that
-    // themselves contain dots, e.g. "Inception.2010.2160p")
+    // never drop the real source extension -- re-attach if missing (names
+    // can themselves contain dots, e.g. "Inception.2010.2160p")
     if (ctx.srcExt && !filename.toLowerCase().endsWith(ctx.srcExt.toLowerCase())) {
       filename += ctx.srcExt
     }

@@ -3,9 +3,8 @@ import type { DbClient } from '../db/client.js'
 import { logEvent } from '../db/events.js'
 import { loginAttempts } from '../db/schema.js'
 
-// Flat lockout, not exponential backoff -- 5 failures within a 15-minute
-// window locks the account for 15 minutes. Hardcoded, not
-// Settings-editable. POST /api/auth/password.
+// Flat lockout: 5 failures within 15 minutes locks the account for 15
+// minutes. Hardcoded, not Settings-editable.
 export const THRESHOLD = 5
 export const WINDOW_S = 15 * 60
 export const LOCKOUT_S = 15 * 60
@@ -16,10 +15,8 @@ export interface LockoutStatus {
   failCount: number
 }
 
-// Accepts either the top-level DbClient or the `tx` handle a
-// db.transaction() callback receives -- both expose the same query-builder
-// surface this module needs, but drizzle types them differently ($client
-// only exists on the top-level client).
+// Accepts either the top-level DbClient or a transaction's `tx` handle --
+// drizzle types them differently, but both expose what this module needs.
 type Queryable = Pick<DbClient, 'select' | 'insert' | 'delete'>
 
 function row(db: Queryable, username: string) {
@@ -34,14 +31,9 @@ export function status(db: DbClient, username: string): LockoutStatus {
   return { locked, lockedUntil: locked ? r.lockedUntil : null, failCount: r.failCount }
 }
 
-/**
- * Record one failed attempt, atomically. better-sqlite3 is synchronous and
- * single-connection-per-process (unlike Python's thread-per-connection
- * sqlite3), so a plain db.transaction() wrapper gives the same atomicity
- * the original's explicit `BEGIN IMMEDIATE` provided -- see the plan's
- * "Background jobs" section for why this simplification is safe as long as
- * no DB writes ever move to a worker thread.
- */
+/** Record one failed attempt, atomically. better-sqlite3 is single-connection
+ * and synchronous, so a plain db.transaction() gives the same atomicity
+ * Python's explicit BEGIN IMMEDIATE provided. */
 export function recordFailure(db: DbClient, username: string): LockoutStatus {
   const result = db.transaction((tx) => {
     const now = Date.now() / 1000
@@ -86,9 +78,7 @@ export function recordFailure(db: DbClient, username: string): LockoutStatus {
   })
 
   if (result.justLocked) {
-    // was_locked is already known false here, so any lockedUntil we just
-    // set is a fresh transition -- log once, not on every subsequent
-    // attempt during the lockout.
+    // Fresh transition (wasLocked was false) -- log once, not every attempt.
     logEvent(
       db,
       'warn',

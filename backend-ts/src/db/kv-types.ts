@@ -1,8 +1,5 @@
-// Every key actually read/written across the Python backend's settings k/v
-// table (grep of get_setting/set_setting call sites). This is a compile-time
-// typo guard, not a schema -- the settings table itself stays a generic
-// key/value store (see db/settings-store.ts and the plan's "Database:
-// Drizzle schema" section for why it isn't normalized into columns).
+// Every key read/written in the settings k/v table -- a compile-time typo
+// guard, not a schema (the table itself stays a generic key/value store).
 export type SettingKey =
   | 'auth_password_enabled'
   | 'auth_oidc_enabled'
@@ -27,9 +24,8 @@ export type SettingKey =
   | 'backup_enabled'
   | 'backup_retention_days'
 
-// Must never be returned by GET /api/settings -- read directly where
-// needed and exposed only through the masked GET /api/settings/auth
-// endpoint. Ported 1:1 from state.py::State.SENSITIVE_SETTING_KEYS.
+// Never returned by GET /api/settings -- exposed only via the masked
+// GET /api/settings/auth endpoint.
 export const SENSITIVE_SETTING_KEYS: ReadonlySet<SettingKey> = new Set([
   'auth_password',
   'oidc_client_secret',

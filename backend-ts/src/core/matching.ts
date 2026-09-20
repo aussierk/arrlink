@@ -1,10 +1,6 @@
-/**
- * Rule matching: does a rule's matcher match an item's tags?
- *
- * A rule matches an item if any of the item's tags satisfies the matcher.
- * The matched tag (and, for regex rules, the match object) drive template
- * placeholder resolution. Ported from core/matching.py.
- */
+/** Rule matching: does a rule's matcher match an item's tags? The matched tag
+ * (and, for regex rules, the match object) drives template placeholder
+ * resolution. Ported from core/matching.py. */
 
 export interface RuleMatch {
   tag: string
@@ -22,27 +18,18 @@ export interface Condition {
   source?: 'native' | 'tag' | null
 }
 
-// Python rule regexes commonly use `(?P<name>...)` (Python's named-group
-// syntax) and `(?P=name)` backreferences -- JS RegExp uses `(?<name>...)`
-// and `\k<name>` instead. Translating these before compiling keeps
-// existing user-authored rules (including every example in this project's
-// own test suite) working, rather than silently changing their matching
-// behavior on cutover. Everything else in a typical rule regex (character
-// classes, quantifiers, anchors, non-capturing groups) is syntax-compatible
-// between Python `re` and JS `RegExp` -- see the plan's regex-portability
-// risk callout for what ISN'T covered by this translation (lookbehind
-// version differences, some Unicode property escapes).
+// Python named groups `(?P<name>...)` / backreferences `(?P=name)` use JS
+// syntax instead: `(?<name>...)` / `\k<name>`. Translate before compiling so
+// existing user-authored rules keep working. Not covered: lookbehind version
+// differences, some Unicode property escapes.
 function translatePythonRegexSyntax(pattern: string): string {
   return pattern
     .replace(/\(\?P<([A-Za-z_][A-Za-z0-9_]*)>/g, '(?<$1>')
     .replace(/\(\?P=([A-Za-z_][A-Za-z0-9_]*)\)/g, '\\k<$1>')
 }
 
-// Compile (and cache) a rule's regex. Returns null for an invalid pattern
-// -- a bad regex simply never matches, same as before. Cached because
-// plan_links evaluates the same handful of rule patterns across every item
-// in the library on every poll. Simple size-bounded LRU (insertion-order
-// Map, re-inserted on hit) mirroring functools.lru_cache(maxsize=512).
+// Compile (and cache) a rule's regex; null for an invalid pattern (never
+// matches). Size-bounded LRU, mirrors Python's lru_cache(maxsize=512).
 const REGEX_CACHE_MAX = 512
 const regexCache = new Map<string, RegExp | null>()
 
@@ -89,10 +76,7 @@ function parseListValue(matchValue: string): Set<string> {
   )
 }
 
-/**
- * Every item tag that satisfies the matcher -- used to fan a single
- * condition out into multiple destination links (one per matching tag).
- */
+/** Every item tag that satisfies the matcher -- fans one condition into multiple links. */
 export function matchRuleAll(
   matchType: string,
   matchValue: string,

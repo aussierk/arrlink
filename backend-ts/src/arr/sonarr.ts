@@ -54,11 +54,8 @@ function toNumberOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/**
- * A cheap "did this series' file set change" marker from the series
- * payload's own statistics block -- no extra call. Null when the payload
- * carries no statistics (then the poller always re-fetches, never skips).
- */
+/** A cheap "did this series' file set change" marker from the statistics block --
+ * no extra call. Null when absent (poller always re-fetches, never skips). */
 function seriesFingerprint(s: SonarrSeriesRow): string | null {
   if (!s.statistics || typeof s.statistics !== 'object') return null
   return `${s.statistics.episodeFileCount ?? 0}:${s.statistics.sizeOnDisk ?? 0}`
@@ -126,9 +123,7 @@ export class SonarrAdapter extends BaseAdapter {
   ): Promise<Item[]> {
     const known = knownFingerprints ?? new Map<number, string>()
 
-    // Independent preamble calls -- series list, quality-profile names, and
-    // (unless the caller supplied it) the tag vocabulary -- run
-    // concurrently. Profile names aren't on the series rows, only the id.
+    // series list, quality-profile names, and (unless supplied) tags -- run concurrently.
     const [seriesData, profileById, vocabulary] = await Promise.all([
       this.getJson('/api/v3/series'),
       this.qualityProfileNames(),
@@ -160,9 +155,8 @@ export class SonarrAdapter extends BaseAdapter {
     }
     if (meta.size === 0) return []
 
-    // Delta fetch: only pull /episodefile for series whose fingerprint
-    // changed (or that we have no fingerprint for). Unchanged series are
-    // returned with filesStale=true and the poller reuses stored rows.
+    // Delta fetch: only pull /episodefile for series with a changed (or missing)
+    // fingerprint. Unchanged series come back filesStale=true for the poller to rehydrate.
     const toFetch = [...meta.entries()]
       .filter(
         ([sid, m]) =>
@@ -183,8 +177,7 @@ export class SonarrAdapter extends BaseAdapter {
           .filter((f) => f && typeof f === 'object' && f.path)
           .map((f) => ({ path: String(f.path), size: f.size }))
 
-        // One directory listing per episode directory (season folder)
-        // instead of one stat per file.
+        // One directory listing per season folder instead of one stat per file.
         const stats = scandirStats(specs.map((s) => s.path))
         const files = specs.map((s) =>
           statFile(s.path, seriesPath, s.size, stats.get(s.path)),
@@ -215,8 +208,7 @@ export class SonarrAdapter extends BaseAdapter {
         if (itemFiles.length === 0) continue // series with no files on disk
         items.push({ ...common, files: itemFiles, filesStale: false })
       } else {
-        // unchanged since last poll -> poller rehydrates files from the
-        // stored app_files rows before reconciling.
+        // unchanged -- poller rehydrates files from stored app_files rows.
         items.push({ ...common, files: [], filesStale: true })
       }
     }

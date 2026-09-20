@@ -69,8 +69,7 @@ export interface Settings {
   oidcAutoLogin: boolean
   uiUsername: string
   uiPassword: string | undefined
-  /** ui_password, hashed once at startup -- computing this per-request would repeat a
-   * real Argon2id cost. "" when unset. */
+  /** ui_password, hashed once at startup (real Argon2id cost). "" when unset. */
   uiPasswordHash: string
   oidcIssuer: string | undefined
   oidcClientId: string | undefined
@@ -89,12 +88,8 @@ export interface Settings {
   logPath: string
 }
 
-/**
- * Loads and validates env vars, then hashes UI_PASSWORD once up front.
- * Async because Argon2 hashing is async in node-argon2 (unlike Python's
- * synchronous argon2-cffi, which the original `cached_property` relied on)
- * -- call this once at boot, not per-request.
- */
+/** Loads and validates env vars, then hashes UI_PASSWORD once up front.
+ * Call once at boot, not per-request. */
 export async function loadSettings(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Settings> {

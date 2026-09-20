@@ -13,15 +13,9 @@ export interface EffectiveAuth {
   sessionTtlH: number
 }
 
-/**
- * Resolves the runtime auth configuration: a DB Setting overrides the env
- * default, but only when *explicitly set* -- an explicit `false` in the DB
- * must still win over an env default of `true`. Ported from
- * config.py::effective_auth(); a naive `dbValue ?? envValue` is correct
- * here (both languages treat `undefined`/`None` as "unset"), but a naive
- * `dbValue || envValue` would be a bug (it treats a stored `false` as
- * "unset" too) -- see the plan's risk callouts.
- */
+/** Resolves runtime auth config: a DB Setting overrides the env default, but
+ * only when explicitly set -- an explicit `false` in the DB must still win
+ * over an env default of `true` (use `!== undefined`, not `||`). */
 export function effectiveAuth(db: SettingsStore | null, env: Settings): EffectiveAuth {
   const dbPasswordEnabled = db?.getSetting<boolean>('auth_password_enabled')
   const passwordEnabled =
@@ -48,21 +42,14 @@ export function effectiveAuth(db: SettingsStore | null, env: Settings): Effectiv
   }
 }
 
-/**
- * `app_url`, a runtime Setting overriding the env value (same pattern as
- * effectiveAuth). Lets Settings > General edit the deployment's external
- * base URL without a redeploy. Used by api/auth.ts's redirectUri() to
- * build the OIDC redirect_uri.
- */
+/** `app_url`, a runtime Setting overriding the env value -- lets Settings > General
+ * edit the external base URL without a redeploy. */
 export function effectiveAppUrl(db: SettingsStore | null, env: Settings): string {
   const dbUrl = db?.getSetting<string>('app_url')
   return dbUrl || env.appUrl || ''
 }
 
-/**
- * (logLevel, logSizeLimitMb) -- a runtime Setting overrides the env
- * default, same pattern as effectiveAuth/effectiveAppUrl.
- */
+/** (logLevel, logSizeLimitMb), same DB-overrides-env pattern as effectiveAuth. */
 export function effectiveLoggingSettings(
   db: SettingsStore,
   env: Settings,

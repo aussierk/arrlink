@@ -3,9 +3,8 @@ import type { DbClient } from './client.js'
 import { settings } from './schema.js'
 import { SENSITIVE_SETTING_KEYS, type SettingKey } from './kv-types.js'
 
-// Ported 1:1 from state.py's settings section (get_setting/set_setting/
-// delete_setting/all_settings). This is a generic runtime-overrides store,
-// not a typed config table -- see the plan for why.
+// Ported 1:1 from state.py's settings section: a generic runtime-overrides
+// store, not a typed config table.
 export class SettingsStore {
   constructor(private readonly db: DbClient) {}
 

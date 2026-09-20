@@ -9,17 +9,10 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 15_000
 
-/**
- * Common contract for *arr app adapters. Subclasses set `appType` and
- * implement the abstract methods below. All methods throw AdapterError on
- * provider failures.
- *
- * Unlike the Python version's explicit `_session()` pooled-httpx-client
- * context manager, this port relies on Node's global `fetch` (undici),
- * which already keep-alives connections per origin by default -- see the
- * plan's "arr/ adapters" section for why the explicit pooling is dropped
- * rather than ported.
- */
+/** Common contract for *arr app adapters. Subclasses set `appType` and implement
+ * the abstract methods; all methods throw AdapterError on provider failures.
+ * No explicit connection pooling (unlike Python's httpx session) -- Node's
+ * global `fetch` already keep-alives per origin. */
 export abstract class BaseAdapter {
   abstract readonly appType: 'radarr' | 'sonarr'
 
@@ -40,11 +33,8 @@ export abstract class BaseAdapter {
     tags?: Tag[],
   ): Promise<Item[]>
 
-  /**
-   * Items + the tag vocabulary in one call -- what the poller needs each
-   * cycle. Avoids fetching /v3/tag twice (once here, once inside
-   * fetchItems for id->label translation).
-   */
+  /** Items + tag vocabulary in one call -- avoids fetching /v3/tag twice
+   * (here, and again inside fetchItems for id->label translation). */
   async fetchSnapshot(
     knownFingerprints?: Map<number, string>,
   ): Promise<{ items: Item[]; tags: Tag[] }> {
@@ -53,21 +43,15 @@ export abstract class BaseAdapter {
     return { items, tags }
   }
 
-  /**
-   * Create a tag in the app (idempotent). Default: unsupported. Used by
-   * the tag repository's *push to app*. Radarr/Sonarr override.
-   */
+  /** Create a tag in the app (idempotent). Default: unsupported; Radarr/Sonarr override. */
   createTag(_label: string): Promise<void> {
     return Promise.reject(
       new AdapterError(`create_tag not supported for ${this.appType}`),
     )
   }
 
-  /**
-   * This instance's configured quality profiles. Radarr and Sonarr both
-   * expose the identical `[{id, name}]` shape at this path, so one shared
-   * implementation covers both.
-   */
+  /** This instance's configured quality profiles -- Radarr and Sonarr expose the
+   * identical `[{id, name}]` shape, so one implementation covers both. */
   async fetchQualityProfiles(): Promise<QualityProfile[]> {
     const data = await this.getJson('/api/v3/qualityprofile')
     if (!Array.isArray(data)) throw new AdapterError('unexpected qualityprofile payload')
@@ -79,12 +63,8 @@ export abstract class BaseAdapter {
     return out
   }
 
-  /**
-   * `{id: name}` for this instance's quality profiles, or `{}` if the app
-   * doesn't expose /qualityprofile -- profile *names* aren't on the
-   * movie/series rows, only the id, so fetchItems resolves them. Tolerant
-   * so it can be gathered alongside the item list.
-   */
+  /** `{id: name}` for this instance's quality profiles, or empty if unsupported --
+   * profile names aren't on the movie/series rows, only the id. */
   async qualityProfileNames(): Promise<Map<number, string>> {
     try {
       const profiles = await this.fetchQualityProfiles()

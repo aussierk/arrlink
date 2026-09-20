@@ -9,12 +9,8 @@ export interface AppInfo {
   version: string
 }
 
-/**
- * One tag from the app's vocabulary. `id` is the app's internal tag id
- * (present in Radarr/Sonarr's `/v3/tag` responses). Item payloads
- * reference tags by this id (a list of ints), so adapters must translate
- * ids -> labels before exposing items.
- */
+/** One tag from the app's vocabulary. Item payloads reference tags by `id`
+ * (a list of ints), so adapters must translate ids -> labels before exposing items. */
 export interface Tag {
   label: string
   count: number

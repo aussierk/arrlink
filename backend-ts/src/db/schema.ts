@@ -9,11 +9,9 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
-// Ported 1:1 from backend/arrlink/state.py's single squashed migration
-// (SCHEMA_VERSION = 1). Every CHECK, FK ON DELETE action, and index below
-// must match the Python schema exactly -- see the plan's "Database: Drizzle
-// schema" section for why (cascade-ordering and NULL-uniqueness semantics
-// that core/poller.ts and core/linker.ts depend on).
+// Ported 1:1 from state.py's schema (SCHEMA_VERSION = 1). Every CHECK, FK
+// ON DELETE action, and index below must match exactly -- linker.ts relies
+// on the cascade ordering and NULL-uniqueness semantics.
 
 export const apps = sqliteTable(
   'apps',
@@ -147,9 +145,9 @@ export const links = sqliteTable(
     missingStrikes: int('missing_strikes').notNull().default(0),
   },
   (t) => ({
-    // NULL is never equal to NULL in a SQLite unique index, so this does
-    // NOT dedupe rows sharing ruleId/itemId/fileId = NULL -- core/linker.ts
-    // relies on that (see the plan's Database section). Do not "fix" it.
+    // NULL never equals NULL in a SQLite unique index, so this does NOT
+    // dedupe rows sharing ruleId/itemId/fileId = NULL -- linker.ts relies
+    // on that. Do not "fix" it.
     ruleItemFileMatchkeyUnique: uniqueIndex('links_rule_item_file_matchkey_unique').on(
       t.ruleId,
       t.itemId,
@@ -220,11 +218,8 @@ export const vocabulary = sqliteTable(
   },
   (t) => ({
     lookupIdx: index('idx_vocabulary_lookup').on(t.category, t.appType, t.appId),
-    // COALESCE(app_id, -1) sentinel so two shared-scope (app_id IS NULL)
-    // rows dedupe -- see idx_vocabulary_unique in state.py. Drizzle's
-    // schema DSL can't express an expression index, so this one is added
-    // via the raw-sql migration statement in migrations/0000_init.sql
-    // instead of here (kept as a comment marker for discoverability).
+    // idx_vocabulary_unique (COALESCE sentinel for app_id) lives in the raw
+    // migration SQL -- Drizzle's schema DSL can't express expression indexes.
     categoryCheck: check(
       'vocabulary_category_check',
       sql`${t.category} IN ('genre','certification','collection','quality','language')`,

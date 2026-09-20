@@ -5,12 +5,9 @@ import lockfile from 'proper-lockfile'
 
 const LOCK_FILENAME = 'arrlink.lock'
 
-// A lock older than this is treated as abandoned (crashed process) and may
-// be stolen. fcntl.flock's kernel-level auto-release-on-death has no exact
-// Node equivalent -- proper-lockfile's mtime-staleness check is the
-// pragmatic replacement (see the plan's risk callouts). Docker sends
-// SIGTERM/SIGKILL on `docker stop`, so this must be well under any restart
-// interval an operator would wait.
+// A lock older than this is treated as abandoned (crashed process) and may be
+// stolen -- fcntl.flock's kernel auto-release has no exact Node equivalent,
+// so this mtime-staleness check is the pragmatic replacement.
 const STALE_MS = 30_000
 
 export class InstanceLockError extends Error {}
@@ -20,9 +17,8 @@ interface HeldEntry {
   refcount: number
 }
 
-// resolved lock-file path -> (release fn, refcount). Mirrors singleton.py's
-// _held registry: multiple createApp() calls in one process (e.g. in
-// tests) share one OS-level lock.
+// resolved lock-file path -> (release fn, refcount). Multiple createApp()
+// calls in one process (e.g. tests) share one OS-level lock.
 const held = new Map<string, HeldEntry>()
 
 function readHolderInfo(lockPath: string): string {
@@ -34,12 +30,9 @@ function readHolderInfo(lockPath: string): string {
   }
 }
 
-/**
- * Acquire the instance lock for `dirPath`. Returns the resolved lock file
- * path (pass back to releaseInstanceLock). Throws InstanceLockError,
- * including the recorded holder's diagnostics, if another live process
- * already holds it.
- */
+/** Acquire the instance lock for `dirPath`, returning the lock file path (pass
+ * back to releaseInstanceLock). Throws InstanceLockError with the holder's
+ * diagnostics if another live process already holds it. */
 export async function acquireInstanceLock(dirPath: string): Promise<string> {
   mkdirSync(dirPath, { recursive: true })
   const lockPath = resolve(join(dirPath, LOCK_FILENAME))
