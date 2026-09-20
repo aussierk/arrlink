@@ -7,7 +7,9 @@ export interface RuleMatch {
   regexMatch: RegExpMatchArray | null
 }
 
-export type MatchType = 'exact' | 'list' | 'regex'
+// 'vocabulary' is a stored-but-not-directly-matched type: expandVocabularyConditions
+// rewrites it to 'list' before match_rule_all ever sees it.
+export type MatchType = 'exact' | 'list' | 'regex' | 'vocabulary'
 export type ConditionJoin = 'AND' | 'OR' | null
 
 export interface Condition {

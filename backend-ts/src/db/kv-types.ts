@@ -21,8 +21,10 @@ export type SettingKey =
   | 'log_level'
   | 'log_size_limit_mb'
   | 'tmdb_api_key'
+  | 'tmdb_certification_country'
   | 'backup_enabled'
   | 'backup_retention_days'
+  | 'backup_interval_hours'
 
 // Never returned by GET /api/settings -- exposed only via the masked
 // GET /api/settings/auth endpoint.
