@@ -1,0 +1,148 @@
+import { statSync } from 'node:fs'
+import { dirname, relative } from 'node:path'
+import { BaseAdapter } from './base.js'
+import {
+  AdapterError,
+  asStr,
+  translateTagLabels,
+  type AppInfo,
+  type Item,
+  type MediaFile,
+  type Tag,
+} from './types.js'
+
+interface RadarrMovieFile {
+  path?: string
+  size?: number
+}
+
+interface RadarrMovieRow {
+  id: number
+  title?: string
+  year?: number
+  tags?: unknown
+  movieFile?: RadarrMovieFile | null
+  genres?: unknown
+  certification?: string
+  collection?: { name?: string } | null
+  qualityProfileId?: number | null
+  originalLanguage?: { name?: string } | null
+}
+
+function toNumberOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+export class RadarrAdapter extends BaseAdapter {
+  readonly appType = 'radarr' as const
+
+  async ping(): Promise<AppInfo> {
+    const data = (await this.getJson('/api/v3/system/status')) as { version?: unknown }
+    if (!data || typeof data !== 'object' || !('version' in data)) {
+      throw new AdapterError('unexpected system/status payload')
+    }
+    return { name: 'radarr', version: String(data.version) }
+  }
+
+  async fetchTags(): Promise<Tag[]> {
+    const data = await this.getJson('/api/v3/tag')
+    if (!Array.isArray(data)) throw new AdapterError('unexpected tag payload')
+    const tags: Tag[] = []
+    for (const row of data) {
+      if (!row || typeof row !== 'object') continue
+      const r = row as { label?: unknown; count?: unknown; id?: unknown }
+      const label = asStr(r.label).trim()
+      if (!label) continue
+      const count = Number.isFinite(Number(r.count)) ? Number(r.count) : 0
+      const id = toNumberOrNull(r.id)
+      tags.push({ label, count, id })
+    }
+    return tags
+  }
+
+  async createTag(label: string): Promise<void> {
+    const trimmed = (label || '').trim()
+    if (!trimmed) throw new AdapterError('tag label is empty')
+    const r = await this.postJson('/api/v3/tag', { label: trimmed })
+    if (r.status === 401 || r.status === 403)
+      throw new AdapterError('bad API key (401)', 401)
+    if (r.status !== 200 && r.status !== 201) {
+      throw new AdapterError(`HTTP ${r.status} creating tag '${trimmed}'`, r.status)
+    }
+  }
+
+  async fetchItems(
+    _knownFingerprints?: Map<number, string>,
+    tags?: Tag[],
+  ): Promise<Item[]> {
+    // known_fingerprints is accepted for interface parity and ignored:
+    // Radarr's item list is a single /movie call.
+    const [data, profileById, vocabulary] = await Promise.all([
+      this.getJson('/api/v3/movie'),
+      this.qualityProfileNames(),
+      tags ? Promise.resolve(tags) : this.fetchTags(),
+    ])
+    if (!Array.isArray(data)) throw new AdapterError('unexpected movie payload')
+
+    const items: Item[] = []
+    for (const row of data as RadarrMovieRow[]) {
+      if (!row || typeof row !== 'object') continue
+      const movieFile = row.movieFile ?? {}
+      const path = movieFile.path
+      if (!path) continue // not on disk yet
+
+      const labels = translateTagLabels(vocabulary, row.tags)
+      const year = toNumberOrNull(row.year)
+      const genres = (Array.isArray(row.genres) ? row.genres : [])
+        .map((g) => String(g).trim())
+        .filter(Boolean)
+      const certification = (row.certification ?? '').trim() || null
+      const collection = row.collection?.name?.trim() || null
+      const qpId = toNumberOrNull(row.qualityProfileId)
+      const qpName = qpId !== null ? (profileById.get(qpId) ?? null) : null
+      const originalLanguage = row.originalLanguage?.name?.trim() || null
+      const apiSize = toNumberOrNull(movieFile.size)
+
+      const itemDir = dirname(path)
+      // Stat the file so the poller can track inodes (Radarr's API doesn't
+      // expose them); the container sees the same paths.
+      let fsize = apiSize
+      let fmtime: number | null = null
+      let finode: number | null = null
+      try {
+        const st = statSync(path)
+        fsize = st.size
+        fmtime = st.mtimeMs / 1000
+        finode = st.ino
+      } catch {
+        // file not visible from this process -- keep the API-reported size
+      }
+
+      const file: MediaFile = {
+        relPath: relative(itemDir || '/', path),
+        absPath: String(path),
+        size: fsize,
+        mtime: fmtime,
+        inode: finode,
+      }
+
+      items.push({
+        id: Number(row.id),
+        title: String(row.title ?? ''),
+        year,
+        tags: labels,
+        path: itemDir,
+        files: [file],
+        genres,
+        certification,
+        collection,
+        qualityProfileId: qpId,
+        qualityProfileName: qpName,
+        originalLanguage,
+      })
+    }
+    return items
+  }
+}
