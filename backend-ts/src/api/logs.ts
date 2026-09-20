@@ -35,8 +35,7 @@ function sseLine(row: EventRow): string {
 export function registerLogsRoutes(app: FastifyInstance, opts: LogsRouteOptions): void {
   const { db, settingsStore, env } = opts
 
-  // Records a frontend exception in the event log so it shows up on the
-  // Logs page and the live stream, same as any backend event.
+  // Records a frontend exception into the event log, same as any backend event.
   app.post('/api/logs', (request, reply) => {
     getCurrentUser(request, db, settingsStore, env)
     const parsed = ClientErrorSchema.safeParse(request.body)
@@ -74,9 +73,7 @@ export function registerLogsRoutes(app: FastifyInstance, opts: LogsRouteOptions)
       .all()
   })
 
-  // Live SSE feed: initial 50 events, then new ones as they happen. `limit`
-  // makes it a bounded snapshot stream (yields up to `limit` events then
-  // closes) -- useful for tests. Omitted = infinite live stream.
+  // SSE: initial 50 events, then live. `limit` bounds it for tests; omitted = infinite.
   app.get('/api/logs/stream', (request, reply) => {
     getCurrentUser(request, db, settingsStore, env)
     const q = request.query as { limit?: string }

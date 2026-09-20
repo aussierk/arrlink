@@ -15,10 +15,8 @@ import {
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Vocabulary CRUD/read surface: known values per rule-condition category,
- * and "refresh now" force-triggers for syncs that otherwise already run
- * automatically in the background (see core/poller.ts, core/vocabulary.ts).
- * Ported from api/vocabulary.py. */
+/** Vocabulary read surface + "refresh now" triggers for the poller's
+ * background syncs. Ported from api/vocabulary.py. */
 
 export interface VocabularyRouteOptions {
   db: DbClient
@@ -32,8 +30,7 @@ export function registerVocabularyRoutes(
 ): void {
   const { db, settingsStore, env } = opts
 
-  // Known values for one (category, app_type[, app_id]) scope: the shared
-  // vocabulary plus this app's own instance-scoped rows, if any.
+  // Known values for one scope: shared vocabulary plus this app's own rows.
   app.get('/api/vocabulary', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const q = request.query as { category?: string; appType?: string; appId?: string }
@@ -70,9 +67,8 @@ export function registerVocabularyRoutes(
     return rows
   })
 
-  // Force-trigger the same TMDB genre/certification sync that the poller's
-  // vocabulary loop already runs automatically on a daily cadence -- useful
-  // right after setting a TMDB key override, not required otherwise.
+  // Force-trigger the poller's daily TMDB sync -- useful right after
+  // setting a key override.
   app.post('/api/vocabulary/import/tmdb', async (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const counts = await syncTmdbVocabulary(db, settingsStore)
@@ -97,9 +93,8 @@ export function registerVocabularyRoutes(
     return { imported: n }
   })
 
-  // Force-trigger this app's per-instance vocabulary sync (quality profiles,
-  // languages, observed collection names) -- the poller already runs this
-  // automatically every poll; this is just for immediate feedback.
+  // Force-trigger this app's per-instance sync -- the poller already runs
+  // it every poll; this is just for immediate feedback.
   app.post('/api/apps/:appId/vocabulary/sync', async (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)

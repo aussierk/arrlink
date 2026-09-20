@@ -28,11 +28,8 @@ export interface SettingsRouteOptions {
 
 const KEY_RE = /^[a-z0-9_.-]{1,64}$/
 
-// Keys owned by a dedicated endpoint (PUT /auth, PUT /tmdb) with its own
-// validation and audit logging. The generic PUT/DELETE /{key} below must
-// never touch these directly -- doing so would let any authenticated caller
-// write an unhashed/unvalidated auth_password (or flip auth_*_enabled) with
-// no log_event trail, bypassing every safeguard put_auth() enforces.
+// Owned by a dedicated endpoint (PUT /auth, PUT /tmdb) with its own hashing/
+// validation/audit-log -- the generic PUT/DELETE /{key} must never touch these.
 const PROTECTED_SETTING_KEYS = new Set<SettingKey>([
   'auth_password',
   'auth_password_enabled',
@@ -137,9 +134,7 @@ export function registerSettingsRoutes(
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const body = parsed.data
 
-    // Validate against the EFFECTIVE (post-save) values so we never allow
-    // saving a flag combination that would immediately lock everyone out.
-    // Password and OIDC are independent -- both, one, or neither may be enabled.
+    // Validate against the post-save values so we never lock everyone out.
     const effPw =
       body.uiPassword ||
       settingsStore.getSetting<string>('auth_password') ||
@@ -229,8 +224,7 @@ export function registerSettingsRoutes(
     }
     settingsStore.setSetting('log_level', level)
     settingsStore.setSetting('log_size_limit_mb', parsed.data.logSizeLimitMb)
-    // Live-apply (reconfiguring the running logger) lands with the pino
-    // wiring in app.ts -- not yet in place, so this only persists for now.
+    // Live-apply lands with the pino wiring; only persists for now.
     logEvent(
       db,
       'info',

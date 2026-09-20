@@ -8,8 +8,7 @@ import { logEvent } from '../db/events.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** DB backup endpoints: list existing backups, trigger one manually. Ported
- * from api/backup.py. */
+/** DB backup endpoints. Ported from api/backup.py. */
 
 export interface BackupRouteOptions {
   db: DbClient
@@ -62,9 +61,7 @@ export function registerBackupRoutes(
 
   app.post('/api/backup/run', async (request) => {
     getCurrentUser(request, db, settingsStore, env)
-    // Manual trigger always runs regardless of `enabled` -- that flag only
-    // gates the automatic nightly loop; a manual "run now" is an explicit
-    // admin action and should always be honored.
+    // Ignores `enabled` -- that flag only gates the automatic nightly loop.
     const { retentionDays } = effectiveBackupSettings(settingsStore, env)
     return runBackupCycle(db, env.dbPath, env.backupDir, retentionDays)
   })

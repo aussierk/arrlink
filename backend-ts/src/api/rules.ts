@@ -26,8 +26,7 @@ import {
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Rules CRUD: storage, validation, matching, templates, and preview. Ported
- * from api/rules.py. */
+/** Rules CRUD, validation, and preview. Ported from api/rules.py. */
 
 export interface RulesRouteOptions {
   db: DbClient
@@ -49,11 +48,10 @@ const ConditionInSchema = z
       'custom',
     ]),
     matchType: z.enum(['exact', 'list', 'regex', 'vocabulary']),
-    // min length relaxed to 0: "vocabulary" intentionally carries an empty match_value
+    // "vocabulary" intentionally carries an empty match_value
     matchValue: z.string().max(2000),
     join: z.enum(['AND', 'OR']).nullable().default(null),
-    // null/absent == "tag". "native" matches the item's real Radarr/Sonarr
-    // metadata instead of its arbitrary tags; only offered for rich categories.
+    // null/absent = "tag"; "native" matches real Radarr/Sonarr metadata, rich categories only.
     source: z.enum(['tag', 'native']).nullable().default(null),
   })
   .superRefine((c, ctx) => {
@@ -159,9 +157,7 @@ const RuleInSchema = z
         message: 'filename_template must not contain backslashes',
       })
     }
-    // A placeholder is only ever resolvable if it's a fixed name or a
-    // category this rule actually has a condition for -- catch a typo here
-    // rather than have it silently fail later, per-item, at match time.
+    // Catch a placeholder typo here rather than have it fail later, per-item, at match time.
     const known = new Set([...FIXED_PLACEHOLDERS, ...seen])
     for (const [field, tmpl] of [
       ['dir_template', body.dirTemplate],
@@ -192,8 +188,7 @@ function parseBody(body: unknown): RuleIn {
   return parsed.data
 }
 
-/** The app_type a rule's conditions should be checked/expanded against, or
- * null if the rule is unscoped -- vocabulary validation/expansion no-ops then. */
+/** The app_type to check/expand a rule's conditions against, or null if unscoped. */
 function resolveAppType(
   db: DbClient,
   appScope: number | null,
@@ -211,8 +206,7 @@ function resolveAppType(
   return null
 }
 
-/** One concrete app id to check instance-scoped vocabulary against, when the
- * rule isn't pinned to a specific app. */
+/** One concrete app id to check instance-scoped vocabulary against, if unpinned. */
 function representativeAppId(
   db: DbClient,
   appScope: number | null,
@@ -381,8 +375,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     reply.code(204).send()
   })
 
-  // Dry-run vocabulary-membership validation with no persistence, so the
-  // rule editor can show warnings live while the user is still typing.
+  // Dry-run for live warnings in the rule editor -- no persistence.
   app.post('/api/rules/vocabulary-check', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const body = parseBody(request.body)

@@ -28,8 +28,7 @@ const AppInSchema = z.object({
   name: z.string().min(1).max(50),
   type: z.enum(['radarr', 'sonarr']),
   url: z.string().min(4).max(200),
-  // Blank on update = keep the existing key (the UI sends the masked key,
-  // which is not a real key). Required to be non-empty on create.
+  // Blank on update keeps the existing key; required non-empty on create.
   apiKey: z.string().max(200).default(''),
   enabled: z.boolean().default(true),
   pollIntervalS: z.number().int().min(10).max(3600).default(300),
@@ -59,9 +58,6 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
     return db.select().from(apps).orderBy(apps.id).all().map(appOut)
   })
 
-  // Must precede /api/apps/:appId (Fastify tries static routes before
-  // parametric ones, so this is not order-sensitive here, unlike FastAPI --
-  // kept as its own handler for parity with the Python route layout).
   app.get('/api/apps/summary', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const active = db
@@ -137,10 +133,8 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const body = parsed.data
 
-    // Changing the app type (radarr <-> sonarr) would make the poller treat
-    // this as a brand-new app on the next rescan: every existing item stops
-    // matching, and after the deletion grace period all of its hardlinks are
-    // unlinked from disk.
+    // Changing type makes the poller treat this as a new app next rescan,
+    // unlinking every existing hardlink after the grace period.
     if (body.type !== row.type) {
       const linked = db
         .select({ c: count() })

@@ -3,12 +3,10 @@ import type { DbClient } from '../db/client.js'
 import { appFiles, appItems } from '../db/schema.js'
 import type { Item, MediaFile } from '../arr/types.js'
 
-/** Rebuild adapter-shaped Item/MediaFile objects from the poller's stored
- * snapshot. Ported from core/snapshot.py. */
+/** Rebuild adapter-shaped Item/MediaFile objects from the poller's stored snapshot.
+ * Ported from core/snapshot.py. */
 
-/** Every stored item for the app, with its stored files attached. Returns []
- * if the app has never been polled -- callers should fall back to a live
- * fetch in that case. */
+/** Every stored item, with files attached. [] if never polled -- callers fall back to live fetch. */
 export function snapshotItems(db: DbClient, appId: number): Item[] {
   const itemRows = db.select().from(appItems).where(eq(appItems.appId, appId)).all()
 

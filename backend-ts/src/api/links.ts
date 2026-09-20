@@ -17,8 +17,7 @@ import { normalizeFsFallback } from '../config/env.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Links API: browse created hardlinks, delete one, repair missing ones.
- * Ported from api/links.py. */
+/** Browse/delete/repair hardlinks. Ported from api/links.py. */
 
 export interface LinksRouteOptions {
   db: DbClient
@@ -107,8 +106,7 @@ export function registerLinksRoutes(app: FastifyInstance, opts: LinksRouteOption
     let fixed = 0
     let failed = 0
     const fallback = resolveFsFallback(settingsStore, normalizeFsFallback(env.fsFallback))
-    // 'missing' too: repair re-creates links that were removed (by the UI or
-    // by the poller) whose source file has since (re)appeared.
+    // 'missing' too: source may have (re)appeared since removal.
     const rows = db
       .select({ id: links.id, dstPath: links.dstPath, srcPath: links.srcPath })
       .from(links)

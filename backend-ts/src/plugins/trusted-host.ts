@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 
-/** Opt-in Host-header allow-list (TRUSTED_HOSTS env) -- unset by default.
- * Ported from main.py's TrustedHostMiddleware wiring. */
+/** Opt-in Host-header allow-list (TRUSTED_HOSTS). Ported from main.py's
+ * TrustedHostMiddleware wiring. */
 export function registerTrustedHost(
   app: FastifyInstance,
   trustedHosts: string | undefined,
@@ -26,8 +26,7 @@ export function registerTrustedHost(
 function isAllowedHost(host: string, hosts: Set<string>): boolean {
   for (const pattern of hosts) {
     if (host === pattern) return true
-    // Starlette-style wildcard: "*.example.com" matches "sub.example.com"
-    // (host.endsWith(pattern without the leading "*")).
+    // "*.example.com" matches "sub.example.com" (Starlette-style).
     if (pattern.startsWith('*') && host.endsWith(pattern.slice(1))) return true
   }
   return false

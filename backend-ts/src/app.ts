@@ -71,8 +71,7 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   const here = fileURLToPath(import.meta.url)
   const dist = findDist(here)
 
-  // Same plugin order as main.py: trusted-host -> dev-CORS -> gzip ->
-  // security-headers (outermost, so it also decorates static/SPA responses).
+  // Same order as main.py: trusted-host -> dev-CORS -> gzip -> security-headers.
   registerTrustedHost(app, settings.trustedHosts)
   if (settings.enableDevCors) registerDevCors(app)
   await app.register(fastifyCompress, { threshold: 1024 })
@@ -93,8 +92,7 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   registerVocabularyRoutes(app, routeOpts)
   registerLogsRoutes(app, routeOpts)
 
-  // Static/SPA catch-all last, so it only ever shadows routes that don't
-  // otherwise exist.
+  // Static/SPA catch-all last, so it only shadows routes that don't exist.
   if (dist) await registerStaticRoutes(app, dist)
 
   const ruleRows = db

@@ -19,9 +19,7 @@ import { ruleAppliesToApp } from '../core/planner.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Tags per app: live import from the app's API, manual import (tests/offline),
- * and a shared tag repository that can be pushed to one or more apps. Ported
- * from api/tags.py. */
+/** Tags per app + a shared tag repository. Ported from api/tags.py. */
 
 export interface TagsRouteOptions {
   db: DbClient
@@ -80,8 +78,7 @@ function conditionMatchesLabel(
   return false
 }
 
-/** Best-effort UI hint (checks each matcher in isolation, not the full AND/OR
- * chain against a real item's tags). */
+/** Best-effort UI hint -- checks each matcher in isolation, not the full AND/OR chain. */
 function ruleMatchesLabel(rule: RuleRow, label: string): boolean {
   let conditions: Array<{ matchType: string; matchValue: string }> = []
   try {

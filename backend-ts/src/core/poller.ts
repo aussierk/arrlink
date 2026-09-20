@@ -26,10 +26,8 @@ import {
   syncVocabularyRows,
 } from './vocabulary.js'
 
-/** Per-app poller: snapshot, diff, and reconcile hardlinks. Ported from core/poller.py.
- * Node has one JS thread, so Python's asyncio.to_thread offload is dropped -- a
- * poll+reconcile just runs inline. Scheduling uses recursive setTimeout (via the
- * sleep() helper) since each loop's delay is dynamic, not fixed. */
+/** Per-app poller: snapshot, diff, and reconcile hardlinks. Ported from
+ * core/poller.py -- runs inline (one JS thread) via recursive setTimeout. */
 
 const JITTER = 0.2
 const MAX_BACKOFF_S = 60
@@ -53,8 +51,8 @@ function jitterFactor(): number {
   return (Math.random() * 2 - 1) * JITTER
 }
 
-/** Resolves after `ms`, or immediately if `signal` fires first -- never rejects,
- * so callers just check `signal.aborted` after each await instead of try/catch. */
+/** Resolves after `ms`, or immediately on abort -- never rejects, so callers
+ * just check `signal.aborted` after each await. */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve()
   return new Promise((resolve) => {
@@ -243,10 +241,8 @@ export class Poller {
     return ts === null || Date.now() / 1000 - ts > maxAge
   }
 
-  /** Per-instance vocabulary: collection names observed in this poll's items (pure
-   * derivation, every poll) plus this app's configured quality profiles/languages
-   * (2 adapter HTTP calls, throttled to INSTANCE_VOCAB_STALE_S). Best-effort: never
-   * fails the poll. */
+  /** Observed collections (every poll) + quality/language profiles (throttled
+   * HTTP calls). Best-effort: never fails the poll. */
   private async syncInstanceVocabulary(
     appId: number,
     appType: string,
@@ -368,9 +364,7 @@ export class Poller {
 
   // -------------------------------------------------------------- storage
 
-  /** Diff the app's reported items/files against what's stored and persist the
-   * delta, chunk-committing every STORE_COMMIT_BATCH rows to release the WAL
-   * writer lock (mirrors linker.ts's withChunkedCommits). */
+  /** Diff reported items/files against stored, chunk-committing like linker.ts's withChunkedCommits. */
   private storeItems(appId: number, items: Item[], now: number): void {
     const itemRowsById = new Map<number, AppItemRow>(
       this.db
@@ -434,12 +428,9 @@ export class Poller {
     const existingFiles =
       existing !== undefined ? (filesByItemDbId.get(existing.id) ?? []) : []
 
-    // This item's files were NOT re-fetched -- rehydrate them from the stored
-    // rows so the planner sees the real file set and the diff below writes
-    // nothing. Only healthy rows (missingStrikes == 0): a row mid-grace is
-    // deliberately left out so the loop below keeps striking it toward
-    // deletion, exactly as a live fetch would. Mutates item.files so
-    // reconcileApp (which runs after storeItems, over the same items) sees it.
+    // Files weren't re-fetched -- rehydrate from stored rows (only healthy
+    // ones, so a mid-grace row keeps getting struck). Mutates item.files so
+    // reconcileApp sees it too.
     if (item.filesStale && existingFiles.length > 0) {
       item.files = existingFiles
         .filter((fr) => (fr.missingStrikes || 0) === 0)
@@ -551,9 +542,7 @@ export class Poller {
         fid = Number(res.lastInsertRowid)
       } else {
         fid = frow.id
-        // a row matched by inode under a different rel_path means the file was
-        // renamed/moved: reuse the row so the linker re-links under the new
-        // name. Skip the write when nothing about the file changed.
+        // matched by inode under a new rel_path = renamed; reuse the row.
         const changed =
           frow.relPath !== f.relPath ||
           frow.absPath !== f.absPath ||
@@ -598,10 +587,8 @@ export class Poller {
         .run()
       return
     }
-    // file gone for good: unlink its hardlinks from disk FIRST (links.file_id is
-    // ON DELETE CASCADE, so the delete below would otherwise silently drop the
-    // links row -- before reconcileApp ever sees it -- leaking the physical
-    // hardlink on disk with zero record of it anywhere).
+    // Unlink FIRST: file_id cascades on delete, which would drop the links
+    // row before reconcileApp sees it, leaking the hardlink with no record.
     const linkRows = this.db
       .select({ dstPath: links.dstPath })
       .from(links)

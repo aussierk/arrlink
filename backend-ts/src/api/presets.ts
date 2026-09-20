@@ -16,8 +16,8 @@ import { DEFAULT_ROOTS, TemplateError, checkJail } from '../core/template.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Presets API: list preset rules per app type + apply one (creates an
- * editable rule, jail-validated). Ported from api/presets.py. */
+/** List preset rules per app type + apply one as an editable rule. Ported
+ * from api/presets.py. */
 
 export interface PresetsRouteOptions {
   db: DbClient
@@ -97,9 +97,8 @@ export function registerPresetsRoutes(
     }
 
     const rendered = renderPreset(body.presetKey, body.appType, base)!
-    // Path jail: the base folder must stay under an allowed root. Preset
-    // subpaths are placeholder-only (resolve to sanitized, separator-free
-    // values), so this guarantees the whole resolved tree stays jailed.
+    // Base folder must stay under an allowed root; preset subpaths are
+    // placeholder-only, so this jails the whole resolved tree.
     const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [
       ...DEFAULT_ROOTS,
     ]
