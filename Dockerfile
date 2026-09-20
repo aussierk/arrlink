@@ -8,31 +8,36 @@ RUN npm install
 COPY web/ ./
 RUN npm run build
 
-# ---------- Stage 2: Python runtime ----------
-FROM python:3.12-slim AS runtime
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
+# ---------- Stage 2: build the TypeScript backend ----------
+FROM node:22-alpine AS backend
+WORKDIR /build
+COPY backend-ts/package.json backend-ts/package-lock.json* ./
+RUN npm install
+COPY backend-ts/ ./
+RUN npm run build
+
+# ---------- Stage 3: runtime ----------
+FROM node:22-alpine AS runtime
+ENV NODE_ENV=production \
     PORT=8270
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gosu \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache su-exec
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend-ts/package.json backend-ts/package-lock.json* ./
+RUN npm install --omit=dev
 
-COPY backend/arrlink ./arrlink
+COPY --from=backend /build/dist ./dist
 COPY --from=web /build/dist ./web/dist
 COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh \
-    && useradd --uid 1000 --create-home appuser \
+    && adduser -D -u 1000 appuser \
     && mkdir -p /config /linked
 
 EXPOSE 8270
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import os,sys,urllib.request; p=os.environ.get('PORT','8270'); r=urllib.request.urlopen(f'http://127.0.0.1:{p}/api/health',timeout=3); sys.exit(0 if r.status==200 else 1)"
+    CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||'8270')+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/entrypoint.sh"]

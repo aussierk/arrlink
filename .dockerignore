@@ -9,3 +9,5 @@ config
 tests
 web/node_modules
 web/dist
+backend-ts/node_modules
+backend-ts/dist

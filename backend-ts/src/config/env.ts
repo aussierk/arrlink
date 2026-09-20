@@ -49,6 +49,10 @@ const EnvSchema = z.object({
   // reached as.
   TRUSTED_HOSTS: z.string().optional(),
   ENABLE_DEV_CORS: boolFromEnv,
+  // IP(s)/CIDR(s) of a trusted reverse proxy -- only from these peers are
+  // X-Forwarded-Proto/-Host honored (spoofable otherwise). See app.ts's
+  // Fastify `trustProxy` option and api/auth.ts's secure() cookie flag.
+  FORWARDED_ALLOW_IPS: z.string().default('127.0.0.1'),
   BACKUP_ENABLED: z
     .string()
     .optional()
@@ -78,6 +82,7 @@ export interface Settings {
   appUrl: string | undefined
   trustedHosts: string | undefined
   enableDevCors: boolean
+  forwardedAllowIps: string
   backupEnabled: boolean
   backupRetentionDays: number
   port: number
@@ -113,6 +118,7 @@ export async function loadSettings(
     appUrl: e.APP_URL,
     trustedHosts: e.TRUSTED_HOSTS,
     enableDevCors: e.ENABLE_DEV_CORS,
+    forwardedAllowIps: e.FORWARDED_ALLOW_IPS,
     backupEnabled: e.BACKUP_ENABLED,
     backupRetentionDays: e.BACKUP_RETENTION_DAYS,
     port: e.PORT,

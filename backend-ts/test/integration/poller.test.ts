@@ -140,6 +140,7 @@ beforeEach(() => {
     sessionTtlH: 12,
     appUrl: undefined,
     trustedHosts: undefined,
+    forwardedAllowIps: '127.0.0.1',
     enableDevCors: false,
     backupEnabled: true,
     backupRetentionDays: 7,

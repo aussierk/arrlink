@@ -55,7 +55,7 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   }
   const settingsStore = new SettingsStore(db)
 
-  const app = Fastify({ logger: false })
+  const app = Fastify({ logger: false, trustProxy: settings.forwardedAllowIps })
   await app.register(fastifyCookie)
 
   // web/src/lib/api.ts's req() helper parses `{ detail }` from error bodies.
