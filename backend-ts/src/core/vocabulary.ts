@@ -40,7 +40,7 @@ async function tmdbGet(path: string, apiKey: string): Promise<unknown> {
 }
 
 /** Full-replace a (category, app_type, app_id) vocabulary scope. */
-function syncVocabularyRows(
+export function syncVocabularyRows(
   db: DbClient,
   category: string,
   appType: string,
