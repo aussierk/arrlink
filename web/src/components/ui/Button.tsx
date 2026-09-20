@@ -1,6 +1,14 @@
 import { Loader2 } from 'lucide-react'
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost'
+type Variant =
+  | 'primary'
+  | 'secondary'
+  | 'ghost'
+  | 'danger'
+  | 'danger-ghost'
+  | 'accent-ghost'
+  | 'success-ghost'
+  | 'warning'
 type Size = 'sm' | 'md'
 
 const VARIANT: Record<Variant, string> = {
@@ -9,6 +17,9 @@ const VARIANT: Record<Variant, string> = {
   ghost: 'text-fg-soft hover:bg-fill',
   danger: 'bg-danger text-white hover:bg-danger-hover',
   'danger-ghost': 'text-danger-fg hover:bg-danger-bg',
+  'accent-ghost': 'text-accent hover:bg-accent-bg',
+  'success-ghost': 'text-success-fg hover:bg-success-bg',
+  warning: 'border border-warning-fg/50 text-warning-fg hover:bg-warning-bg',
 }
 
 const SIZE: Record<Size, string> = {

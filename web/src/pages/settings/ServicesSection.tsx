@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Download, Pencil, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import AppModal from '../../components/AppModal'
 import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
+import { Table, TableEmpty, Th, Thead } from '../../components/ui/Table'
 import { api, fmtTime, type AppItem } from '../../lib/api'
+import { useAsyncLoad } from '../../lib/useAsyncLoad'
 import { useConfirm } from '../../lib/useConfirm'
 import { useToast } from '../../lib/useToast'
 
@@ -21,17 +24,9 @@ export default function ServicesSection() {
   const [editing, setEditing] = useState<AppItem | null>(null)
   const [rowMsg, setRowMsg] = useState<Record<number, string>>({})
 
-  const load = useCallback(async () => {
-    try {
-      setApps(await api.listApps())
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [toast])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const load = useAsyncLoad(async () => {
+    setApps(await api.listApps())
+  }, [])
 
   function openNew() {
     setEditing(null)
@@ -114,128 +109,108 @@ export default function ServicesSection() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-fg">{t('settingsServices.title')}</h3>
-          <p className="text-xs text-fg-subtle">{t('settingsServices.subtitle')}</p>
-        </div>
-        <Button onClick={openNew}>
-          <Plus className="size-4" />
-          {t('settingsServices.addService')}
-        </Button>
-      </div>
+      <PageHeader
+        size="md"
+        title={t('settingsServices.title')}
+        subtitle={t('settingsServices.subtitle')}
+        actions={
+          <Button onClick={openNew}>
+            <Plus className="size-4" />
+            {t('settingsServices.addService')}
+          </Button>
+        }
+      />
 
-      <div className="overflow-hidden rounded-lg border border-line">
-        <table className="w-full text-sm">
-          <thead className="bg-surface text-left text-xs font-semibold text-fg-muted">
-            <tr>
-              <th scope="col" className="px-3 py-2">
-                {t('settingsServices.colName')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('settingsServices.colType')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('settingsServices.colUrl')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('settingsServices.colApiKey')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('settingsServices.colPoll')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('settingsServices.colLastPoll')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('settingsServices.colActions')}
-              </th>
-              <th scope="col" className="px-3 py-2" />
+      <Table>
+        <Thead>
+          <tr>
+            <Th>{t('settingsServices.colName')}</Th>
+            <Th>{t('settingsServices.colType')}</Th>
+            <Th>{t('settingsServices.colUrl')}</Th>
+            <Th>{t('settingsServices.colApiKey')}</Th>
+            <Th>{t('settingsServices.colPoll')}</Th>
+            <Th>{t('settingsServices.colLastPoll')}</Th>
+            <Th>{t('settingsServices.colActions')}</Th>
+            <Th />
+          </tr>
+        </Thead>
+        <tbody className="divide-y divide-line">
+          {apps.length === 0 && (
+            <TableEmpty colSpan={8}>
+              <Trans i18nKey="settingsServices.empty">
+                No services yet — click <span className="text-accent">Add service</span>.
+              </Trans>
+            </TableEmpty>
+          )}
+          {apps.map((a) => (
+            <tr key={a.id} className="bg-sunken/40">
+              <td className="px-3 py-2 font-medium">
+                {a.name}
+                {!a.enabled && (
+                  <span className="ml-2 text-xs text-fg-subtle">
+                    {t('settingsServices.disabled')}
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-2">{a.type}</td>
+              <td className="px-3 py-2 text-fg-muted">{a.url}</td>
+              <td className="px-3 py-2 font-mono text-xs text-fg-subtle">
+                {a.api_key_masked}
+              </td>
+              <td className="px-3 py-2">
+                {a.poll_interval_s}
+                {t('settingsServices.pollSuffix')}
+              </td>
+              <td className="px-3 py-2 text-fg-muted">
+                {a.last_error ? (
+                  <span className="text-danger-fg">{a.last_error}</span>
+                ) : (
+                  fmtTime(a.last_poll_at)
+                )}
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => void testRow(a.id)}>
+                    <Plug className="size-3.5" />
+                    {t('settingsServices.test')}
+                  </Button>
+                  <Button
+                    variant="accent-ghost"
+                    size="sm"
+                    onClick={() => void importRow(a.id)}
+                  >
+                    <Download className="size-3.5" />
+                    {t('settingsServices.importTags')}
+                  </Button>
+                  <Button
+                    variant="success-ghost"
+                    size="sm"
+                    onClick={() => void rescanRow(a.id)}
+                  >
+                    <RefreshCw className="size-3.5" />
+                    {t('settingsServices.rescan')}
+                  </Button>
+                  {rowMsg[a.id] && (
+                    <span className="text-xs text-fg-subtle">{rowMsg[a.id]}</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-3 py-2 text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>
+                    <Pencil className="size-3.5" />
+                    {t('settingsServices.edit')}
+                  </Button>
+                  <Button variant="danger-ghost" size="sm" onClick={() => void remove(a)}>
+                    <Trash2 className="size-3.5" />
+                    {t('settingsServices.delete')}
+                  </Button>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {apps.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
-                  <Trans i18nKey="settingsServices.empty">
-                    No services yet — click{' '}
-                    <span className="text-accent">Add service</span>.
-                  </Trans>
-                </td>
-              </tr>
-            )}
-            {apps.map((a) => (
-              <tr key={a.id} className="bg-sunken/40">
-                <td className="px-3 py-2 font-medium">
-                  {a.name}
-                  {!a.enabled && (
-                    <span className="ml-2 text-xs text-fg-subtle">
-                      {t('settingsServices.disabled')}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2">{a.type}</td>
-                <td className="px-3 py-2 text-fg-muted">{a.url}</td>
-                <td className="px-3 py-2 font-mono text-xs text-fg-subtle">
-                  {a.api_key_masked}
-                </td>
-                <td className="px-3 py-2">
-                  {a.poll_interval_s}
-                  {t('settingsServices.pollSuffix')}
-                </td>
-                <td className="px-3 py-2 text-fg-muted">
-                  {a.last_error ? (
-                    <span className="text-danger-fg">{a.last_error}</span>
-                  ) : (
-                    fmtTime(a.last_poll_at)
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => void testRow(a.id)}>
-                      <Plug className="size-3.5" />
-                      {t('settingsServices.test')}
-                    </Button>
-                    <button
-                      onClick={() => void importRow(a.id)}
-                      className="flex items-center gap-1 rounded px-2.5 py-1 text-xs text-accent transition-colors hover:bg-accent-bg focus-visible:focus-ring"
-                    >
-                      <Download className="size-3.5" />
-                      {t('settingsServices.importTags')}
-                    </button>
-                    <button
-                      onClick={() => void rescanRow(a.id)}
-                      className="flex items-center gap-1 rounded px-2.5 py-1 text-xs text-success-fg transition-colors hover:bg-success-bg focus-visible:focus-ring"
-                    >
-                      <RefreshCw className="size-3.5" />
-                      {t('settingsServices.rescan')}
-                    </button>
-                    {rowMsg[a.id] && (
-                      <span className="text-xs text-fg-subtle">{rowMsg[a.id]}</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>
-                      <Pencil className="size-3.5" />
-                      {t('settingsServices.edit')}
-                    </Button>
-                    <Button
-                      variant="danger-ghost"
-                      size="sm"
-                      onClick={() => void remove(a)}
-                    >
-                      <Trash2 className="size-3.5" />
-                      {t('settingsServices.delete')}
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </Table>
 
       {modalOpen && (
         <AppModal

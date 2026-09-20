@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, setDisplayTimezone } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
@@ -6,9 +6,11 @@ import { TMDB_CERTIFICATION_COUNTRIES } from '../../lib/countries'
 import i18n from '../../i18n'
 import Toggle from '../../components/ui/Toggle'
 import Field from '../../components/ui/Field'
+import { useAsyncLoad } from '../../lib/useAsyncLoad'
 import { useToast } from '../../lib/useToast'
 import SubSection from '../../components/ui/SubSection'
 import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
 
 const LOG_LEVELS = ['debug', 'info', 'warning', 'error']
 
@@ -59,34 +61,26 @@ export default function GeneralSection() {
   const [logLevel, setLogLevel] = useState('info')
   const [logSizeLimitMb, setLogSizeLimitMb] = useState(10)
 
-  const load = useCallback(async () => {
-    try {
-      const [eff, settings, logging] = await Promise.all([
-        api.getEffectiveSettings(),
-        api.getSettings(),
-        api.getLoggingSettings(),
-      ])
-      setUnlink(eff.global_unlink_on_mismatch)
-      setFsFallback(eff.fs_fallback)
-      setFsModes(eff.fs_fallback_modes)
-      setRootsText(eff.allowed_roots.join(', '))
-      setAppTitle(eff.app_title)
-      setAppUrl(eff.app_url)
-      setDisplayLanguageState(eff.display_language)
-      setTimezone(eff.display_timezone)
-      setBindAddress(eff.bind_address)
-      setPort(eff.port)
-      setRegion((settings['tmdb_certification_country'] as string | undefined) ?? 'US')
-      setLogLevel(logging.log_level)
-      setLogSizeLimitMb(logging.log_size_limit_mb)
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [toast])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const load = useAsyncLoad(async () => {
+    const [eff, settings, logging] = await Promise.all([
+      api.getEffectiveSettings(),
+      api.getSettings(),
+      api.getLoggingSettings(),
+    ])
+    setUnlink(eff.global_unlink_on_mismatch)
+    setFsFallback(eff.fs_fallback)
+    setFsModes(eff.fs_fallback_modes)
+    setRootsText(eff.allowed_roots.join(', '))
+    setAppTitle(eff.app_title)
+    setAppUrl(eff.app_url)
+    setDisplayLanguageState(eff.display_language)
+    setTimezone(eff.display_timezone)
+    setBindAddress(eff.bind_address)
+    setPort(eff.port)
+    setRegion((settings['tmdb_certification_country'] as string | undefined) ?? 'US')
+    setLogLevel(logging.log_level)
+    setLogSizeLimitMb(logging.log_size_limit_mb)
+  }, [])
 
   function onLanguageChange(lng: string) {
     setDisplayLanguageState(lng)
@@ -127,10 +121,11 @@ export default function GeneralSection() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-fg">{t('settingsGeneral.title')}</h3>
-        <p className="text-xs text-fg-subtle">{t('settingsGeneral.subtitle')}</p>
-      </div>
+      <PageHeader
+        size="md"
+        title={t('settingsGeneral.title')}
+        subtitle={t('settingsGeneral.subtitle')}
+      />
 
       <SubSection title={t('settingsGeneral.applicationSectionTitle')}>
         <Field label={t('settingsGeneral.appTitle')}>

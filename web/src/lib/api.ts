@@ -541,19 +541,15 @@ export function reportClientError(input: {
   url?: string
   stack?: string
 }): void {
-  try {
-    void fetch('/api/logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      keepalive: true,
-      body: JSON.stringify({
-        message: input.message.slice(0, 500),
-        level: input.level ?? 'error',
-        url: input.url ?? window.location.pathname,
-        stack: (input.stack ?? '').slice(0, 2000),
-      }),
-    }).catch(() => {})
-  } catch {
-    /* reporting must never throw */
-  }
+  void fetch('/api/logs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    keepalive: true,
+    body: JSON.stringify({
+      message: input.message.slice(0, 500),
+      level: input.level ?? 'error',
+      url: input.url ?? window.location.pathname,
+      stack: (input.stack ?? '').slice(0, 2000),
+    }),
+  }).catch(() => {})
 }

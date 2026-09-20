@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { api, type AppItem, type LinkItem } from '../lib/api'
 import Button from './ui/Button'
+import { TableEmpty, Th, Thead } from './ui/Table'
+import { useAsyncLoad } from '../lib/useAsyncLoad'
 import { useToast } from '../lib/useToast'
+import { selectCls } from '../lib/ui'
 
 /**
  * Links panel: browse, filter, remove, and repair the hardlinks ArrLink
@@ -40,20 +43,16 @@ export default function LinksPanel() {
     if (s !== null) setStatus(s)
   }, [params])
 
-  const load = useCallback(async () => {
-    try {
-      const r = await api.listLinks({
-        app_id: appId ? Number(appId) : undefined,
-        status: status || undefined,
-        limit: PAGE_SIZE,
-        offset,
-      })
-      setLinks(r.items)
-      setTotal(r.total)
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [appId, status, offset, toast])
+  const load = useAsyncLoad(async () => {
+    const r = await api.listLinks({
+      app_id: appId ? Number(appId) : undefined,
+      status: status || undefined,
+      limit: PAGE_SIZE,
+      offset,
+    })
+    setLinks(r.items)
+    setTotal(r.total)
+  }, [appId, status, offset])
 
   useEffect(() => {
     api
@@ -65,10 +64,6 @@ export default function LinksPanel() {
   useEffect(() => {
     setOffset(0)
   }, [appId, status])
-
-  useEffect(() => {
-    void load()
-  }, [load])
 
   async function repair() {
     setBusy(true)
@@ -96,7 +91,7 @@ export default function LinksPanel() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <select
-          className="rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg"
+          className={selectCls}
           value={appId}
           onChange={(e) => setAppId(e.target.value)}
         >
@@ -108,7 +103,7 @@ export default function LinksPanel() {
           ))}
         </select>
         <select
-          className="rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg"
+          className={selectCls}
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
@@ -127,33 +122,19 @@ export default function LinksPanel() {
 
       <div className="max-h-96 overflow-auto rounded-lg border border-line">
         <table className="w-full min-w-4xl text-sm">
-          <thead className="sticky top-0 bg-surface text-left text-xs font-semibold text-fg-muted">
+          <Thead className="sticky top-0">
             <tr>
-              <th scope="col" className="px-3 py-2">
-                {t('linksTable.colApp')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('linksTable.colRule')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('linksTable.colSource')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('linksTable.colLinkedTo')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('linksTable.colStatus')}
-              </th>
-              <th scope="col" className="px-3 py-2" />
+              <Th>{t('linksTable.colApp')}</Th>
+              <Th>{t('linksTable.colRule')}</Th>
+              <Th>{t('linksTable.colSource')}</Th>
+              <Th>{t('linksTable.colLinkedTo')}</Th>
+              <Th>{t('linksTable.colStatus')}</Th>
+              <Th />
             </tr>
-          </thead>
+          </Thead>
           <tbody className="divide-y divide-line">
             {links.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-fg-subtle">
-                  {t('linksTable.empty')}
-                </td>
-              </tr>
+              <TableEmpty colSpan={6}>{t('linksTable.empty')}</TableEmpty>
             )}
             {links.map((l) => (
               <tr key={l.id} className="bg-sunken/40">

@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type AppItem } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Field from '../../components/ui/Field'
+import { useAsyncLoad } from '../../lib/useAsyncLoad'
 import { useToast } from '../../lib/useToast'
 import SubSection from '../../components/ui/SubSection'
 import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
 
 /**
  * Metadata providers (genre/certification/quality/language/collection):
@@ -25,21 +27,13 @@ export default function VocabularySection() {
   const [defaultKeyConfigured, setDefaultKeyConfigured] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      const [a, tmdb] = await Promise.all([api.listApps(), api.getTmdbSettings()])
-      setApps(a)
-      setApiKey('')
-      setApiKeySet(tmdb.api_key_set)
-      setDefaultKeyConfigured(tmdb.default_key_configured)
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [toast])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const load = useAsyncLoad(async () => {
+    const [a, tmdb] = await Promise.all([api.listApps(), api.getTmdbSettings()])
+    setApps(a)
+    setApiKey('')
+    setApiKeySet(tmdb.api_key_set)
+    setDefaultKeyConfigured(tmdb.default_key_configured)
+  }, [])
 
   async function saveKey() {
     try {
@@ -93,10 +87,11 @@ export default function VocabularySection() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-fg">{t('settingsVocab.title')}</h3>
-        <p className="text-xs text-fg-subtle">{t('settingsVocab.subtitle')}</p>
-      </div>
+      <PageHeader
+        size="md"
+        title={t('settingsVocab.title')}
+        subtitle={t('settingsVocab.subtitle')}
+      />
 
       <SubSection
         title={t('settingsVocab.tmdbTitle')}

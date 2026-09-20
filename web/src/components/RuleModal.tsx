@@ -14,7 +14,9 @@ import {
   decodeServiceValue,
   emptyForm,
   encodeServiceValue,
+  nextMatchValueForSelection,
   PRISTINE_DIRS,
+  reorderConditions,
   type FormState,
 } from './ruleModal/helpers'
 import {
@@ -26,7 +28,7 @@ import {
   type RuleItem,
   type TagItem,
 } from '../lib/api'
-import { joinList, parseList, type ServiceType } from '../lib/tagOptions'
+import { type ServiceType } from '../lib/tagOptions'
 import { inputCls } from '../lib/ui'
 
 /**
@@ -134,17 +136,9 @@ export default function RuleModal({
 
   function applyBlockSelection(i: number, prevSelected: string[], next: string[]) {
     const c = conditions[i]
-    if (c.match_type !== 'list') {
-      updateBlock(i, { match_value: next[0] ?? '' })
-      return
-    }
-    const removed = prevSelected.filter((tag) => !next.includes(tag))
-    const added = next.filter((tag) => !prevSelected.includes(tag))
-    const cur = parseList(c.match_value).filter((tag) => !removed.includes(tag))
-    added.forEach((tag) => {
-      if (!cur.includes(tag)) cur.push(tag)
+    updateBlock(i, {
+      match_value: nextMatchValueForSelection(c.match_type, c.match_value, prevSelected, next),
     })
-    updateBlock(i, { match_value: joinList(cur) })
   }
 
   function addCondition(join: 'AND' | 'OR' | null) {
@@ -168,20 +162,8 @@ export default function RuleModal({
     setConditions(next)
   }
 
-  // Reorder matters — the backend folds the AND/OR chain left-to-right with no
-  // precedence. `join` is positional: index 0 must be null, the rest AND/OR,
-  // so re-normalise after moving (backfilling any interior null to 'AND').
   function moveCondition(from: number, to: number) {
-    setConditions((cs) => {
-      if (to < 0 || to >= cs.length) return cs
-      const next = [...cs]
-      const [item] = next.splice(from, 1)
-      next.splice(to, 0, item)
-      return next.map((c, idx) => ({
-        ...c,
-        join: idx === 0 ? null : (c.join ?? 'AND'),
-      }))
-    })
+    setConditions((cs) => reorderConditions(cs, from, to))
   }
 
   function applyPreset(p: PresetItem) {

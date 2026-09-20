@@ -6,12 +6,9 @@ import {
   type ConditionItem,
   type RuleInput,
   type TagItem,
-  type VocabularyEntry,
 } from '../../lib/api'
-import { CUSTOM_TAG_SUGGESTIONS, type ServiceType } from '../../lib/tagOptions'
-import { RICH, type FormState } from './helpers'
-
-type Vocab = Partial<Record<ConditionCategory, VocabularyEntry[]>>
+import { type ServiceType } from '../../lib/tagOptions'
+import { computeCustomOptions, optionsForCategory, type FormState, type Vocab } from './helpers'
 
 type Args = {
   form: FormState
@@ -77,27 +74,10 @@ export function useRuleVocabulary({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conditions, form.app_scope, form.app_type_scope])
 
-  const customOptions = useMemo(() => {
-    const knownTags = new Set(
-      RICH_CATEGORIES.flatMap((cat) => (vocab[cat] ?? []).map((v) => v.value)),
-    )
-    const appTags = tags.map((t) => t.label).filter((l) => !knownTags.has(l))
-    const extra = CUSTOM_TAG_SUGGESTIONS.filter((t) => !knownTags.has(t))
-    return Array.from(new Set([...appTags, ...extra]))
-  }, [tags, vocab])
+  const customOptions = useMemo(() => computeCustomOptions(tags, vocab), [tags, vocab])
 
   function optionsFor(category: ConditionCategory): string[] {
-    if (RICH.has(category)) {
-      // Vocabulary values, plus any tag already manually classified into
-      // this category (Tags page) — both count as known members.
-      const fromVocab = (vocab[category] ?? []).map((v) => v.value)
-      const fromClassifiedTags = tags
-        .filter((t) => t.category === category)
-        .map((t) => t.label)
-      return Array.from(new Set([...fromVocab, ...fromClassifiedTags]))
-    }
-    if (category === 'custom') return customOptions
-    return [] // user
+    return optionsForCategory(category, vocab, tags, customOptions)
   }
 
   return { vocabWarnings, optionsFor }

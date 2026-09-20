@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RotateCw } from 'lucide-react'
 import { api, fmtTime, type BackupInfo } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Toggle from '../../components/ui/Toggle'
 import Field from '../../components/ui/Field'
+import { useAsyncLoad } from '../../lib/useAsyncLoad'
 import { useToast } from '../../lib/useToast'
+import PageHeader from '../../components/ui/PageHeader'
 import SubSection from '../../components/ui/SubSection'
 import Button from '../../components/ui/Button'
+import { Table, Th, Thead } from '../../components/ui/Table'
 
 const DEFAULT_EVENTS_RETENTION = 5000
 
@@ -40,28 +43,20 @@ export default function BackupSection() {
   const [running, setRunning] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  const load = useCallback(async () => {
-    try {
-      const [list, bset, settings] = await Promise.all([
-        api.listBackups(),
-        api.getBackupSettings(),
-        api.getSettings(),
-      ])
-      setBackups([...list].sort((a, b) => b.created_at - a.created_at))
-      setEnabled(bset.enabled)
-      setRetentionDays(bset.retention_days)
-      setIntervalHours(bset.interval_hours)
-      setEventsRetention(
-        (settings['events_retention'] as number | undefined) ?? DEFAULT_EVENTS_RETENTION,
-      )
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [toast])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const load = useAsyncLoad(async () => {
+    const [list, bset, settings] = await Promise.all([
+      api.listBackups(),
+      api.getBackupSettings(),
+      api.getSettings(),
+    ])
+    setBackups([...list].sort((a, b) => b.created_at - a.created_at))
+    setEnabled(bset.enabled)
+    setRetentionDays(bset.retention_days)
+    setIntervalHours(bset.interval_hours)
+    setEventsRetention(
+      (settings['events_retention'] as number | undefined) ?? DEFAULT_EVENTS_RETENTION,
+    )
+  }, [])
 
   async function runNow() {
     setRunning(true)
@@ -102,10 +97,11 @@ export default function BackupSection() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-fg">{t('settingsBackup.title')}</h3>
-        <p className="text-xs text-fg-subtle">{t('settingsBackup.subtitle')}</p>
-      </div>
+      <PageHeader
+        size="md"
+        title={t('settingsBackup.title')}
+        subtitle={t('settingsBackup.subtitle')}
+      />
 
       <SubSection
         title={t('settingsBackup.listTitle')}
@@ -119,34 +115,24 @@ export default function BackupSection() {
         {backups.length === 0 ? (
           <p className="text-xs text-fg-faint">{t('settingsBackup.noBackups')}</p>
         ) : (
-          <div className="overflow-hidden rounded-md border border-line">
-            <table className="w-full text-sm">
-              <thead className="bg-surface text-left text-xs font-semibold text-fg-muted">
-                <tr>
-                  <th scope="col" className="px-3 py-1.5">
-                    {t('settingsBackup.colName')}
-                  </th>
-                  <th scope="col" className="px-3 py-1.5">
-                    {t('settingsBackup.colSize')}
-                  </th>
-                  <th scope="col" className="px-3 py-1.5">
-                    {t('settingsBackup.colCreated')}
-                  </th>
+          <Table>
+            <Thead>
+              <tr>
+                <Th className="py-1.5">{t('settingsBackup.colName')}</Th>
+                <Th className="py-1.5">{t('settingsBackup.colSize')}</Th>
+                <Th className="py-1.5">{t('settingsBackup.colCreated')}</Th>
+              </tr>
+            </Thead>
+            <tbody className="divide-y divide-line">
+              {backups.map((b) => (
+                <tr key={b.name}>
+                  <td className="px-3 py-1.5 font-mono text-xs text-fg-soft">{b.name}</td>
+                  <td className="px-3 py-1.5 text-fg-muted">{fmtSize(b.size)}</td>
+                  <td className="px-3 py-1.5 text-fg-muted">{fmtTime(b.created_at)}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {backups.map((b) => (
-                  <tr key={b.name}>
-                    <td className="px-3 py-1.5 font-mono text-xs text-fg-soft">
-                      {b.name}
-                    </td>
-                    <td className="px-3 py-1.5 text-fg-muted">{fmtSize(b.size)}</td>
-                    <td className="px-3 py-1.5 text-fg-muted">{fmtTime(b.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </Table>
         )}
       </SubSection>
 

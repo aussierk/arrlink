@@ -12,3 +12,11 @@ web/node_modules/
 web/dist/
 web/*.tsbuildinfo
 web/**/*.tsbuildinfo
+backend-ts/node_modules/
+backend-ts/dist/
+backend-ts/*.tsbuildinfo
+backend-ts/**/*.tsbuildinfo
+.claude/
+.playwright-mcp/
+screenshots/
+mock-api.mjs

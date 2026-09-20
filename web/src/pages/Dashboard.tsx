@@ -1,49 +1,34 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import LinksPanel from '../components/LinksPanel'
 import Card from '../components/ui/Card'
+import PageHeader from '../components/ui/PageHeader'
 import LinkHealthCard from '../components/dashboard/LinkHealthCard'
 import ServicesCard from '../components/dashboard/ServicesCard'
 import RulesCard from '../components/dashboard/RulesCard'
 import RecentActivityCard from '../components/dashboard/RecentActivityCard'
 import { api, type AppItem, type RuleItem, type Summary } from '../lib/api'
+import { useAsyncLoad } from '../lib/useAsyncLoad'
 import { useAuth } from '../lib/useAuth'
-import { useToast } from '../lib/useToast'
 
 export default function Dashboard() {
   const { t } = useTranslation()
-  const toast = useToast()
   const { me } = useAuth()
   const [summary, setSummary] = useState<Summary | null>(null)
   const [apps, setApps] = useState<AppItem[] | null>(null)
   const [rules, setRules] = useState<RuleItem[] | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      const [s, a, r] = await Promise.all([
-        api.summary(),
-        api.listApps(),
-        api.listRules(),
-      ])
-      setSummary(s)
-      setApps(a)
-      setRules(r)
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [toast])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  useAsyncLoad(async () => {
+    const [s, a, r] = await Promise.all([api.summary(), api.listApps(), api.listRules()])
+    setSummary(s)
+    setApps(a)
+    setRules(r)
+  }, [])
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">{t('dashboard.title')}</h2>
-        <p className="text-sm text-fg-subtle">{t('dashboard.subtitle')}</p>
-      </div>
+      <PageHeader title={t('dashboard.title')} subtitle={t('dashboard.subtitle')} />
 
       {summary && summary.orphaned_rules.length > 0 && (
         <div className="rounded-md border border-warning-line bg-warning-bg p-3 text-sm text-warning-fg">

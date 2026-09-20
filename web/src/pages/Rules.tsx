@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check } from 'lucide-react'
 import RuleModal from '../components/RuleModal'
 import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
 import SortHeader from '../components/ui/SortHeader'
+import { Table, TableEmpty, Th, Thead } from '../components/ui/Table'
 import { encodeServiceValue } from '../components/ruleModal/helpers'
+import { pruneSelection } from '../lib/pruneSelection'
+import { useAsyncLoad } from '../lib/useAsyncLoad'
 import { useConfirm } from '../lib/useConfirm'
 import { useSort } from '../lib/useSort'
 import { useToast } from '../lib/useToast'
@@ -16,13 +20,11 @@ import {
   type RuleItem,
 } from '../lib/api'
 import { REGEX_PICKS } from '../lib/tagOptions'
+import { selectCls } from '../lib/ui'
 import i18n from '../i18n'
 
 const filterCls =
   'w-56 rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg outline-none focus:border-ring focus-visible:focus-ring'
-
-const selectCls =
-  'rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg'
 
 const RULE_SORT: Record<string, (r: RuleItem) => string | number> = {
   name: (r) => r.name.toLowerCase(),
@@ -225,15 +227,7 @@ export default function Rules() {
   const visibleIdsKey = visibleRules.map((r) => r.id).join(',')
   useEffect(() => {
     const visibleIds = new Set(visibleRules.map((r) => r.id))
-    setSelectedIds((prev) => {
-      let changed = false
-      const next = new Set<number>()
-      for (const id of prev) {
-        if (visibleIds.has(id)) next.add(id)
-        else changed = true
-      }
-      return changed ? next : prev
-    })
+    setSelectedIds((prev) => pruneSelection(prev, visibleIds))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleIdsKey])
 
@@ -272,17 +266,9 @@ export default function Rules() {
     setSelectedIds(new Set())
   }
 
-  const load = useCallback(async () => {
-    try {
-      setRules(await api.listRules())
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [toast])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const load = useAsyncLoad(async () => {
+    setRules(await api.listRules())
+  }, [])
 
   function openNew() {
     setEditing(null)
@@ -372,15 +358,15 @@ export default function Rules() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">{t('rules.title')}</h2>
-          <p className="text-sm text-fg-subtle">{t('rules.subtitle')}</p>
-        </div>
-        <Button onClick={openNew} className="shrink-0 whitespace-nowrap">
-          {t('rules.addRule')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('rules.title')}
+        subtitle={t('rules.subtitle')}
+        actions={
+          <Button onClick={openNew} className="whitespace-nowrap">
+            {t('rules.addRule')}
+          </Button>
+        }
+      />
 
       {rules.length > 0 &&
         (selectedIds.size > 0 ? (
@@ -504,140 +490,115 @@ export default function Rules() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full min-w-3xl text-sm">
-          <thead className="bg-surface text-left text-xs font-semibold text-fg-muted">
-            <tr>
-              <th scope="col" className="w-8 px-3 py-2">
-                <input
-                  ref={selectAllRef}
-                  type="checkbox"
-                  aria-label={t('rules.selectAll')}
-                  checked={allVisibleSelected}
-                  onChange={toggleSelectAll}
-                />
-              </th>
-              <SortHeader
-                label={t('rules.colName')}
-                columnKey="name"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
+      <Table className="min-w-3xl">
+        <Thead>
+          <tr>
+            <Th className="w-8">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                aria-label={t('rules.selectAll')}
+                checked={allVisibleSelected}
+                onChange={toggleSelectAll}
               />
-              <SortHeader
-                label={t('rules.colApp')}
-                columnKey="app"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-              <th scope="col" className="px-3 py-2 text-center">
-                {t('rules.colEnabled')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colType')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colCategory')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colValue')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                {t('rules.colDirTemplate')}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {rules.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
-                  {t('rules.empty')}
+            </Th>
+            <SortHeader
+              label={t('rules.colName')}
+              columnKey="name"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={toggleSort}
+            />
+            <SortHeader
+              label={t('rules.colApp')}
+              columnKey="app"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={toggleSort}
+            />
+            <Th className="text-center">{t('rules.colEnabled')}</Th>
+            <Th>{t('rules.colType')}</Th>
+            <Th>{t('rules.colCategory')}</Th>
+            <Th>{t('rules.colValue')}</Th>
+            <Th>{t('rules.colDirTemplate')}</Th>
+          </tr>
+        </Thead>
+        <tbody className="divide-y divide-line">
+          {rules.length === 0 && <TableEmpty colSpan={8}>{t('rules.empty')}</TableEmpty>}
+          {rules.length > 0 && visibleRules.length === 0 && (
+            <TableEmpty colSpan={8}>{t('rules.noMatch')}</TableEmpty>
+          )}
+          {visibleRules.map((r) => {
+            const rows = conditionRows(r)
+            return (
+              <tr key={r.id} className={`bg-sunken/40 ${r.enabled ? '' : 'opacity-60'}`}>
+                <td className="px-3 py-2 align-top">
+                  <input
+                    type="checkbox"
+                    aria-label={t('rules.selectRow', { name: r.name })}
+                    checked={selectedIds.has(r.id)}
+                    onChange={() => toggleSelected(r.id)}
+                  />
                 </td>
-              </tr>
-            )}
-            {rules.length > 0 && visibleRules.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-fg-subtle">
-                  {t('rules.noMatch')}
+                <td className="px-3 py-2 align-top font-medium">
+                  <span
+                    tabIndex={0}
+                    role="button"
+                    aria-label={t('rules.editRule', { name: r.name })}
+                    onClick={() => openEdit(r)}
+                    onKeyDown={(e) => handleNameKeyDown(e, r)}
+                    className="rounded focus-visible:focus-ring"
+                  >
+                    {r.name}
+                  </span>
                 </td>
-              </tr>
-            )}
-            {visibleRules.map((r) => {
-              const rows = conditionRows(r)
-              return (
-                <tr
-                  key={r.id}
-                  className={`bg-sunken/40 ${r.enabled ? '' : 'opacity-60'}`}
-                >
-                  <td className="px-3 py-2 align-top">
-                    <input
-                      type="checkbox"
-                      aria-label={t('rules.selectRow', { name: r.name })}
-                      checked={selectedIds.has(r.id)}
-                      onChange={() => toggleSelected(r.id)}
+                <td className="px-3 py-2 align-top text-fg-muted">
+                  {serviceLabel(r.app_name, r.app_type_scope)}
+                </td>
+                <td className="px-3 py-2 align-top text-center">
+                  {r.enabled ? (
+                    <Check
+                      className="mx-auto size-4 text-success-fg"
+                      aria-label={t('rules.colEnabled')}
                     />
-                  </td>
-                  <td className="px-3 py-2 align-top font-medium">
-                    <span
-                      tabIndex={0}
-                      role="button"
-                      aria-label={t('rules.editRule', { name: r.name })}
-                      onDoubleClick={() => openEdit(r)}
-                      onKeyDown={(e) => handleNameKeyDown(e, r)}
-                      className="rounded focus-visible:focus-ring"
-                    >
-                      {r.name}
+                  ) : (
+                    <span className="text-fg-faint" aria-hidden="true">
+                      —
                     </span>
-                  </td>
-                  <td className="px-3 py-2 align-top text-fg-muted">
-                    {serviceLabel(r.app_name, r.app_type_scope)}
-                  </td>
-                  <td className="px-3 py-2 align-top text-center">
-                    {r.enabled ? (
-                      <Check
-                        className="mx-auto size-4 text-success-fg"
-                        aria-label={t('rules.colEnabled')}
-                      />
-                    ) : (
-                      <span className="text-fg-faint" aria-hidden="true">
-                        —
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 align-top text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      {rows.map((cr) => (
-                        <div key={cr.key}>{cr.type}</div>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      {rows.map((cr) => (
-                        <div key={cr.key} className="flex items-baseline gap-1.5">
-                          {cr.join}
-                          {cr.category}
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      {rows.map((cr) => (
-                        <div key={cr.key}>{cr.value}</div>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-soft">
-                    {r.dir_template}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                  )}
+                </td>
+                <td className="px-3 py-2 align-top text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    {rows.map((cr) => (
+                      <div key={cr.key}>{cr.type}</div>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-3 py-2 align-top text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    {rows.map((cr) => (
+                      <div key={cr.key} className="flex items-baseline gap-1.5">
+                        {cr.join}
+                        {cr.category}
+                      </div>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-3 py-2 align-top text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    {rows.map((cr) => (
+                      <div key={cr.key}>{cr.value}</div>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-3 py-2 align-top font-mono text-xs break-all text-fg-soft">
+                  {r.dir_template}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </Table>
 
       {modalOpen && (
         <RuleModal

@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Field from '../../components/ui/Field'
+import { useAsyncLoad } from '../../lib/useAsyncLoad'
 import { useToast } from '../../lib/useToast'
 import SubSection from '../../components/ui/SubSection'
 import Toggle from '../../components/ui/Toggle'
 import Button from '../../components/ui/Button'
+import PageHeader from '../../components/ui/PageHeader'
 
 function parseList(text: string): string[] {
   return text
@@ -43,29 +45,21 @@ export default function AuthenticationSection() {
   const [groupsText, setGroupsText] = useState('')
   const [emailsText, setEmailsText] = useState('')
 
-  const load = useCallback(async () => {
-    try {
-      const [a, s] = await Promise.all([api.getAuthSettings(), api.getSettings()])
-      setPasswordEnabled(a.password_enabled)
-      setUiUsername(a.ui_username)
-      setUiPassword('')
-      setUiPasswordSet(a.ui_password_set)
-      setOidcEnabled(a.oidc_enabled)
-      setAutoLogin(a.auto_login)
-      setOidcIssuer(a.oidc_issuer)
-      setOidcClientId(a.oidc_client_id)
-      setOidcClientSecret('')
-      setOidcClientSecretSet(a.oidc_client_secret_set)
-      setGroupsText(((s['oidc_allowed_groups'] as string[] | undefined) ?? []).join(', '))
-      setEmailsText(((s['oidc_allowed_emails'] as string[] | undefined) ?? []).join(', '))
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [toast])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const load = useAsyncLoad(async () => {
+    const [a, s] = await Promise.all([api.getAuthSettings(), api.getSettings()])
+    setPasswordEnabled(a.password_enabled)
+    setUiUsername(a.ui_username)
+    setUiPassword('')
+    setUiPasswordSet(a.ui_password_set)
+    setOidcEnabled(a.oidc_enabled)
+    setAutoLogin(a.auto_login)
+    setOidcIssuer(a.oidc_issuer)
+    setOidcClientId(a.oidc_client_id)
+    setOidcClientSecret('')
+    setOidcClientSecretSet(a.oidc_client_secret_set)
+    setGroupsText(((s['oidc_allowed_groups'] as string[] | undefined) ?? []).join(', '))
+    setEmailsText(((s['oidc_allowed_emails'] as string[] | undefined) ?? []).join(', '))
+  }, [])
 
   async function save() {
     try {
@@ -90,10 +84,11 @@ export default function AuthenticationSection() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-fg">{t('settingsAuth.title')}</h3>
-        <p className="text-xs text-fg-subtle">{t('settingsAuth.subtitle')}</p>
-      </div>
+      <PageHeader
+        size="md"
+        title={t('settingsAuth.title')}
+        subtitle={t('settingsAuth.subtitle')}
+      />
 
       <SubSection title={t('settingsAuth.passwordTitle')}>
         <Field label={t('settingsAuth.enablePassword')}>
@@ -188,13 +183,6 @@ export default function AuthenticationSection() {
             autoComplete="new-password"
           />
         </Field>
-        <p className="text-xs text-fg-subtle">
-          <Trans i18nKey="settingsAuth.allowListHint">
-            Allowed for sign-in: any user whose email is in the email list{' '}
-            <span className="text-fg-muted">or</span> whose group is in the group list.
-            Both empty = anyone who can sign in with the provider may use ArrLink.
-          </Trans>
-        </p>
         <Field label={t('settingsAuth.allowedGroups')}>
           <input
             className={inputCls}

@@ -10,10 +10,14 @@ import {
 } from '../lib/api'
 import { useBeforeUnloadGuard } from '../lib/unsavedGuard'
 import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
 import SortHeader from '../components/ui/SortHeader'
+import { Table, TableEmpty, Thead } from '../components/ui/Table'
+import { useAsyncLoad } from '../lib/useAsyncLoad'
 import { useConfirm } from '../lib/useConfirm'
 import { useSort } from '../lib/useSort'
 import { useToast } from '../lib/useToast'
+import { selectCls } from '../lib/ui'
 
 const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
   'genre',
@@ -32,9 +36,6 @@ const TAG_SORT: Record<string, (t: TagItem) => string | number> = {
   rules: (t) => t.rule_count,
   imported: (t) => t.imported_at,
 }
-
-const selectCls =
-  'rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg'
 
 /**
  * Tags: the tag vocabulary imported from each app, with usage counts and
@@ -69,33 +70,18 @@ export default function Tags() {
   const [saving, setSaving] = useState(false)
   const hasPending = Object.keys(pendingEdits).length > 0
 
-  const loadApps = useCallback(async () => {
-    try {
-      const a = await api.listApps()
-      setApps(a)
-      if (appId === null && a.length > 0) setAppId(a[0].id)
-      if (appId !== null && !a.some((x) => x.id === appId)) setAppId(null)
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [appId, toast])
+  useAsyncLoad(async () => {
+    const a = await api.listApps()
+    setApps(a)
+    if (appId === null && a.length > 0) setAppId(a[0].id)
+    if (appId !== null && !a.some((x) => x.id === appId)) setAppId(null)
+  }, [appId])
 
-  const loadTags = useCallback(async () => {
+  const loadTags = useAsyncLoad(async () => {
     if (appId === null) return
-    try {
-      setTags(await api.listTags(appId))
-      setPendingEdits({})
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }, [appId, toast])
-
-  useEffect(() => {
-    void loadApps()
-  }, [loadApps])
-  useEffect(() => {
-    void loadTags()
-  }, [loadTags])
+    setTags(await api.listTags(appId))
+    setPendingEdits({})
+  }, [appId])
 
   const saveTagEdits = useCallback(async (): Promise<boolean> => {
     const ids = Object.keys(pendingEdits).map(Number)
@@ -196,41 +182,45 @@ export default function Tags() {
   return (
     <div className="space-y-6">
       {/* ------------------------------ App tags --------------------------- */}
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">{t('tags.appTags.title')}</h2>
-          <p className="text-sm text-fg-subtle">{t('tags.appTags.subtitle')}</p>
-        </div>
-        {apps.length > 0 && (
-          <select
-            className="rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-sm text-fg"
-            value={appId ?? ''}
-            onChange={(e) => void switchApp(Number(e.target.value))}
-          >
-            {apps.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.type})
-              </option>
-            ))}
-          </select>
-        )}
-        <Button
-          onClick={() => void doImport()}
-          disabled={appId === null || busy}
-          loading={busy}
-        >
-          {busy ? t('tags.appTags.importing') : t('tags.appTags.importTags')}
-        </Button>
-        <button
-          onClick={() => void saveTagEdits()}
-          disabled={!hasPending || saving}
-          className="ml-auto rounded-md border border-warning-fg/50 px-4 py-1.5 text-sm font-medium text-warning-fg hover:bg-warning-bg disabled:opacity-40"
-        >
-          {saving
-            ? t('tags.appTags.saving')
-            : t('tags.appTags.saveChanges', { count: Object.keys(pendingEdits).length })}
-        </button>
-      </div>
+      <PageHeader
+        title={t('tags.appTags.title')}
+        subtitle={t('tags.appTags.subtitle')}
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            {apps.length > 0 && (
+              <select
+                className={selectCls}
+                value={appId ?? ''}
+                onChange={(e) => void switchApp(Number(e.target.value))}
+              >
+                {apps.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.type})
+                  </option>
+                ))}
+              </select>
+            )}
+            <Button
+              onClick={() => void doImport()}
+              disabled={appId === null || busy}
+              loading={busy}
+            >
+              {busy ? t('tags.appTags.importing') : t('tags.appTags.importTags')}
+            </Button>
+            <Button
+              variant="warning"
+              onClick={() => void saveTagEdits()}
+              disabled={!hasPending || saving}
+            >
+              {saving
+                ? t('tags.appTags.saving')
+                : t('tags.appTags.saveChanges', {
+                    count: Object.keys(pendingEdits).length,
+                  })}
+            </Button>
+          </div>
+        }
+      />
 
       {tags.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
@@ -250,111 +240,105 @@ export default function Tags() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full min-w-2xl text-sm">
-          <thead className="bg-surface text-left text-xs font-semibold text-fg-muted">
-            <tr>
-              <SortHeader
-                label={t('tags.appTags.colTag')}
-                columnKey="label"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortHeader
-                label={t('tags.appTags.colCategory')}
-                columnKey="category"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortHeader
-                label={t('tags.appTags.colInUse')}
-                columnKey="count"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortHeader
-                label={t('tags.appTags.colRules')}
-                columnKey="rules"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortHeader
-                label={t('tags.appTags.colImported')}
-                columnKey="imported"
-                activeKey={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {tags.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-fg-subtle">
-                  {appId === null
-                    ? t('tags.appTags.connectFirst')
-                    : t('tags.appTags.emptyImport')}
+      <Table className="min-w-2xl">
+        <Thead>
+          <tr>
+            <SortHeader
+              label={t('tags.appTags.colTag')}
+              columnKey="label"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={toggleSort}
+            />
+            <SortHeader
+              label={t('tags.appTags.colCategory')}
+              columnKey="category"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={toggleSort}
+            />
+            <SortHeader
+              label={t('tags.appTags.colInUse')}
+              columnKey="count"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={toggleSort}
+            />
+            <SortHeader
+              label={t('tags.appTags.colRules')}
+              columnKey="rules"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={toggleSort}
+            />
+            <SortHeader
+              label={t('tags.appTags.colImported')}
+              columnKey="imported"
+              activeKey={sortKey}
+              dir={sortDir}
+              onSort={toggleSort}
+            />
+          </tr>
+        </Thead>
+        <tbody className="divide-y divide-line">
+          {tags.length === 0 && (
+            <TableEmpty colSpan={5}>
+              {appId === null
+                ? t('tags.appTags.connectFirst')
+                : t('tags.appTags.emptyImport')}
+            </TableEmpty>
+          )}
+          {tags.length > 0 && visibleTags.length === 0 && (
+            <TableEmpty colSpan={5}>
+              {t('tags.appTags.noMatch', { query: filter.trim() })}
+            </TableEmpty>
+          )}
+          {visibleTags.map((tag) => {
+            const isPending = tag.id in pendingEdits
+            const shown = isPending ? pendingEdits[tag.id] : tag.category
+            return (
+              <tr key={tag.id} className="bg-sunken/40">
+                <td className="px-3 py-2 font-mono text-xs text-fg">{tag.label}</td>
+                <td className="px-3 py-2">
+                  <select
+                    className={`rounded-md border bg-sunken px-2 py-1 text-xs text-fg ${
+                      isPending ? 'border-warning-fg' : 'border-line-strong'
+                    }`}
+                    value={shown ?? ''}
+                    onChange={(e) =>
+                      stageTagCategory(
+                        tag.id,
+                        (e.target.value || null) as ConditionCategory | null,
+                      )
+                    }
+                  >
+                    <option value="">{t('tags.appTags.unclassified')}</option>
+                    {CLASSIFIABLE_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {t(`ruleModal.categoryLabel.${cat}`)}
+                      </option>
+                    ))}
+                  </select>
+                  {isPending && (
+                    <span className="ml-1.5 text-xs text-warning-fg">
+                      {t('tags.appTags.unsaved')}
+                    </span>
+                  )}
                 </td>
-              </tr>
-            )}
-            {tags.length > 0 && visibleTags.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-fg-subtle">
-                  {t('tags.appTags.noMatch', { query: filter.trim() })}
+                <td className="px-3 py-2 text-fg-muted">{tag.count}</td>
+                <td className="px-3 py-2 text-fg-muted">
+                  {tag.rule_count > 0 ? (
+                    <span className="text-accent">{tag.rule_count}</span>
+                  ) : (
+                    <span className="text-fg-faint">—</span>
+                  )}
                 </td>
+                <td className="px-3 py-2 text-fg-subtle">{fmtTime(tag.imported_at)}</td>
               </tr>
-            )}
-            {visibleTags.map((tag) => {
-              const isPending = tag.id in pendingEdits
-              const shown = isPending ? pendingEdits[tag.id] : tag.category
-              return (
-                <tr key={tag.id} className="bg-sunken/40">
-                  <td className="px-3 py-2 font-mono text-xs text-fg">{tag.label}</td>
-                  <td className="px-3 py-2">
-                    <select
-                      className={`rounded-md border bg-sunken px-2 py-1 text-xs text-fg ${
-                        isPending ? 'border-warning-fg' : 'border-line-strong'
-                      }`}
-                      value={shown ?? ''}
-                      onChange={(e) =>
-                        stageTagCategory(
-                          tag.id,
-                          (e.target.value || null) as ConditionCategory | null,
-                        )
-                      }
-                    >
-                      <option value="">{t('tags.appTags.unclassified')}</option>
-                      {CLASSIFIABLE_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {t(`ruleModal.categoryLabel.${cat}`)}
-                        </option>
-                      ))}
-                    </select>
-                    {isPending && (
-                      <span className="ml-1.5 text-xs text-warning-fg">
-                        {t('tags.appTags.unsaved')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-fg-muted">{tag.count}</td>
-                  <td className="px-3 py-2 text-fg-muted">
-                    {tag.rule_count > 0 ? (
-                      <span className="text-accent">{tag.rule_count}</span>
-                    ) : (
-                      <span className="text-fg-faint">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-fg-subtle">{fmtTime(tag.imported_at)}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+            )
+          })}
+        </tbody>
+      </Table>
     </div>
   )
 }
