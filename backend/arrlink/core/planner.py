@@ -88,6 +88,7 @@ def _native_values(it: dict) -> dict[str, list[str]]:
         "collection": [it["collection"]] if it.get("collection") else [],
         "quality": [it["quality_profile_name"]] if it.get("quality_profile_name") else [],
         "language": [it["original_language"]] if it.get("original_language") else [],
+        "audio_language": it.get("audio_languages") or [],
     }
 
 
@@ -129,7 +130,7 @@ def plan_links(
         item_id = it.get("db_id") if it.get("db_id") is not None else it["id"]
         title = it.get("title") or ""
         year = it.get("year")
-        item_path = it.get("path") or ""
+        raw_item_path = it.get("path") or ""
         tags = it.get("tags") or []
         native = _native_values(it)
         files = [_as_dict(f) for f in (it.get("files") or [])]
@@ -142,6 +143,10 @@ def plan_links(
             if not cr.result:
                 continue
             variants = _fanout_variants(cr)
+            # "custom" opts a rule out of the auto-appended source folder
+            # name, restoring the pre-9b72b2d behavior where dir_template
+            # alone must resolve the full destination folder.
+            item_path = raw_item_path if rule.get("dir_naming_mode", "source") == "source" else ""
             for f in files:
                 src = f["abs_path"]
                 fid = f.get("id")

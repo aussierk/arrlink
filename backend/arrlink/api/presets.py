@@ -75,7 +75,7 @@ def apply_preset(
     except Exception as e:  # TemplateError
         raise HTTPException(422, str(e)) from e
 
-    match_type, match_value = preset.matchers[body.app_type]
+    match_type, match_value, source = preset.matchers[body.app_type]
     name = body.name or f"preset:{preset.key}"
     conditions_json = json.dumps(
         [
@@ -84,6 +84,7 @@ def apply_preset(
                 "match_type": match_type,
                 "match_value": match_value,
                 "join": None,
+                "source": source,
             }
         ]
     )

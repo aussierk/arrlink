@@ -157,7 +157,7 @@ class SonarrAdapter(BaseAdapter):
         # HTTP failure propagates so the poller backs off without removals.
         sem = asyncio.Semaphore(FILE_FETCH_CONCURRENCY)
 
-        async def _files(sid: int) -> tuple[int, list[MediaFile]]:
+        async def _files(sid: int) -> tuple[int, list[MediaFile], list[str]]:
             async with sem:
                 data = await self._get_json(f"/api/v3/episodefile?seriesId={sid}")
                 if not isinstance(data, list):
@@ -176,9 +176,24 @@ class SonarrAdapter(BaseAdapter):
                     stats = scandir_stats([p for p, _ in specs])
                     return [self._stat_file(p, series_path, sz, stats.get(p)) for p, sz in specs]
 
-                return sid, await asyncio.to_thread(_build)
+                # Union of every episode file's audio track(s) -- a series'
+                # episodes aren't guaranteed to share one dub/language mix.
+                audio_languages = list(
+                    dict.fromkeys(
+                        name
+                        for f in data
+                        if isinstance(f, dict)
+                        for lang in (f.get("languages") or [])
+                        if isinstance(lang, dict) and (name := (lang.get("name") or "").strip())
+                    )
+                )
 
-        fetched = dict(await asyncio.gather(*(_files(sid) for sid in to_fetch)))
+                return sid, await asyncio.to_thread(_build), audio_languages
+
+        fetched = {
+            sid: (files, langs)
+            for sid, files, langs in await asyncio.gather(*(_files(sid) for sid in to_fetch))
+        }
 
         items: list[Item] = []
         for sid, m in meta.items():
@@ -197,13 +212,20 @@ class SonarrAdapter(BaseAdapter):
                 stats_fingerprint=m["stats_fingerprint"],
             )
             if sid in fetched:
-                item_files = fetched[sid]
+                item_files, audio_languages = fetched[sid]
                 if not item_files:
                     continue  # series with no files on disk
-                items.append(Item(**common, files=item_files, files_stale=False))
+                items.append(
+                    Item(
+                        **common,
+                        files=item_files,
+                        audio_languages=audio_languages,
+                        files_stale=False,
+                    )
+                )
             else:
-                # unchanged since last poll -> poller rehydrates files from
-                # the stored app_files rows before reconciling.
+                # unchanged since last poll -> poller rehydrates files (and
+                # audio_languages) from the stored app_items/app_files rows.
                 items.append(Item(**common, files=[], files_stale=True))
         return items
 

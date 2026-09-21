@@ -113,6 +113,13 @@ class RadarrAdapter(BaseAdapter):
             original_language = (
                 (lang_obj.get("name") or "").strip() or None if isinstance(lang_obj, dict) else None
             )
+            # movieFile.languages is the file's own audio track(s), always present
+            # alongside movieFile.path/size in the same /movie payload -- no extra call.
+            audio_languages = [
+                name
+                for lang in (movie_file.get("languages") or [])
+                if isinstance(lang, dict) and (name := (lang.get("name") or "").strip())
+            ]
             size = movie_file.get("size")
             try:
                 size = int(size) if size is not None else None
@@ -150,6 +157,7 @@ class RadarrAdapter(BaseAdapter):
                     quality_profile_id=qp_id,
                     quality_profile_name=qp_name,
                     original_language=original_language,
+                    audio_languages=audio_languages,
                 )
             )
         return items

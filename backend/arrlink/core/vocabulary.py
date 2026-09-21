@@ -21,7 +21,9 @@ TRASH_QUALITY_URL = (
     "docs/json/radarr/quality-size/movie.json"
 )
 
-RICH_CATEGORIES = frozenset({"genre", "certification", "collection", "quality", "language"})
+RICH_CATEGORIES = frozenset(
+    {"genre", "certification", "collection", "quality", "language", "audio_language"}
+)
 
 
 def tmdb_api_key(db: State) -> str:

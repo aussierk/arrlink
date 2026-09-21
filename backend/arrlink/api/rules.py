@@ -36,14 +36,21 @@ router = APIRouter(prefix="/api/rules", tags=["rules"])
 
 class ConditionIn(BaseModel):
     category: Literal[
-        "user", "genre", "language", "quality", "certification", "collection", "custom"
+        "user",
+        "genre",
+        "language",
+        "audio_language",
+        "quality",
+        "certification",
+        "collection",
+        "custom",
     ]
     match_type: Literal["exact", "list", "regex", "vocabulary"]
     # min_length relaxed to 0: "vocabulary" intentionally carries an empty match_value
     match_value: str = Field(min_length=0, max_length=2000)
     join: Literal["AND", "OR"] | None = None
     # None/absent == "tag" . "native" matches the item's real Radarr/Sonarr metadata
-    # instead of its arbitrary tags; only offered for the 5 rich categories.
+    # instead of its arbitrary tags; only offered for the rich categories.
     source: Literal["tag", "native"] | None = None
 
     @model_validator(mode="after")
@@ -51,7 +58,7 @@ class ConditionIn(BaseModel):
         if self.source == "native" and self.category not in RICH_CATEGORIES:
             raise ValueError(
                 f"condition '{self.category}': native-metadata matching is only "
-                "available for genre/language/quality/certification/collection"
+                "available for genre/language/audio_language/quality/certification/collection"
             )
         if self.match_type == "regex":
             try:
@@ -78,6 +85,13 @@ class RuleIn(BaseModel):
     conditions: list[ConditionIn] = Field(min_length=1, max_length=8)
     dir_template: str = Field(min_length=1, max_length=300)
     filename_template: str | None = Field(default=None, max_length=300)
+    # "source" (default): the item's own source folder name (Radarr/Sonarr's
+    # own naming, tmdbid/tvdbid disambiguators included) is always appended
+    # under dir_template automatically. "custom": that append is skipped, and
+    # dir_template alone must resolve the full destination folder name (the
+    # pre-9b72b2d behavior) -- for rules that deliberately want a
+    # reconstructed name instead of the source's own.
+    dir_naming_mode: Literal["source", "custom"] = "source"
     enabled: bool = True
     unlink_on_mismatch: bool = True
     priority: int = Field(default=100, ge=1, le=1000)
@@ -252,8 +266,8 @@ def create_rule(
     _check_dir_template_jail(db, body.dir_template)
     cur = db.execute(
         "INSERT INTO rules (name, app_scope, app_type_scope, "
-        "conditions_json, dir_template, filename_template, enabled, unlink_on_mismatch, "
-        "priority) VALUES (?,?,?,?,?,?,?,?,?)",
+        "conditions_json, dir_template, filename_template, dir_naming_mode, "
+        "enabled, unlink_on_mismatch, priority) VALUES (?,?,?,?,?,?,?,?,?,?)",
         (
             body.name,
             body.app_scope,
@@ -261,6 +275,7 @@ def create_rule(
             json.dumps([c.model_dump() for c in body.conditions]),
             body.dir_template,
             body.filename_template,
+            body.dir_naming_mode,
             int(body.enabled),
             int(body.unlink_on_mismatch),
             body.priority,
@@ -297,7 +312,7 @@ def update_rule(
     _check_dir_template_jail(db, body.dir_template)
     db.execute(
         "UPDATE rules SET name=?, app_scope=?, app_type_scope=?, "
-        "conditions_json=?, dir_template=?, filename_template=?, "
+        "conditions_json=?, dir_template=?, filename_template=?, dir_naming_mode=?, "
         "enabled=?, unlink_on_mismatch=?, priority=? WHERE id=?",
         (
             body.name,
@@ -306,6 +321,7 @@ def update_rule(
             json.dumps([c.model_dump() for c in body.conditions]),
             body.dir_template,
             body.filename_template,
+            body.dir_naming_mode,
             int(body.enabled),
             int(body.unlink_on_mismatch),
             body.priority,
@@ -404,6 +420,7 @@ def preview(
         "conditions": [c.model_dump() for c in body.conditions],
         "dir_template": body.dir_template,
         "filename_template": body.filename_template,
+        "dir_naming_mode": body.dir_naming_mode,
         "enabled": True,
         "priority": body.priority,
         "app_scope": body.app_scope,

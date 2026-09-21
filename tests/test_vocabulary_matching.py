@@ -159,6 +159,7 @@ def test_native_values_maps_item_fields():
         "collection": "X Collection",
         "quality_profile_name": "HD-1080p",
         "original_language": "English",
+        "audio_languages": ["English", "Spanish"],
     }
     native = _native_values(it)
     assert native["genre"] == ["Action", "Adventure"]
@@ -166,6 +167,7 @@ def test_native_values_maps_item_fields():
     assert native["collection"] == ["X Collection"]
     assert native["quality"] == ["HD-1080p"]
     assert native["language"] == ["English"]
+    assert native["audio_language"] == ["English", "Spanish"]
 
 
 def test_native_values_empty_when_absent():
@@ -175,6 +177,7 @@ def test_native_values_empty_when_absent():
         "collection": [],
         "quality": [],
         "language": [],
+        "audio_language": [],
     }
 
 
@@ -512,6 +515,19 @@ def test_instance_vocabulary_synced_after_poll(client, radarr):
         f"/api/vocabulary?category=language&app_type=radarr&app_id={app_id}"
     ).json()
     assert {row["value"] for row in languages} == {"English"}
+
+    # genre/certification are observed straight from each item's real
+    # fields, same as collection -- not just the shared TMDB catalog, so
+    # picking "Native" for these categories surfaces real per-instance data.
+    genres = client.get(f"/api/vocabulary?category=genre&app_type=radarr&app_id={app_id}").json()
+    assert {row["value"] for row in genres} == {"Action", "Adventure", "Animation", "Family"}
+    assert all(row["source"] == "observed" for row in genres)
+
+    certs = client.get(
+        f"/api/vocabulary?category=certification&app_type=radarr&app_id={app_id}"
+    ).json()
+    assert {row["value"] for row in certs} == {"PG-13", "G"}
+    assert all(row["source"] == "observed" for row in certs)
 
 
 def test_instance_vocabulary_quality_sync_is_throttled(client, radarr):

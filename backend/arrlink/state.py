@@ -57,7 +57,7 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             count INTEGER NOT NULL DEFAULT 0,
             imported_at REAL NOT NULL,
             category TEXT CHECK (category IS NULL OR category IN
-                ('genre','certification','collection','quality','language','user','custom')),
+                ('genre','certification','collection','quality','language','audio_language','user','custom')),
             UNIQUE (app_id, label)
         );
 
@@ -69,6 +69,8 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             conditions_json TEXT NOT NULL DEFAULT '[]',
             dir_template TEXT NOT NULL,
             filename_template TEXT,
+            dir_naming_mode TEXT NOT NULL DEFAULT 'source'
+                CHECK (dir_naming_mode IN ('source', 'custom')),
             enabled INTEGER NOT NULL DEFAULT 1,
             unlink_on_mismatch INTEGER NOT NULL DEFAULT 1,
             priority INTEGER NOT NULL DEFAULT 100,
@@ -93,6 +95,7 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
             quality_profile_id INTEGER,
             quality_profile_name TEXT,
             original_language TEXT,
+            audio_languages_json TEXT NOT NULL DEFAULT '[]',
             stats_fingerprint TEXT,
             UNIQUE (app_id, item_id)
         );
@@ -166,7 +169,7 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
         CREATE TABLE IF NOT EXISTS vocabulary (
             id INTEGER PRIMARY KEY,
             category TEXT NOT NULL CHECK (category IN
-                ('genre','certification','collection','quality','language')),
+                ('genre','certification','collection','quality','language','audio_language')),
             app_type TEXT NOT NULL CHECK (app_type IN ('radarr','sonarr')),
             app_id INTEGER REFERENCES apps(id) ON DELETE CASCADE,
             value TEXT NOT NULL,

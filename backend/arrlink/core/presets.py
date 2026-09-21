@@ -19,7 +19,10 @@ class Preset:
     name: str
     description: str
     category: str
-    # app_type -> (match_type, match_value)
+    # app_type -> (match_type, match_value, source). source is None ("tag",
+    # the default) or "native" -- see core/matching.py::match_conditions and
+    # core/vocabulary.py::RICH_CATEGORIES for what "native" means and which
+    # categories support it.
     matchers: dict
     # appended to the base folder; may contain {$...} placeholders
     subpath: str
@@ -32,8 +35,8 @@ PRESETS: list[Preset] = [
         description="One subfolder per user, from '2 - alice' style tags.",
         category="user",
         matchers={
-            "radarr": ("regex", r"^\d+\s*-\s*(?P<user>.+)$"),
-            "sonarr": ("regex", r"^\d+\s*-\s*(?P<user>.+)$"),
+            "radarr": ("regex", r"^\d+\s*-\s*(?P<user>.+)$", None),
+            "sonarr": ("regex", r"^\d+\s*-\s*(?P<user>.+)$", None),
         },
         subpath="/{$user}",
     ),
@@ -43,8 +46,8 @@ PRESETS: list[Preset] = [
         description="One subfolder per rating, directly under the base folder.",
         category="certification",
         matchers={
-            "radarr": ("regex", r"^(G|PG|PG-13|R|NC-17)$"),
-            "sonarr": ("regex", r"^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$"),
+            "radarr": ("regex", r"^(G|PG|PG-13|R|NC-17)$", None),
+            "sonarr": ("regex", r"^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$", None),
         },
         subpath="/{$certification}",
     ),
@@ -54,8 +57,8 @@ PRESETS: list[Preset] = [
         description="Everything kids-related into a single kids folder.",
         category="custom",
         matchers={
-            "radarr": ("list", "kids,children,family,G,PG"),
-            "sonarr": ("list", "kids,family,TV-Y,TV-Y7,TV-G,TV-PG"),
+            "radarr": ("list", "kids,children,family,G,PG", None),
+            "sonarr": ("list", "kids,family,TV-Y,TV-Y7,TV-G,TV-PG", None),
         },
         subpath="/kids",
     ),
@@ -65,8 +68,8 @@ PRESETS: list[Preset] = [
         description="High-res / HDR content into a 4k folder.",
         category="quality",
         matchers={
-            "radarr": ("list", "4k,uhd,2160p,hdr,dolby"),
-            "sonarr": ("list", "4k,uhd,2160p,hdr,dolby"),
+            "radarr": ("list", "4k,uhd,2160p,hdr,dolby", None),
+            "sonarr": ("list", "4k,uhd,2160p,hdr,dolby", None),
         },
         subpath="/4k",
     ),
@@ -76,46 +79,37 @@ PRESETS: list[Preset] = [
         description="Full-HD content into a 1080p folder.",
         category="quality",
         matchers={
-            "radarr": ("list", "1080p,fhd,1080,high"),
-            "sonarr": ("list", "1080p,fhd,1080,high"),
+            "radarr": ("list", "1080p,fhd,1080,high", None),
+            "sonarr": ("list", "1080p,fhd,1080,high", None),
         },
         subpath="/1080p",
     ),
     Preset(
         key="genre",
         name="Genre",
-        description="One subfolder per genre. Pick the genres you want.",
+        description="One subfolder per genre, from Radarr/Sonarr's own genre metadata.",
         category="genre",
+        # Native metadata, not tags: a hardcoded tag list can't enumerate every
+        # genre a library will ever have, and most libraries don't carry
+        # genre-named tags at all. A catch-all regex against the item's real
+        # genres is complete by construction and fans out via the planner's
+        # existing multi-genre variant handling.
         matchers={
-            "radarr": (
-                "list",
-                "action,adventure,animation,comedy,crime,drama,"
-                "documentary,family,horror,mystery,romance,sci-fi,thriller,western",
-            ),
-            "sonarr": (
-                "list",
-                "action,adventure,animation,comedy,crime,drama,"
-                "documentary,family,horror,mystery,romance,sci-fi,thriller,western",
-            ),
+            "radarr": ("regex", r".+", "native"),
+            "sonarr": ("regex", r".+", "native"),
         },
         subpath="/{$genre}",
     ),
     Preset(
         key="language",
         name="Language",
-        description="One subfolder per language. Pick the languages you want.",
+        description="One subfolder per language, from Radarr/Sonarr's own language metadata.",
         category="language",
+        # Same rationale as "genre" above: native metadata via a catch-all
+        # regex instead of an enumerated tag list.
         matchers={
-            "radarr": (
-                "list",
-                "english,spanish,french,german,japanese,korean,italian,"
-                "chinese,hindi,portuguese,dutch,russian",
-            ),
-            "sonarr": (
-                "list",
-                "english,spanish,french,german,japanese,korean,italian,"
-                "chinese,hindi,portuguese,dutch,russian",
-            ),
+            "radarr": ("regex", r".+", "native"),
+            "sonarr": ("regex", r".+", "native"),
         },
         subpath="/{$language}",
     ),
@@ -142,7 +136,7 @@ def list_presets_for_type(app_type: str, base: str | None = None) -> list[dict]:
     b = base or default_base_folder(app_type)
     out: list[dict] = []
     for p in PRESETS:
-        match_type, match_value = p.matchers[app_type]
+        match_type, match_value, source = p.matchers[app_type]
         out.append(
             {
                 "key": p.key,
@@ -151,6 +145,7 @@ def list_presets_for_type(app_type: str, base: str | None = None) -> list[dict]:
                 "category": p.category,
                 "match_type": match_type,
                 "match_value": match_value,
+                "source": source,
                 "subpath": p.subpath,
                 "default_base_folder": default_base_folder(app_type),
                 "dir_template": _dir_template(b, p.subpath),
@@ -165,13 +160,14 @@ def render_preset(key: str, app_type: str, base: str | None = None) -> dict | No
     if p is None:
         return None
     b = base or default_base_folder(app_type)
-    match_type, match_value = p.matchers[app_type]
+    match_type, match_value, source = p.matchers[app_type]
     return {
         "key": p.key,
         "name": p.name,
         "category": p.category,
         "match_type": match_type,
         "match_value": match_value,
+        "source": source,
         "subpath": p.subpath,
         "base_folder": b,
         "dir_template": _dir_template(b, p.subpath),

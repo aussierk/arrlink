@@ -44,6 +44,7 @@ def build_radarr(origin: str) -> tuple[FastAPI, dict]:
                 "movieFile": {
                     "path": "/media/movies/Inception.2010.2160p.mkv",
                     "size": 12345,
+                    "languages": [{"id": 1, "name": "English"}],
                 },
             },
             {
@@ -364,6 +365,9 @@ def test_adapter_fetch_items_normalization(radarr):
     assert inc.files[0].abs_path == "/media/movies/Inception.2010.2160p.mkv"
     assert inc.files[0].rel_path == "Inception.2010.2160p.mkv"
     assert inc.files[0].size == 12345
+    # movieFile.languages -- the file's own audio track(s), distinct from
+    # original_language (the title's production language).
+    assert inc.audio_languages == ["English"]
 
     kids = items[1]
     assert kids.path == "/media/movies/Kids Movie"

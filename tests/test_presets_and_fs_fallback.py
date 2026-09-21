@@ -160,10 +160,16 @@ def test_list_presets_radarr(client):
     assert by_key["1080p"]["match_value"].split(",")[0] == "1080p"
     assert by_key["1080p"]["dir_template"] == "/media/movies/1080p"
     assert by_key["1080p"]["category"] == "quality"
-    assert by_key["genre"]["match_type"] == "list"
+    # genre/language match native metadata via a catch-all regex, not a
+    # hardcoded tag list — see the Genre/Language presets' docstring
+    assert by_key["genre"]["match_type"] == "regex"
+    assert by_key["genre"]["match_value"] == ".+"
+    assert by_key["genre"]["source"] == "native"
     assert by_key["genre"]["dir_template"] == "/media/movies/{$genre}"
     assert by_key["genre"]["category"] == "genre"
-    assert by_key["language"]["match_type"] == "list"
+    assert by_key["language"]["match_type"] == "regex"
+    assert by_key["language"]["match_value"] == ".+"
+    assert by_key["language"]["source"] == "native"
     assert by_key["language"]["dir_template"] == "/media/movies/{$language}"
     assert by_key["language"]["category"] == "language"
 
@@ -211,6 +217,22 @@ def test_apply_preset_creates_rule(client, radarr_media):
     # it's a real, listable rule
     rules = client.get("/api/rules").json()
     assert any(x["id"] == rule["id"] for x in rules)
+
+
+def test_apply_preset_genre_uses_native_source(client, radarr_media):
+    r = client.post(
+        "/api/presets/apply",
+        json={
+            "preset_key": "genre",
+            "app_type": "radarr",
+            "base_folder": radarr_media["linked"],
+        },
+    )
+    assert r.status_code == 201, r.text
+    cond = r.json()["rule"]["conditions"][0]
+    assert cond["match_type"] == "regex"
+    assert cond["match_value"] == ".+"
+    assert cond["source"] == "native"
 
 
 def test_apply_preset_custom_base_and_scope(client, radarr_media):

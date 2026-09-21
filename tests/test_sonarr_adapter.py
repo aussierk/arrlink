@@ -59,13 +59,15 @@ class Tv:
         )
         return self.series[-1]
 
-    def add_episode(self, series_index, rel_path, data=b"episode data"):
+    def add_episode(self, series_index, rel_path, data=b"episode data", languages=None):
         s = self.series[series_index]
         full = os.path.join(s["path"], rel_path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, "wb") as f:
             f.write(data)
-        s["files"].append({"path": full, "size": os.path.getsize(full)})
+        s["files"].append(
+            {"path": full, "size": os.path.getsize(full), "languages": languages}
+        )
 
     def set_series_tags(self, index: int, labels: list[str]):
         self.series[index]["tags"] = [self.tag_id(t) for t in labels]
@@ -98,7 +100,16 @@ class Tv:
         for s in self.series:
             if s["id"] == series_id:
                 return [
-                    {"id": i + 1, "path": f["path"], "size": f["size"]}
+                    {
+                        "id": i + 1,
+                        "path": f["path"],
+                        "size": f["size"],
+                        "languages": (
+                            [{"id": li + 1, "name": name} for li, name in enumerate(f["languages"])]
+                            if f.get("languages")
+                            else []
+                        ),
+                    }
                     for i, f in enumerate(s["files"])
                 ]
         return []
@@ -167,8 +178,10 @@ def _free_port() -> int:
 def sonarr_media(tmp_path_factory):
     tv = Tv(str(tmp_path_factory.mktemp("tv")), str(tmp_path_factory.mktemp("linked")))
     tv.add_series("The Show", "The Show", 2021, ["tv-14", "## - bob"])
-    tv.add_episode(0, "The Show - S01E01 - Pilot.mkv", b"pilot data")
-    tv.add_episode(0, "The Show - S01E02 - Second.mkv", b"second data")
+    tv.add_episode(0, "The Show - S01E01 - Pilot.mkv", b"pilot data", languages=["English"])
+    tv.add_episode(
+        0, "The Show - S01E02 - Second.mkv", b"second data", languages=["English", "Spanish"]
+    )
     tv.add_series("Family Show", "Family Show", 2019, ["kids"])
     tv.add_episode(1, "Family Show - S01E01 - Start.mkv", b"family data")
     # a series with no files on disk (must be excluded from items)
@@ -276,10 +289,30 @@ def test_adapter_fetch_items_normalization(sonarr_media):
     for f in show.files:
         assert f.inode is not None  # stat'ed for real inodes
         assert f.rel_path  # relative to the series dir
+    # union of every episode file's own audio track(s) -- distinct from
+    # original_language (the title's production language).
+    assert set(show.audio_languages) == {"English", "Spanish"}
 
     family = next(i for i in items if i.id == 2)
     assert set(family.tags) == {"kids"}
     assert family.files[0].rel_path == "Family Show - S01E01 - Start.mkv"
+    # no languages given for this fixture's episode -> empty, not None
+    assert family.audio_languages == []
+
+
+def test_adapter_audio_languages_undefined_when_delta_fetch_skips(sonarr_media):
+    origin, tv = sonarr_media
+    adapter = SonarrAdapter(origin, API_KEY, timeout=5)
+
+    first = asyncio.run(adapter.fetch_items())
+    known = {i.id: i.stats_fingerprint for i in first}
+
+    second = asyncio.run(adapter.fetch_items(known))
+    show = next(i for i in second if i.id == 1)
+    assert show.files_stale is True
+    # None (not []) -- the poller must know to keep the last stored value
+    # rather than clearing it, since /episodefile wasn't refetched.
+    assert show.audio_languages is None
 
 
 def test_adapter_ping(sonarr_media):

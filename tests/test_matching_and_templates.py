@@ -125,6 +125,59 @@ def test_planner_multi_rule_and_file():
     assert len(planned) == 1
 
 
+def test_plan_links_dir_naming_mode_custom_skips_source_folder_append():
+    # "source" (the default, and the only mode absent from a rule dict) always
+    # appends the item's own source directory basename; "custom" opts back
+    # into the pre-9b72b2d behavior where dir_template alone resolves the
+    # full destination folder.
+    base_rule = {
+        "id": 1,
+        "name": "kids",
+        "conditions": [
+            {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None}
+        ],
+        "dir_template": "/linked/movies/kids",
+        "filename_template": None,
+        "enabled": True,
+        "priority": 100,
+        "app_scope": None,
+    }
+    items = [
+        {
+            "id": 1,
+            "title": "Kids Movie",
+            "year": 2019,
+            "tags": ["kids"],
+            "path": "/media/movies/Kids Movie (2019) [tmdbid-1]",
+            "files": [
+                {
+                    "abs_path": "/media/movies/Kids Movie (2019) [tmdbid-1]/Kids Movie.2019.mkv",
+                    "size": 1,
+                }
+            ],
+        }
+    ]
+
+    planned, _ = plan_links(
+        [{**base_rule, "dir_naming_mode": "source"}], items, "Radarr", 1, ["/linked"]
+    )
+    assert planned[0].dst_path == (
+        "/linked/movies/kids/Kids Movie (2019) [tmdbid-1]/Kids Movie.2019.mkv"
+    )
+
+    planned, _ = plan_links(
+        [{**base_rule, "dir_naming_mode": "custom"}], items, "Radarr", 1, ["/linked"]
+    )
+    assert planned[0].dst_path == "/linked/movies/kids/Kids Movie.2019.mkv"
+
+    # rules with no dir_naming_mode key at all (e.g. pre-existing test
+    # fixtures) still default to "source"
+    planned, _ = plan_links([base_rule], items, "Radarr", 1, ["/linked"])
+    assert planned[0].dst_path == (
+        "/linked/movies/kids/Kids Movie (2019) [tmdbid-1]/Kids Movie.2019.mkv"
+    )
+
+
 # ---------------------------------------------------------------------------
 # template engine
 # ---------------------------------------------------------------------------

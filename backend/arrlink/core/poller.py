@@ -155,35 +155,52 @@ class Poller:
         ts = row["ts"] if row else None
         return ts is None or (time.time() - ts) > max_age
 
+    def _sync_observed_vocabulary(self, app_id: int, app_type: str, category: str, values) -> None:
+        """One category's vocabulary, derived purely from what this poll's
+        items already carry (collection names, genres, certifications — all
+        real Radarr/Sonarr fields, see arr/base.py's MediaFile). Only writes
+        when the observed set actually changed, so a static library's poll
+        stays write-free."""
+        distinct = sorted({v for v in values if v})
+        stored = {
+            r["value"]
+            for r in self.db.query(
+                "SELECT value FROM vocabulary WHERE category=? "
+                "AND app_type=? AND app_id IS ? AND source='observed'",
+                (category, app_type, app_id),
+            )
+        }
+        if set(distinct) != stored:
+            self.db.sync_vocabulary(
+                category, app_type, app_id, [(v, None) for v in distinct], "observed"
+            )
+
     def _sync_instance_vocabulary(self, app_id: int, app_type: str, items) -> None:
-        """Per-instance vocabulary: collection names observed in this poll's
-        items (pure derivation, every poll) plus this app's configured
-        quality profiles/languages (2 adapter HTTP calls, throttled to
-        INSTANCE_VOCAB_STALE_S — they change rarely). Best-effort: never
-        fails the poll."""
-        # collections observed in the items we already have. Only
-        # write when the set actually changed, so a static library's poll
-        # stays write-free.
+        """Per-instance vocabulary: collection/genre/certification values
+        observed in this poll's items (pure derivation, every poll) plus
+        this app's configured quality profiles/languages (2 adapter HTTP
+        calls, throttled to INSTANCE_VOCAB_STALE_S — they change rarely).
+        Best-effort: never fails the poll."""
         try:
-            collections = sorted({c for c in (i.collection for i in items) if c})
-            stored = {
-                r["value"]
-                for r in self.db.query(
-                    "SELECT value FROM vocabulary WHERE category='collection' "
-                    "AND app_type=? AND app_id IS ? AND source='observed'",
-                    (app_type, app_id),
-                )
-            }
-            if set(collections) != stored:
-                self.db.sync_vocabulary(
-                    "collection",
-                    app_type,
-                    app_id,
-                    [(c, None) for c in collections],
-                    "observed",
-                )
+            self._sync_observed_vocabulary(
+                app_id, app_type, "collection", (i.collection for i in items)
+            )
         except Exception as e:  # noqa: BLE001 - best-effort, suggestion data only
             log.warning("collection vocabulary sync failed for app %s: %s", app_id, e)
+
+        try:
+            self._sync_observed_vocabulary(
+                app_id, app_type, "genre", (g for i in items for g in i.genres)
+            )
+        except Exception as e:  # noqa: BLE001 - best-effort, suggestion data only
+            log.warning("genre vocabulary sync failed for app %s: %s", app_id, e)
+
+        try:
+            self._sync_observed_vocabulary(
+                app_id, app_type, "certification", (i.certification for i in items)
+            )
+        except Exception as e:  # noqa: BLE001 - best-effort, suggestion data only
+            log.warning("certification vocabulary sync failed for app %s: %s", app_id, e)
 
         if not (
             self._vocab_stale(
@@ -191,6 +208,9 @@ class Poller:
             )
             or self._vocab_stale(
                 "language", app_id, app_type, "instance", max_age=INSTANCE_VOCAB_STALE_S
+            )
+            or self._vocab_stale(
+                "audio_language", app_id, app_type, "instance", max_age=INSTANCE_VOCAB_STALE_S
             )
         ):
             return
@@ -210,6 +230,17 @@ class Poller:
             )
             self.db.sync_vocabulary(
                 "language",
+                app_type,
+                app_id,
+                [(lg.name, str(lg.id)) for lg in languages if lg.name],
+                "instance",
+            )
+            # Same instance language list, offered as suggestions for
+            # audio_language too -- it's the same Radarr/Sonarr language
+            # taxonomy, just matched against the file's audio track instead
+            # of the title's production language.
+            self.db.sync_vocabulary(
+                "audio_language",
                 app_type,
                 app_id,
                 [(lg.name, str(lg.id)) for lg in languages if lg.name],
@@ -332,14 +363,28 @@ class Poller:
                     if (fr["missing_strikes"] or 0) == 0
                 ]
 
+            # audio_languages is None (not []) when the adapter didn't recompute
+            # it this poll (Sonarr's delta-fetch skip, same trigger as the files
+            # rehydration above) -- keep the last stored value instead of
+            # clearing it.
+            audio_languages = getattr(item, "audio_languages", None)
+            if audio_languages is None:
+                audio_languages = (
+                    json.loads(existing["audio_languages_json"] or "[]")
+                    if existing is not None
+                    else []
+                )
+            audio_languages_json = json.dumps(sorted(audio_languages))
+
             stats_fp = getattr(item, "stats_fingerprint", None)
             if existing is None:
                 cur = self.db.execute(
                     "INSERT INTO app_items (app_id, item_id, title, year, tags_json, "
                     "path, file_count, first_seen, last_seen, missing_strikes, "
                     "genres_json, certification, collection, quality_profile_id, "
-                    "quality_profile_name, original_language, stats_fingerprint) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?)",
+                    "quality_profile_name, original_language, audio_languages_json, "
+                    "stats_fingerprint) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?)",
                     (
                         app_id,
                         item.id,
@@ -352,6 +397,7 @@ class Poller:
                         now,
                         genres_json,
                         *native,
+                        audio_languages_json,
                         stats_fp,
                     ),
                 )
@@ -371,6 +417,7 @@ class Poller:
                     or existing["quality_profile_id"] != item.quality_profile_id
                     or existing["quality_profile_name"] != item.quality_profile_name
                     or existing["original_language"] != item.original_language
+                    or existing["audio_languages_json"] != audio_languages_json
                     or existing["stats_fingerprint"] != stats_fp
                     or (existing["missing_strikes"] or 0) != 0
                 ):
@@ -379,7 +426,7 @@ class Poller:
                         "file_count=?, last_seen=?, missing_strikes=0, genres_json=?, "
                         "certification=?, collection=?, quality_profile_id=?, "
                         "quality_profile_name=?, original_language=?, "
-                        "stats_fingerprint=? WHERE id=?",
+                        "audio_languages_json=?, stats_fingerprint=? WHERE id=?",
                         (
                             item.title,
                             item.year,
@@ -389,6 +436,7 @@ class Poller:
                             now,
                             genres_json,
                             *native,
+                            audio_languages_json,
                             stats_fp,
                             item_db_id,
                         ),

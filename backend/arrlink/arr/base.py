@@ -128,6 +128,12 @@ class Item:
     quality_profile_id: int | None = None
     quality_profile_name: str | None = None
     original_language: str | None = None
+    # The downloaded file's own audio track(s) -- distinct from
+    # original_language (the title's production language): a foreign film
+    # with an English dub, or multiple audio tracks, means these can differ.
+    # None (not []) means "not refetched this poll" (Sonarr's delta-fetch
+    # skip) -- the poller keeps the last stored value instead of clearing it.
+    audio_languages: list[str] | None = None
     stats_fingerprint: str | None = None
     files_stale: bool = False
     # app_items.id once stored -- distinct from `id` (the adapter's external

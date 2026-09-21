@@ -47,6 +47,7 @@ def snapshot_items(db: State, app_id: int) -> list[Item]:
                 quality_profile_id=r["quality_profile_id"],
                 quality_profile_name=r["quality_profile_name"],
                 original_language=r["original_language"],
+                audio_languages=json.loads(r["audio_languages_json"] or "[]"),
                 db_id=r["id"],
             )
         )
