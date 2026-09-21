@@ -14,9 +14,11 @@ import {
   type RenderedPreset,
 } from '../core/presets.js'
 import type { Condition } from '../core/matching.js'
+import type { Poller } from '../core/poller.js'
 import { DEFAULT_ROOTS, TemplateError, checkJail } from '../core/template.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
+import { scopeAppIds, triggerRescan } from './rules.js'
 
 /** List preset rules per app type + apply one as an editable rule. Ported
  * from api/presets.py. Wire format is snake_case; core/presets.ts stays
@@ -26,6 +28,7 @@ export interface PresetsRouteOptions {
   db: DbClient
   settingsStore: SettingsStore
   env: Settings
+  getPoller: () => Poller | null
 }
 
 const APP_TYPES = new Set(['radarr', 'sonarr'])
@@ -87,7 +90,7 @@ export function registerPresetsRoutes(
   app: FastifyInstance,
   opts: PresetsRouteOptions,
 ): void {
-  const { db, settingsStore, env } = opts
+  const { db, settingsStore, env, getPoller } = opts
 
   app.get('/api/presets', (request) => {
     getCurrentUser(request, db, settingsStore, env)
@@ -166,6 +169,7 @@ export function registerPresetsRoutes(
       id,
     )
     const rule = db.select().from(rulesTable).where(eq(rulesTable.id, id)).get()!
+    triggerRescan(getPoller(), scopeAppIds(db, body.app_scope, null))
     reply.code(201)
     return {
       preset_key: preset.key,

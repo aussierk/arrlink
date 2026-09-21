@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, type AppContext } from '../../src/app.js'
 import { loadSettings } from '../../src/config/env.js'
+import { apps } from '../../src/db/schema.js'
 
 let dir: string
 let ctx: AppContext
@@ -15,9 +16,34 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.unstubAllGlobals()
   await ctx.close()
   rmSync(dir, { recursive: true, force: true })
 })
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+/** Mocks the three Radarr endpoints the adapter's fetchSnapshot touches --
+ * same shape as poller.test.ts's mockRadarr, just inline (no movies on disk
+ * needed here since these tests only care whether a poll ran at all). */
+function mockRadarr(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string | URL) => {
+      const u = String(url)
+      if (u.includes('/api/v3/tag')) return Promise.resolve(jsonResponse([]))
+      if (u.includes('/api/v3/qualityprofile')) return Promise.resolve(jsonResponse([]))
+      if (u.includes('/api/v3/language')) return Promise.resolve(jsonResponse([]))
+      if (u.includes('/api/v3/movie')) return Promise.resolve(jsonResponse([]))
+      return Promise.resolve(new Response('not found', { status: 404 }))
+    }),
+  )
+}
 
 function ruleBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -79,6 +105,39 @@ describe('POST /api/rules', () => {
     expect(res.statusCode).toBe(422)
   })
 
+  it('rescans the scoped app automatically, without a separate /rescan call', async () => {
+    mockRadarr()
+    const appRes = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/apps',
+      payload: {
+        name: 'Radarr',
+        type: 'radarr',
+        url: 'http://radarr.local',
+        api_key: 'k',
+      },
+    })
+    const appId = appRes.json<{ id: number; last_poll_at: number | null }>().id
+    expect(appRes.json<{ last_poll_at: number | null }>().last_poll_at).toBeNull()
+
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/rules',
+      payload: ruleBody({ app_scope: appId }),
+    })
+    expect(res.statusCode).toBe(201)
+
+    // triggerRescan() (see api/rules.ts) fires the poll in the background --
+    // it must not block the save response -- so poll for its result instead
+    // of asserting on it synchronously.
+    await vi.waitFor(() => {
+      const appNow = ctx.app.inject({ method: 'GET', url: `/api/apps/${appId}` })
+      return appNow.then((r) => {
+        expect(r.json<{ last_poll_at: number | null }>().last_poll_at).not.toBeNull()
+      })
+    })
+  })
+
   it('rejects an invalid regex condition', async () => {
     const res = await ctx.app.inject({
       method: 'POST',
@@ -94,6 +153,56 @@ describe('POST /api/rules', () => {
 })
 
 describe('GET/PATCH/DELETE /api/rules/:ruleId', () => {
+  it('rescans the union of old+new scope on update, and the scope again on delete', async () => {
+    mockRadarr()
+    const mkApp = async (name: string): Promise<number> => {
+      const r = await ctx.app.inject({
+        method: 'POST',
+        url: '/api/apps',
+        payload: { name, type: 'radarr', url: 'http://radarr.local', api_key: 'k' },
+      })
+      return r.json<{ id: number }>().id
+    }
+    const appA = await mkApp('A')
+    const appB = await mkApp('B')
+    const lastPollAt = async (appId: number): Promise<number | null> => {
+      const r = await ctx.app.inject({ method: 'GET', url: `/api/apps/${appId}` })
+      return r.json<{ last_poll_at: number | null }>().last_poll_at
+    }
+    const resetPolls = (): void => {
+      ctx.db.update(apps).set({ lastPollAt: null }).run()
+    }
+
+    const created = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/rules',
+      payload: ruleBody({ app_scope: appA }),
+    })
+    const ruleId = created.json<{ id: number }>().id
+    await vi.waitFor(async () => expect(await lastPollAt(appA)).not.toBeNull())
+
+    // Re-scoping from A to B should rescan both: B because it's newly in
+    // scope, A because it's leaving scope and its now-stale links need
+    // retiring promptly rather than waiting for A's next natural poll.
+    resetPolls()
+    const patch = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/api/rules/${ruleId}`,
+      payload: ruleBody({ app_scope: appB }),
+    })
+    expect(patch.statusCode).toBe(200)
+    await vi.waitFor(async () => {
+      expect(await lastPollAt(appA)).not.toBeNull()
+      expect(await lastPollAt(appB)).not.toBeNull()
+    })
+
+    // Deleting should rescan the rule's (now former) scope, B.
+    resetPolls()
+    const del = await ctx.app.inject({ method: 'DELETE', url: `/api/rules/${ruleId}` })
+    expect(del.statusCode).toBe(204)
+    await vi.waitFor(async () => expect(await lastPollAt(appB)).not.toBeNull())
+  })
+
   it('round-trips a rule through update and delete', async () => {
     const created = await ctx.app.inject({
       method: 'POST',

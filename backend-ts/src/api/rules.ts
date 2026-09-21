@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { AdapterError } from '../arr/types.js'
@@ -10,6 +10,7 @@ import { apps, rules as rulesTable } from '../db/schema.js'
 import type { SettingsStore } from '../db/settings-store.js'
 import type { Condition } from '../core/matching.js'
 import { planLinks, type PlannerRule } from '../core/planner.js'
+import type { Poller } from '../core/poller.js'
 import { snapshotItems } from '../core/snapshot.js'
 import {
   DEFAULT_ROOTS,
@@ -36,6 +37,7 @@ export interface RulesRouteOptions {
   db: DbClient
   settingsStore: SettingsStore
   env: Settings
+  getPoller: () => Poller | null
 }
 
 type RuleRow = typeof rulesTable.$inferSelect
@@ -290,6 +292,49 @@ function ruleOut(
   }
 }
 
+/** Enabled app ids a rule with this scope covers -- the same set the poller
+ * itself would match via ruleAppliesToApp(). Exported for presets.ts, whose
+ * preset-apply endpoint creates a rule the same way POST /api/rules does. */
+export function scopeAppIds(
+  db: DbClient,
+  appScope: number | null,
+  appTypeScope: string | null,
+): number[] {
+  if (appScope !== null) {
+    const row = db
+      .select({ id: apps.id })
+      .from(apps)
+      .where(and(eq(apps.id, appScope), eq(apps.enabled, 1)))
+      .get()
+    return row ? [row.id] : []
+  }
+  const rows =
+    appTypeScope !== null
+      ? db
+          .select({ id: apps.id })
+          .from(apps)
+          .where(and(eq(apps.type, appTypeScope), eq(apps.enabled, 1)))
+          .all()
+      : db.select({ id: apps.id }).from(apps).where(eq(apps.enabled, 1)).all()
+  return rows.map((r) => r.id)
+}
+
+/** Saving/deleting a rule should apply immediately rather than silently
+ * waiting for the next scheduled poll (or a user separately finding the
+ * Rescan button) -- but a rescan is a real network round-trip per app, so it
+ * must not block the response or fail the save over an unrelated adapter
+ * error. Runs sequentially, not Promise.all, so an unscoped rule across many
+ * configured apps doesn't fire a rescan burst all at once. */
+export function triggerRescan(poller: Poller | null, appIds: number[]): void {
+  if (poller === null || appIds.length === 0) return
+  const unique = [...new Set(appIds)]
+  // pollOnce() already logs a warn event with the failure detail -- nothing
+  // further to do with the result here.
+  void (async () => {
+    for (const id of unique) await poller.rescan(id)
+  })()
+}
+
 function checkDirTemplateJail(settingsStore: SettingsStore, dirTemplate: string): void {
   const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [...DEFAULT_ROOTS]
   try {
@@ -301,7 +346,7 @@ function checkDirTemplateJail(settingsStore: SettingsStore, dirTemplate: string)
 }
 
 export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOptions): void {
-  const { db, settingsStore, env } = opts
+  const { db, settingsStore, env, getPoller } = opts
 
   app.get('/api/rules', (request) => {
     getCurrentUser(request, db, settingsStore, env)
@@ -354,6 +399,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     const id = Number(res.lastInsertRowid)
     logEvent(db, 'info', `rule added: ${body.name}`, null, id)
     const out = ruleOut(db.select().from(rulesTable).where(eq(rulesTable.id, id)).get()!)
+    triggerRescan(getPoller(), scopeAppIds(db, body.app_scope, body.app_type_scope))
     reply.code(201)
     return { ...out, vocabulary_warnings: vocabularyWarnings(db, body) }
   })
@@ -361,15 +407,12 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
   app.patch('/api/rules/:ruleId', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const ruleId = Number((request.params as { ruleId: string }).ruleId)
-    if (
-      !db
-        .select({ id: rulesTable.id })
-        .from(rulesTable)
-        .where(eq(rulesTable.id, ruleId))
-        .get()
-    ) {
-      throw new HttpError(404, 'rule not found')
-    }
+    const existing = db
+      .select({ appScope: rulesTable.appScope, appTypeScope: rulesTable.appTypeScope })
+      .from(rulesTable)
+      .where(eq(rulesTable.id, ruleId))
+      .get()
+    if (!existing) throw new HttpError(404, 'rule not found')
     const body = parseBody(request.body)
     if (
       body.app_scope !== null &&
@@ -395,15 +438,33 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     const out = ruleOut(
       db.select().from(rulesTable).where(eq(rulesTable.id, ruleId)).get()!,
     )
+    // Rescan the new scope, plus the old scope if it narrowed/moved -- e.g. a
+    // rule that used to apply to all apps and now only applies to one still
+    // needs the other apps rescanned so their now-stale links retire promptly.
+    triggerRescan(getPoller(), [
+      ...scopeAppIds(db, body.app_scope, body.app_type_scope),
+      ...scopeAppIds(db, existing.appScope, existing.appTypeScope),
+    ])
     return { ...out, vocabulary_warnings: vocabularyWarnings(db, body) }
   })
 
   app.delete('/api/rules/:ruleId', (request, reply) => {
     getCurrentUser(request, db, settingsStore, env)
     const ruleId = Number((request.params as { ruleId: string }).ruleId)
+    const existing = db
+      .select({ appScope: rulesTable.appScope, appTypeScope: rulesTable.appTypeScope })
+      .from(rulesTable)
+      .where(eq(rulesTable.id, ruleId))
+      .get()
     const res = db.delete(rulesTable).where(eq(rulesTable.id, ruleId)).run()
     if (res.changes === 0) throw new HttpError(404, 'rule not found')
     logEvent(db, 'info', `rule deleted: ${ruleId}`)
+    // So the deleted rule's links retire promptly instead of waiting for the
+    // next natural poll.
+    triggerRescan(
+      getPoller(),
+      scopeAppIds(db, existing!.appScope, existing!.appTypeScope),
+    )
     reply.code(204).send()
   })
 

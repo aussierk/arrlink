@@ -59,6 +59,23 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   const app = Fastify({ logger: false, trustProxy: settings.forwardedAllowIps })
   await app.register(fastifyCookie)
 
+  // Fastify's default JSON parser throws FST_ERR_CTP_EMPTY_JSON_BODY for a
+  // body-less request sent with `Content-Type: application/json` (e.g. a
+  // bare `fetch(url, { method: 'POST' })`, which still carries that header).
+  // Routes that don't declare a body never look at it, so treat empty as
+  // absent rather than failing the request.
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
+    if (body === '') {
+      done(null, undefined)
+      return
+    }
+    try {
+      done(null, JSON.parse(body as string))
+    } catch (err) {
+      done(err as Error, undefined)
+    }
+  })
+
   // web/src/lib/api.ts's req() helper parses `{ detail }` from error bodies.
   app.setErrorHandler((err, _request, reply) => {
     if (err instanceof HttpError) {
@@ -85,10 +102,10 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   registerAuthRoutes(app, routeOpts)
   registerAppsRoutes(app, { ...routeOpts, getPoller: () => poller })
   registerTagsRoutes(app, routeOpts)
-  registerRulesRoutes(app, routeOpts)
+  registerRulesRoutes(app, { ...routeOpts, getPoller: () => poller })
   registerSettingsRoutes(app, routeOpts)
   registerLinksRoutes(app, routeOpts)
-  registerPresetsRoutes(app, routeOpts)
+  registerPresetsRoutes(app, { ...routeOpts, getPoller: () => poller })
   registerBackupRoutes(app, routeOpts)
   registerVocabularyRoutes(app, routeOpts)
   registerLogsRoutes(app, routeOpts)
