@@ -64,6 +64,7 @@ export function reconcile(
   plan: PlannedLink[],
   liveSrcs: Set<string>,
   unlinkOnMismatch: boolean,
+  roots: string[],
   fallback: FsFallbackMode = 'skip',
   now: number = Date.now() / 1000,
   deleteAfter: number = DEFAULT_DELETE_AFTER,
@@ -125,11 +126,11 @@ export function reconcile(
     if (p !== undefined) {
       planned.delete(key)
       if (p.dstPath === dst) {
-        ensurePresent(db, row, dst, p, res, fallback, now, statCache)
+        ensurePresent(db, row, dst, p, res, fallback, now, statCache, roots)
       } else {
         // dst changed (file renamed/moved, or template edited) -> recreate
         // under the new dst, drop the old
-        const r = removeLink(dst)
+        const r = removeLink(dst, roots)
         if (!r.ok && r.error) res.errors.push(`old link ${dst}: ${r.error}`)
         if (p.fileId !== null) create(db, p, appId, res, fallback, now)
         res.moved += 1
@@ -149,6 +150,7 @@ export function reconcile(
       deleteAfter,
       rulesById,
       statCache,
+      roots,
     )
   })
 
@@ -176,6 +178,7 @@ function ensurePresent(
   fallback: FsFallbackMode,
   now: number,
   statCache: Map<string, Stats>,
+  roots: string[],
 ): void {
   const src = p.srcPath
   const srcIno = p.srcInode !== null ? p.srcInode : cachedIno(src, statCache)
@@ -209,8 +212,11 @@ function ensurePresent(
   if (dstIno !== srcIno) {
     // source was replaced (e.g. quality upgrade): re-link under the same
     // dst name. The old file's data survives until this unlink.
-    const r = removeLink(dst)
+    const r = removeLink(dst, roots)
     if (r.ok && srcIno !== null) {
+      // removeLink() may have pruned dst's now-empty parent away -- recreate
+      // it, the same way create() already does before its own createLink().
+      ensureDir(dirname(dst))
       const r2 = createLink(src, dst, fallback)
       if (r2.ok) {
         res.moved += 1
@@ -246,6 +252,7 @@ function retire(
   deleteAfter: number,
   rulesById: Map<number, RuleRow>,
   statCache: Map<string, Stats>,
+  roots: string[],
 ): void {
   const rule = row.ruleId !== null ? rulesById.get(row.ruleId) : undefined
   const ruleUnlink = rule ? Boolean(rule.unlinkOnMismatch) : unlinkOnMismatch
@@ -265,7 +272,7 @@ function retire(
     return
   }
 
-  const r = removeLink(dst)
+  const r = removeLink(dst, roots)
   if (r.ok) res.removed += 1
   else res.errors.push(`remove ${dst}: ${r.error}`)
   db.update(links).set({ status: 'missing' }).where(eq(links.id, row.id)).run()

@@ -98,7 +98,9 @@ describe('reconcile: create', () => {
     writeFileSync(src, 'hello')
     const dst = join(linkedDir, 'kids', 'a.mkv')
 
-    const res = reconcile(db, appId, 'Radarr', [plan()], new Set([src]), true)
+    const res = reconcile(db, appId, 'Radarr', [plan()], new Set([src]), true, [
+      linkedDir,
+    ])
     expect(res).toMatchObject({ created: 1, removed: 0, moved: 0, errors: [] })
     expect(existsSync(dst)).toBe(true)
     expect(inodeOf(src)).toBe(inodeOf(dst))
@@ -113,8 +115,8 @@ describe('reconcile: create', () => {
     writeFileSync(src, 'hello')
     const p = plan({ srcPath: src })
 
-    reconcile(db, appId, 'Radarr', [p], new Set([src]), true)
-    const res2 = reconcile(db, appId, 'Radarr', [p], new Set([src]), true)
+    reconcile(db, appId, 'Radarr', [p], new Set([src]), true, [linkedDir])
+    const res2 = reconcile(db, appId, 'Radarr', [p], new Set([src]), true, [linkedDir])
     expect(res2).toMatchObject({ created: 0, removed: 0, moved: 0, errors: [] })
     expect(db.select().from(linksTable).all()).toHaveLength(1)
   })
@@ -127,7 +129,7 @@ describe('reconcile: create', () => {
     writeFileSync(blocker, 'x')
     const p = plan({ srcPath: src, dstPath: join(blocker, 'a.mkv') })
 
-    const res = reconcile(db, appId, 'Radarr', [p], new Set([src]), true)
+    const res = reconcile(db, appId, 'Radarr', [p], new Set([src]), true, [linkedDir])
     expect(res.created).toBe(0)
     expect(res.errors).toHaveLength(1)
   })
@@ -138,7 +140,9 @@ describe('reconcile: rename', () => {
     const src = join(mediaDir, 'a.mkv')
     writeFileSync(src, 'hello')
     const oldDst = join(linkedDir, 'kids', 'a.mkv')
-    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true)
+    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true, [
+      linkedDir,
+    ])
     const oldIno = inodeOf(oldDst)
 
     const newDst = join(linkedDir, 'kids', 'b.mkv')
@@ -149,6 +153,7 @@ describe('reconcile: rename', () => {
       [plan({ srcPath: src, dstPath: newDst })],
       new Set([src]),
       true,
+      [linkedDir],
     )
     expect(res.moved).toBe(1)
     expect(existsSync(oldDst)).toBe(false)
@@ -162,7 +167,9 @@ describe('reconcile: source replaced (quality upgrade)', () => {
     const src = join(mediaDir, 'a.mkv')
     writeFileSync(src, 'hello')
     const dst = join(linkedDir, 'kids', 'a.mkv')
-    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true)
+    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true, [
+      linkedDir,
+    ])
     const oldIno = inodeOf(dst)
 
     rmSync(src)
@@ -174,6 +181,7 @@ describe('reconcile: source replaced (quality upgrade)', () => {
       [plan({ srcPath: src })],
       new Set([src]),
       true,
+      [linkedDir],
     )
     expect(res.moved).toBe(1)
     expect(inodeOf(dst)).toBe(inodeOf(src))
@@ -186,15 +194,17 @@ describe('reconcile: retire (missing source)', () => {
     const src = join(mediaDir, 'a.mkv')
     writeFileSync(src, 'hello')
     const dst = join(linkedDir, 'kids', 'a.mkv')
-    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true)
+    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true, [
+      linkedDir,
+    ])
 
     // no plan this time (item gone), source also removed from the live set
     rmSync(src)
-    reconcile(db, appId, 'Radarr', [], new Set(), true)
+    reconcile(db, appId, 'Radarr', [], new Set(), true, [linkedDir])
     expect(existsSync(dst)).toBe(true) // miss 1
-    reconcile(db, appId, 'Radarr', [], new Set(), true)
+    reconcile(db, appId, 'Radarr', [], new Set(), true, [linkedDir])
     expect(existsSync(dst)).toBe(true) // miss 2
-    const res = reconcile(db, appId, 'Radarr', [], new Set(), true)
+    const res = reconcile(db, appId, 'Radarr', [], new Set(), true, [linkedDir])
     expect(existsSync(dst)).toBe(false) // miss 3 -> removed
     expect(res.removed).toBe(1)
 
@@ -206,14 +216,16 @@ describe('reconcile: retire (missing source)', () => {
     const src = join(mediaDir, 'a.mkv')
     writeFileSync(src, 'hello')
     const dst = join(linkedDir, 'kids', 'a.mkv')
-    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true)
+    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true, [
+      linkedDir,
+    ])
     db.update(rulesTable)
       .set({ unlinkOnMismatch: 0 })
       .where(eq(rulesTable.id, ruleId))
       .run()
 
     // source still exists but no longer planned (rule no longer matches)
-    const res = reconcile(db, appId, 'Radarr', [], new Set([src]), true)
+    const res = reconcile(db, appId, 'Radarr', [], new Set([src]), true, [linkedDir])
     expect(existsSync(dst)).toBe(true)
     expect(res.removed).toBe(0)
     const row = db.select().from(linksTable).all()[0]
@@ -236,6 +248,7 @@ describe('reconcile: collision', () => {
       [plan({ srcPath: src })],
       new Set([src]),
       true,
+      [linkedDir],
     )
     expect(res.created).toBe(0)
     expect(res.errors).toHaveLength(1)
@@ -264,6 +277,7 @@ describe('reconcile: overlapping rules', () => {
       ],
       new Set([src]),
       true,
+      [linkedDir],
     )
     expect(res.errors.some((e) => e.includes('both plan to link here'))).toBe(true)
   })
@@ -298,6 +312,7 @@ describe('reconcile: dead missing-row cleanup', () => {
       [plan({ srcPath: src, dstPath: dst })],
       new Set([src]),
       true,
+      [linkedDir],
     )
     expect(res.created).toBe(1)
     const rows = db.select().from(linksTable).all()
@@ -320,7 +335,7 @@ describe('reconcile: chunked commits', () => {
         dstPath: join(linkedDir, 'kids', `${i}.mkv`),
       }),
     )
-    reconcile(db, appId, 'Radarr', plans, new Set(srcs), true)
+    reconcile(db, appId, 'Radarr', plans, new Set(srcs), true, [linkedDir])
 
     // Re-run pass 1 over the now-existing 3 rows with a real $client.exec
     // spy to confirm more than one COMMIT was issued.
@@ -331,7 +346,7 @@ describe('reconcile: chunked commits', () => {
       return rawExec(sql)
     }
     try {
-      reconcile(db, appId, 'Radarr', plans, new Set(srcs), true)
+      reconcile(db, appId, 'Radarr', plans, new Set(srcs), true, [linkedDir])
     } finally {
       db.$client.exec = rawExec
     }

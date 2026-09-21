@@ -310,6 +310,30 @@ describe('Poller.rescan', () => {
     const linkRow = db.select().from(linksTable).where(eq(linksTable.dstPath, dst)).get()
     expect(linkRow?.status).toBe('missing')
   })
+
+  it('prunes the now-empty directory structure a rule created, once its last link is retired', async () => {
+    // Mirrors a real template like `movies/English/{$title}/` -- two levels
+    // of directories the template created just for this one file.
+    db.update(rulesTable)
+      .set({ dirTemplate: join(linkedDir, 'kids', 'Movie1 (2020)') })
+      .where(eq(rulesTable.name, 'kids'))
+      .run()
+    const src = movieFile('movie1.mkv')
+    mockRadarr([{ id: 1, title: 'Movie1', year: 2020, tags: [1], moviePath: src }])
+    const poller = new Poller(db, settings)
+    await poller.rescan(appId)
+    const nested = join(linkedDir, 'kids', 'Movie1 (2020)')
+    const dst = join(nested, 'movie1.mkv')
+    expect(existsSync(dst)).toBe(true)
+
+    mockRadarr([{ id: 1, title: 'Movie1', year: 2020, tags: [], moviePath: src }])
+    await poller.rescan(appId)
+
+    expect(existsSync(dst)).toBe(false)
+    expect(existsSync(nested)).toBe(false) // pruned
+    expect(existsSync(join(linkedDir, 'kids'))).toBe(false) // pruned too, now empty
+    expect(existsSync(linkedDir)).toBe(true) // the allowed root itself survives
+  })
 })
 
 describe('Poller.start/stop', () => {

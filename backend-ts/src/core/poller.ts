@@ -595,8 +595,11 @@ export class Poller {
       .from(links)
       .where(and(eq(links.fileId, frow.id), inArray(links.status, ['active', 'stale'])))
       .all()
+    const roots = this.settingsStore.getSetting<string[]>('allowed_roots') ?? [
+      ...DEFAULT_ROOTS,
+    ]
     for (const lrow of linkRows) {
-      const r = removeLink(lrow.dstPath)
+      const r = removeLink(lrow.dstPath, roots)
       if (r.ok) {
         this.db
           .update(links)
@@ -625,8 +628,11 @@ export class Poller {
       .from(links)
       .where(and(eq(links.itemId, row.id), inArray(links.status, ['active', 'stale'])))
       .all()
+    const roots = this.settingsStore.getSetting<string[]>('allowed_roots') ?? [
+      ...DEFAULT_ROOTS,
+    ]
     for (const lrow of linkRows) {
-      const r = removeLink(lrow.dstPath)
+      const r = removeLink(lrow.dstPath, roots)
       if (r.ok) {
         this.db
           .update(links)
@@ -711,6 +717,7 @@ export class Poller {
       planned,
       liveSrcs,
       Boolean(unlinkDefault),
+      roots,
       resolveFsFallback(
         this.settingsStore,
         normalizeFsFallback(this.settings.fsFallback),

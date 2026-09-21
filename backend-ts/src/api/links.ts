@@ -14,6 +14,7 @@ import {
   resolveFsFallback,
 } from '../core/fsutil.js'
 import { normalizeFsFallback } from '../config/env.js'
+import { DEFAULT_ROOTS } from '../core/template.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
@@ -116,7 +117,10 @@ export function registerLinksRoutes(app: FastifyInstance, opts: LinksRouteOption
     const linkId = Number((request.params as { linkId: string }).linkId)
     const row = db.select().from(links).where(eq(links.id, linkId)).get()
     if (!row) throw new HttpError(404, 'link not found')
-    const r = removeLink(row.dstPath)
+    const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [
+      ...DEFAULT_ROOTS,
+    ]
+    const r = removeLink(row.dstPath, roots)
     if (!r.ok && r.error) throw new HttpError(500, r.error)
     db.update(links).set({ status: 'missing' }).where(eq(links.id, linkId)).run()
     logEvent(db, 'info', `link removed: ${row.dstPath}`)

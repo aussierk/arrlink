@@ -170,14 +170,14 @@ describe('removeLink', () => {
     writeFileSync(target, 'x')
     symlinkSync(target, link)
 
-    const r = removeLink(link)
+    const r = removeLink(link, [dir])
     expect(r.ok).toBe(false)
     expect(r.error).toMatch(/symlink/)
     expect(existsSync(link)).toBe(true)
   })
 
   it('treats an already-gone path as success', () => {
-    const r = removeLink(join(dir, 'nonexistent.txt'))
+    const r = removeLink(join(dir, 'nonexistent.txt'), [dir])
     expect(r.ok).toBe(true)
   })
 
@@ -187,11 +187,57 @@ describe('removeLink', () => {
     writeFileSync(src, 'hello')
     createLink(src, dst, 'skip')
 
-    const r = removeLink(dst)
+    const r = removeLink(dst, [dir])
     expect(r.ok).toBe(true)
     expect(existsSync(dst)).toBe(false)
     expect(existsSync(src)).toBe(true)
     expect(readFileSync(src, 'utf-8')).toBe('hello')
+  })
+
+  it('prunes now-empty parent directories up to (not including) an allowed root', () => {
+    const src = join(dir, 'src.txt')
+    const nested = join(dir, 'movies', 'English', 'Some Title (2005)')
+    const dst = join(nested, 'dst.txt')
+    writeFileSync(src, 'hello')
+    mkdirSync(nested, { recursive: true })
+    createLink(src, dst, 'skip')
+
+    const r = removeLink(dst, [dir])
+    expect(r.ok).toBe(true)
+    expect(existsSync(nested)).toBe(false)
+    expect(existsSync(join(dir, 'movies', 'English'))).toBe(false)
+    expect(existsSync(join(dir, 'movies'))).toBe(false)
+    expect(existsSync(dir)).toBe(true) // the root itself is never removed
+  })
+
+  it('stops pruning at the first non-empty ancestor', () => {
+    const src1 = join(dir, 'src1.txt')
+    const src2 = join(dir, 'movies', 'keep-me.txt')
+    const nested = join(dir, 'movies', 'English')
+    const dst = join(nested, 'dst.txt')
+    writeFileSync(src1, 'hello')
+    mkdirSync(nested, { recursive: true })
+    writeFileSync(src2, 'unrelated file that should survive')
+    createLink(src1, dst, 'skip')
+
+    const r = removeLink(dst, [dir])
+    expect(r.ok).toBe(true)
+    expect(existsSync(nested)).toBe(false) // now-empty, pruned
+    expect(existsSync(join(dir, 'movies'))).toBe(true) // still has keep-me.txt
+    expect(existsSync(src2)).toBe(true)
+  })
+
+  it('never removes a configured root, even when it is empty', () => {
+    const emptyRoot = join(dir, 'linked')
+    mkdirSync(emptyRoot)
+    const src = join(dir, 'src.txt')
+    const dst = join(emptyRoot, 'dst.txt')
+    writeFileSync(src, 'hello')
+    createLink(src, dst, 'skip')
+
+    const r = removeLink(dst, [emptyRoot])
+    expect(r.ok).toBe(true)
+    expect(existsSync(emptyRoot)).toBe(true)
   })
 })
 

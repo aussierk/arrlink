@@ -7,7 +7,9 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readSync,
+  rmdirSync,
   statSync,
   symlinkSync,
   unlinkSync,
@@ -15,6 +17,7 @@ import {
   writeSync,
   type Stats,
 } from 'node:fs'
+import { dirname, normalize, sep } from 'node:path'
 import type { SettingsStore } from '../db/settings-store.js'
 import { normalizeFsFallback, type FsFallbackMode } from '../config/env.js'
 
@@ -223,15 +226,52 @@ export function resolveFsFallback(
   return normalizeFsFallback(value, envDefault)
 }
 
+/** Walks upward from a removed link's parent directory, rmdir-ing each
+ * ancestor while it's empty, so the template-created directory structure
+ * (e.g. `movies/English/Some Title (2005)/`) doesn't accumulate as litter
+ * once its last link is gone. Stops at (never removes) a configured root,
+ * and refuses to walk past territory no root covers at all -- a defensive
+ * backstop against ever pruning outside the jail. Best-effort: any error
+ * (permissions, a concurrent write racing in) just stops the walk -- this
+ * is cosmetic cleanup, never worth failing the caller's remove over. */
+function pruneEmptyParents(dstPath: string, roots: string[]): void {
+  const normalizedRoots = roots.map((r) => normalize(r))
+  let dir = normalize(dirname(dstPath))
+  for (;;) {
+    if (normalizedRoots.includes(dir)) return
+    if (!normalizedRoots.some((r) => dir.startsWith(r + sep))) return
+    let entries: string[]
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    if (entries.length > 0) return
+    try {
+      rmdirSync(dir)
+    } catch {
+      return
+    }
+    const parent = dirname(dir)
+    if (parent === dir) return
+    dir = parent
+  }
+}
+
 /** Remove a link we created. Refuses symlinks; removes the dir entry only
- * (the file data survives via its other links / the source). */
-export function removeLink(dst: string): LinkResult {
+ * (the file data survives via its other links / the source). Then prunes
+ * any now-empty parent directories up to (not including) an allowed root. */
+export function removeLink(dst: string, roots: string[]): LinkResult {
   if (isSymlink(dst)) return fail(dst, 'refusing to remove a symlink')
-  if (!lexists(dst)) return ok(dst) // already gone
+  if (!lexists(dst)) {
+    pruneEmptyParents(dst, roots)
+    return ok(dst) // already gone
+  }
   try {
     unlinkSync(dst)
-    return ok(dst)
   } catch (e) {
     return fail(dst, errorDetail(e))
   }
+  pruneEmptyParents(dst, roots)
+  return ok(dst)
 }
