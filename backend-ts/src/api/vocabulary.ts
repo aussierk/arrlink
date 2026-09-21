@@ -48,10 +48,15 @@ export function registerVocabularyRoutes(
       )
     }
     const appId = q.app_id !== undefined ? Number(q.app_id) : null
+    // No app_id means the rule editor is asking for a type-scoped rule (no
+    // single instance) -- union across every instance of this app_type's own
+    // vocabulary instead of just the shared rows, so a category like
+    // "language" (which has no shared/global source at all) still returns
+    // real suggestions instead of an empty dropdown.
     const scope =
       appId !== null
         ? or(isNull(vocabularyTable.appId), eq(vocabularyTable.appId, appId))
-        : isNull(vocabularyTable.appId)
+        : null
     const rows = db
       .select({
         value: vocabularyTable.value,
@@ -64,17 +69,31 @@ export function registerVocabularyRoutes(
         and(
           eq(vocabularyTable.category, category),
           eq(vocabularyTable.appType, appType),
-          scope,
+          scope ?? undefined,
         ),
       )
       .orderBy(vocabularyTable.value)
       .all()
-    return rows.map((r) => ({
-      value: r.value,
-      source: r.source,
-      external_id: r.externalId,
-      app_id: r.appId,
-    }))
+    // De-dupe by value when unioning across instances -- e.g. two Radarr
+    // instances both reporting "English" shouldn't show up twice.
+    const seen = new Set<string>()
+    const out: Array<{
+      value: string
+      source: string
+      external_id: string | null
+      app_id: number | null
+    }> = []
+    for (const r of rows) {
+      if (seen.has(r.value)) continue
+      seen.add(r.value)
+      out.push({
+        value: r.value,
+        source: r.source,
+        external_id: r.externalId,
+        app_id: r.appId,
+      })
+    }
+    return out
   })
 
   // Force-trigger the poller's daily TMDB sync -- useful right after

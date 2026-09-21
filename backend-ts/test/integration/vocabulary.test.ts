@@ -139,7 +139,7 @@ describe('validateConditionValues', () => {
       { category: 'genre', matchType: 'exact', matchValue: 'Sci-Fi', join: null },
       db,
       'radarr',
-      appId,
+      [appId],
     )
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('Sci-Fi')
@@ -160,7 +160,7 @@ describe('validateConditionValues', () => {
       { category: 'genre', matchType: 'exact', matchValue: 'Horror', join: null },
       db,
       'radarr',
-      appId,
+      [appId],
     )
     expect(warnings).toEqual([])
   })
@@ -170,7 +170,7 @@ describe('validateConditionValues', () => {
       { category: 'genre', matchType: 'regex', matchValue: '^Sci', join: null },
       db,
       'radarr',
-      appId,
+      [appId],
     )
     expect(warnings).toEqual([])
   })
@@ -180,7 +180,7 @@ describe('validateConditionValues', () => {
       { category: 'genre', matchType: 'exact', matchValue: 'Anything', join: null },
       db,
       'radarr',
-      appId,
+      [appId],
     )
     expect(warnings).toEqual([])
   })
@@ -190,7 +190,7 @@ describe('validateConditionValues', () => {
       { category: 'custom', matchType: 'exact', matchValue: 'kids', join: null },
       db,
       'radarr',
-      appId,
+      [appId],
     )
     expect(warnings).toEqual([])
   })

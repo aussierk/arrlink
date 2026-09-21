@@ -1,4 +1,4 @@
-import { and, eq, isNull, or } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { DbClient } from '../db/client.js'
 import { tags as tagsTable, vocabulary } from '../db/schema.js'
 import type { SettingsStore } from '../db/settings-store.js'
@@ -143,17 +143,20 @@ export async function syncTrashVocabulary(
   return syncVocabularyRows(db, 'quality', appType, null, entries, 'trash')
 }
 
-/** Every known value for a scope: shared (app_id null) vocabulary, this app's own
- * instance-scoped vocabulary, and any tag manually classified into this category. */
+/** Every known value for a scope: shared (app_id null) vocabulary, plus every one of
+ * `appIds`' own instance-scoped vocabulary and any tag manually classified into this
+ * category. `appIds` is a single instance for an app-scoped rule, every enabled instance
+ * of that type for a type-scoped rule (see api/rules.ts's scopeAppIds), or [] for a real
+ * poll/preview against one already-known app (expandVocabularyConditions). */
 function vocabularyValues(
   db: DbClient,
   category: string,
   appType: string,
-  appId: number | null,
+  appIds: number[],
 ): Set<string> {
   const scope =
-    appId !== null
-      ? or(isNull(vocabulary.appId), eq(vocabulary.appId, appId))
+    appIds.length > 0
+      ? or(isNull(vocabulary.appId), inArray(vocabulary.appId, appIds))
       : isNull(vocabulary.appId)
   const rows = db
     .select({ value: vocabulary.value })
@@ -161,11 +164,11 @@ function vocabularyValues(
     .where(and(eq(vocabulary.category, category), eq(vocabulary.appType, appType), scope))
     .all()
   const values = new Set(rows.map((r) => r.value))
-  if (appId !== null) {
+  if (appIds.length > 0) {
     const tagRows = db
       .select({ label: tagsTable.label })
       .from(tagsTable)
-      .where(and(eq(tagsTable.appId, appId), eq(tagsTable.category, category)))
+      .where(and(inArray(tagsTable.appId, appIds), eq(tagsTable.category, category)))
       .all()
     for (const r of tagRows) values.add(r.label)
   }
@@ -182,7 +185,9 @@ export function expandVocabularyConditions(
   // Unscoped rule (no specific app/app_type): nothing to resolve against --
   // leave any vocabulary condition as a no-op empty list.
   const expandTo = (category: string): Set<string> =>
-    appType === null ? new Set() : vocabularyValues(db, category, appType, appId)
+    appType === null
+      ? new Set()
+      : vocabularyValues(db, category, appType, appId !== null ? [appId] : [])
 
   return rules.map((rule) => ({
     ...rule,
@@ -204,7 +209,7 @@ export function validateConditionValues(
   cond: Condition,
   db: DbClient,
   appType: string | null,
-  appId: number | null,
+  appIds: number[],
 ): string[] {
   if (
     !RICH_CATEGORIES.has(cond.category) ||
@@ -213,7 +218,7 @@ export function validateConditionValues(
     return []
   }
   if (appType === null) return []
-  const known = vocabularyValues(db, cond.category, appType, appId)
+  const known = vocabularyValues(db, cond.category, appType, appIds)
   if (known.size === 0) return []
 
   const candidates =

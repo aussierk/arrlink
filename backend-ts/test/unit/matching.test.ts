@@ -131,6 +131,48 @@ describe('matchConditions', () => {
     expect(r.matchedConditions[0]).toMatchObject({ category: 'genre', tag: 'Horror' })
   })
 
+  it('matches native metadata case-insensitively (exact and list), unlike tags', () => {
+    // Radarr/Sonarr's own fields are a fixed Title Case ("English", not
+    // "english") -- a user typing lowercase in the rule editor shouldn't
+    // get a silent zero-match.
+    const exact = matchConditions(
+      [
+        {
+          category: 'language',
+          matchType: 'exact',
+          matchValue: 'english',
+          join: null,
+          source: 'native',
+        },
+      ],
+      [],
+      { language: ['English'] },
+    )
+    expect(exact.result).toBe(true)
+
+    const list = matchConditions(
+      [
+        {
+          category: 'language',
+          matchType: 'list',
+          matchValue: 'english,spanish',
+          join: null,
+          source: 'native',
+        },
+      ],
+      [],
+      { language: ['English'] },
+    )
+    expect(list.result).toBe(true)
+
+    // Tags stay case-sensitive -- same values, but as a plain (non-native) condition.
+    const tag = matchConditions(
+      [{ category: 'custom', matchType: 'exact', matchValue: 'english', join: null }],
+      ['English'],
+    )
+    expect(tag.result).toBe(false)
+  })
+
   it('records every matching tag for a category, not just the first (fan-out source)', () => {
     const r = matchConditions(
       [{ category: 'custom', matchType: 'regex', matchValue: '^4k', join: null }],

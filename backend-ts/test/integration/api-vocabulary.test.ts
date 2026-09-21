@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createApp, type AppContext } from '../../src/app.js'
 import { loadSettings } from '../../src/config/env.js'
-import { vocabulary as vocabularyTable } from '../../src/db/schema.js'
+import { apps, vocabulary as vocabularyTable } from '../../src/db/schema.js'
 
 let dir: string
 let ctx: AppContext
@@ -47,6 +47,65 @@ describe('GET /api/vocabulary', () => {
     })
     expect(res.statusCode).toBe(200)
     expect(res.json<Array<{ value: string }>>().map((r) => r.value)).toEqual(['Horror'])
+  })
+
+  it('unions every instance of the app_type when no app_id is given, deduping shared values', async () => {
+    const [appA, appB] = [
+      ctx.db
+        .insert(apps)
+        .values({ name: 'A', type: 'radarr', url: 'http://a', apiKey: 'k' })
+        .run().lastInsertRowid as number,
+      ctx.db
+        .insert(apps)
+        .values({ name: 'B', type: 'radarr', url: 'http://b', apiKey: 'k' })
+        .run().lastInsertRowid as number,
+    ]
+    // language has no shared/global source at all -- purely per-instance --
+    // so this is the exact scenario that used to return an empty dropdown
+    // for a type-scoped rule.
+    ctx.db
+      .insert(vocabularyTable)
+      .values([
+        {
+          category: 'language',
+          appType: 'radarr',
+          appId: appA,
+          value: 'English',
+          source: 'instance',
+          importedAt: 0,
+        },
+        {
+          category: 'language',
+          appType: 'radarr',
+          appId: appB,
+          value: 'English', // duplicate across instances -- should dedupe
+          source: 'instance',
+          importedAt: 0,
+        },
+        {
+          category: 'language',
+          appType: 'radarr',
+          appId: appB,
+          value: 'French',
+          source: 'instance',
+          importedAt: 0,
+        },
+      ])
+      .run()
+
+    // No app_id -- matches what the rule editor requests for a rule scoped
+    // by app_type_scope rather than one specific app instance.
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/vocabulary?category=language&app_type=radarr',
+    })
+    expect(res.statusCode).toBe(200)
+    expect(
+      res
+        .json<Array<{ value: string }>>()
+        .map((r) => r.value)
+        .sort(),
+    ).toEqual(['English', 'French'])
   })
 })
 

@@ -234,32 +234,16 @@ function resolveAppType(
   return null
 }
 
-/** One concrete app id to check instance-scoped vocabulary against, if unpinned. */
-function representativeAppId(
-  db: DbClient,
-  appScope: number | null,
-  appTypeScope: string | null,
-): number | null {
-  if (appScope !== null) return appScope
-  if (appTypeScope !== null) {
-    const row = db
-      .select({ id: apps.id })
-      .from(apps)
-      .where(sql`${apps.type} = ${appTypeScope} AND ${apps.enabled} = 1`)
-      .orderBy(apps.id)
-      .limit(1)
-      .get()
-    return row?.id ?? null
-  }
-  return null
-}
-
 function vocabularyWarnings(db: DbClient, body: RuleIn): string[] {
   const appType = resolveAppType(db, body.app_scope, body.app_type_scope)
-  const appId = representativeAppId(db, body.app_scope, body.app_type_scope)
+  // Every enabled instance in scope, not just one representative -- so a
+  // type-scoped rule's warnings (and the value picker behind
+  // GET /api/vocabulary) see the union of each instance's own vocabulary
+  // instead of going silently empty just because there's no single app_id.
+  const appIds = scopeAppIds(db, body.app_scope, body.app_type_scope)
   const warnings: string[] = []
   for (const c of body.conditions) {
-    warnings.push(...validateConditionValues(conditionToInternal(c), db, appType, appId))
+    warnings.push(...validateConditionValues(conditionToInternal(c), db, appType, appIds))
   }
   return warnings
 }

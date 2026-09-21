@@ -78,19 +78,40 @@ function parseListValue(matchValue: string): Set<string> {
   )
 }
 
-/** Every item tag that satisfies the matcher -- fans one condition into multiple links. */
+/** Every item tag that satisfies the matcher -- fans one condition into multiple links.
+ *
+ * `caseInsensitive` is for native-metadata conditions: Radarr/Sonarr's own
+ * fields (originalLanguage.name, genres, certifications, quality profile
+ * names) use a fixed, known Title Case convention, so comparing
+ * case-insensitively there is safe and avoids a silent, unexplained
+ * zero-match if a user types "english" instead of "English". Tag matching
+ * stays case-sensitive since tags are free-form user data where case can be
+ * meaningful. */
 export function matchRuleAll(
   matchType: string,
   matchValue: string,
   itemTags: string[],
+  caseInsensitive = false,
 ): RuleMatch[] {
   if (matchType === 'exact') {
     const target = matchValue.trim()
+    if (caseInsensitive) {
+      const lower = target.toLowerCase()
+      return itemTags
+        .filter((t) => t.toLowerCase() === lower)
+        .map((t) => ({ tag: t, regexMatch: null }))
+    }
     return itemTags.filter((t) => t === target).map((t) => ({ tag: t, regexMatch: null }))
   }
 
   if (matchType === 'list') {
     const targets = parseListValue(matchValue)
+    if (caseInsensitive) {
+      const lowerTargets = new Set([...targets].map((t) => t.toLowerCase()))
+      return itemTags
+        .filter((t) => lowerTargets.has(t.toLowerCase()))
+        .map((t) => ({ tag: t, regexMatch: null }))
+    }
     return itemTags
       .filter((t) => targets.has(t))
       .map((t) => ({ tag: t, regexMatch: null }))
@@ -115,8 +136,9 @@ export function matchRule(
   matchType: string,
   matchValue: string,
   itemTags: string[],
+  caseInsensitive = false,
 ): RuleMatch | null {
-  const matches = matchRuleAll(matchType, matchValue, itemTags)
+  const matches = matchRuleAll(matchType, matchValue, itemTags, caseInsensitive)
   return matches.length > 0 ? matches[0] : null
 }
 
@@ -154,8 +176,9 @@ export function matchConditions(
       if (cond.join === 'OR' && running === true) return
     }
 
-    const values = cond.source === 'native' ? (native[cond.category] ?? []) : itemTags
-    const hits = matchRuleAll(cond.matchType, cond.matchValue, values)
+    const isNative = cond.source === 'native'
+    const values = isNative ? (native[cond.category] ?? []) : itemTags
+    const hits = matchRuleAll(cond.matchType, cond.matchValue, values, isNative)
     const hit = hits.length > 0
 
     if (i === 0) {

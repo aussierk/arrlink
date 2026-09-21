@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, type AppContext } from '../../src/app.js'
 import { loadSettings } from '../../src/config/env.js'
-import { apps } from '../../src/db/schema.js'
+import { apps, vocabulary as vocabularyTable } from '../../src/db/schema.js'
 
 let dir: string
 let ctx: AppContext
@@ -235,6 +235,71 @@ describe('POST /api/rules/vocabulary-check', () => {
       method: 'POST',
       url: '/api/rules/vocabulary-check',
       payload: ruleBody(),
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json<{ warnings: string[] }>().warnings).toEqual([])
+  })
+
+  it('checks against the union of every instance for a type-scoped rule, not just one', async () => {
+    const appA = (
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/api/apps',
+        payload: { name: 'A', type: 'radarr', url: 'http://a', api_key: 'k' },
+      })
+    ).json<{ id: number }>().id
+    const appB = (
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/api/apps',
+        payload: { name: 'B', type: 'radarr', url: 'http://b', api_key: 'k' },
+      })
+    ).json<{ id: number }>().id
+
+    // A has a non-empty vocabulary (so the old single-representative check
+    // wouldn't just no-op on a totally empty set) but doesn't know
+    // "English" -- only B does. Old behavior: a type-scoped rule picked one
+    // "representative" instance (lowest enabled id, i.e. A here) to check
+    // against; "English" isn't in A's known set -> false-positive warning.
+    // Fixed behavior: unions every instance of that type -> "English" is
+    // known via B -> no warning.
+    ctx.db
+      .insert(vocabularyTable)
+      .values([
+        {
+          category: 'language',
+          appType: 'radarr',
+          appId: appA,
+          value: 'Spanish',
+          source: 'instance',
+          importedAt: 0,
+        },
+        {
+          category: 'language',
+          appType: 'radarr',
+          appId: appB,
+          value: 'English',
+          source: 'instance',
+          importedAt: 0,
+        },
+      ])
+      .run()
+
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/rules/vocabulary-check',
+      payload: ruleBody({
+        app_type_scope: 'radarr',
+        conditions: [
+          {
+            category: 'language',
+            match_type: 'exact',
+            match_value: 'English',
+            join: null,
+            source: 'native',
+          },
+        ],
+      }),
     })
     expect(res.statusCode).toBe(200)
     expect(res.json<{ warnings: string[] }>().warnings).toEqual([])
