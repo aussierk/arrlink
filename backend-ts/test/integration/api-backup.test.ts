@@ -45,4 +45,13 @@ describe('backup settings + run', () => {
     const names = list.json<Array<{ name: string }>>().map((b) => b.name)
     expect(names).toContain(runResult.path.split(/[\\/]/).pop())
   })
+
+  it('accepts a POST with an empty body and Content-Type: application/json, matching the browser fetch() call', async () => {
+    const run = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/backup/run',
+      headers: { 'content-type': 'application/json' },
+    })
+    expect(run.statusCode).toBe(200)
+  })
 })
