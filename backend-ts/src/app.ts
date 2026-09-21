@@ -5,6 +5,7 @@ import fastifyCompress from '@fastify/compress'
 import fastifyCookie from '@fastify/cookie'
 import Fastify, { type FastifyInstance } from 'fastify'
 import type { Settings } from './config/env.js'
+import { effectiveLoggingSettings } from './config/runtime.js'
 import { closeDb, openDb, type DbClient } from './db/client.js'
 import { logEvent } from './db/events.js'
 import { runMigrations } from './db/migrate.js'
@@ -17,6 +18,7 @@ import { HttpError } from './http-error.js'
 import { registerTrustedHost } from './plugins/trusted-host.js'
 import { registerDevCors } from './plugins/cors.js'
 import { registerStaticRoutes } from './plugins/static.js'
+import { createLogger } from './logging.js'
 import { registerHealthRoutes } from './api/health.js'
 import { registerAuthRoutes } from './api/auth.js'
 import { registerAppsRoutes } from './api/apps.js'
@@ -56,14 +58,13 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   }
   const settingsStore = new SettingsStore(db)
 
-  const app = Fastify({ logger: false, trustProxy: settings.forwardedAllowIps })
+  const { level: logLevel, sizeMb: logSizeMb } = effectiveLoggingSettings(settingsStore, settings)
+  const { logger, close: closeLogger } = createLogger(settings, logLevel, logSizeMb)
+
+  const app = Fastify({ loggerInstance: logger, trustProxy: settings.forwardedAllowIps })
   await app.register(fastifyCookie)
 
-  // Fastify's default JSON parser throws FST_ERR_CTP_EMPTY_JSON_BODY for a
-  // body-less request sent with `Content-Type: application/json` (e.g. a
-  // bare `fetch(url, { method: 'POST' })`, which still carries that header).
-  // Routes that don't declare a body never look at it, so treat empty as
-  // absent rather than failing the request.
+  // Treat an empty JSON body as absent instead of throwing FST_ERR_CTP_EMPTY_JSON_BODY.
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
     if (body === '') {
       done(null, undefined)
@@ -83,6 +84,8 @@ export async function createApp(settings: Settings): Promise<AppContext> {
       return
     }
     app.log.error(err)
+    const message = err instanceof Error ? err.message : String(err)
+    logEvent(db, 'error', `unhandled error: ${message}`)
     reply.code(500).send({ detail: 'internal server error' })
   })
 
@@ -149,6 +152,7 @@ export async function createApp(settings: Settings): Promise<AppContext> {
     await app.close()
     closeDb(db)
     await releaseInstanceLock(lockPath)
+    await closeLogger()
   }
 
   return { app, db, close }
