@@ -57,6 +57,11 @@ export interface Item {
   originalLanguage: string | null
   statsFingerprint?: string | null
   filesStale?: boolean
+  /** app_items.id once stored -- distinct from `id` (the adapter's external
+   * item id). Backfilled by poller.ts's storeOneItem, same pattern as
+   * MediaFile.id, and is what the planner must use for links.item_id (an FK
+   * to app_items.id, not to the external id). */
+  dbId?: number
 }
 
 /** Adapter-level failure; carries a user-facing detail. */

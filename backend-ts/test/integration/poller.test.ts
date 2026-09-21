@@ -190,6 +190,30 @@ describe('Poller.rescan', () => {
     expect(appRow?.lastError).toBeNull()
   })
 
+  it('hardlinks correctly when the external item id differs from app_items.id', async () => {
+    // Regression test: links.item_id is an FK to app_items.id (internal), not
+    // to the adapter's external item id. A real Radarr/Sonarr library almost
+    // never has ids starting contiguously at 1, so use a non-trivial external
+    // id here -- otherwise this test would pass even with the bug, since the
+    // first-ever item in a fresh DB gets internal id 1 too.
+    const src = movieFile('movie1.mkv')
+    mockRadarr([{ id: 1001, title: 'Movie1', year: 2020, tags: [1], moviePath: src }])
+
+    const poller = new Poller(db, settings)
+    const result = await poller.rescan(appId)
+    expect(result.ok).toBe(true)
+
+    const itemRow = db.select().from(appItems).where(eq(appItems.appId, appId)).get()
+    expect(itemRow?.itemId).toBe(1001)
+
+    const dst = join(linkedDir, 'kids', 'movie1.mkv')
+    expect(existsSync(dst)).toBe(true)
+
+    const linkRow = db.select().from(linksTable).where(eq(linksTable.dstPath, dst)).get()
+    expect(linkRow?.status).toBe('active')
+    expect(linkRow?.itemId).toBe(itemRow!.id)
+  })
+
   it('is idempotent across repeated identical polls', async () => {
     const src = movieFile('movie1.mkv')
     mockRadarr([{ id: 1, title: 'Movie1', year: 2020, tags: [1], moviePath: src }])

@@ -511,6 +511,7 @@ export class Poller {
           .run()
       }
     }
+    item.dbId = itemDbId // backfill so the planner writes links.item_id as the FK, not the external id
 
     // --- files: match by rel_path, else by inode (rename) -----------------
     const byRelPath = new Map(existingFiles.map((fr) => [fr.relPath, fr]))
@@ -657,7 +658,10 @@ export class Poller {
     plannerRules = expandVocabularyConditions(plannerRules, this.db, appId, appType)
 
     const plannerItems: PlannerItem[] = items.map((it) => ({
-      id: it.id,
+      // links.item_id is an FK to app_items.id, not the adapter's external item
+      // id -- storeItems() (called earlier in pollOnce) backfills dbId onto
+      // every item, so this is always set by the time reconcileApp runs.
+      id: it.dbId as number,
       title: it.title,
       year: it.year,
       tags: it.tags,
