@@ -118,7 +118,6 @@ export default function RuleModal({
     form,
     conditions,
     serviceType,
-    representativeAppId,
     tags,
   })
 
@@ -137,7 +136,12 @@ export default function RuleModal({
   function applyBlockSelection(i: number, prevSelected: string[], next: string[]) {
     const c = conditions[i]
     updateBlock(i, {
-      match_value: nextMatchValueForSelection(c.match_type, c.match_value, prevSelected, next),
+      match_value: nextMatchValueForSelection(
+        c.match_type,
+        c.match_value,
+        prevSelected,
+        next,
+      ),
     })
   }
 
