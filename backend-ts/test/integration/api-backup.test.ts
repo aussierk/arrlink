@@ -34,9 +34,15 @@ describe('backup settings + run', () => {
 
     const run = await ctx.app.inject({ method: 'POST', url: '/api/backup/run' })
     expect(run.statusCode).toBe(200)
-    expect(run.json<{ ok: boolean }>().ok).toBe(true)
+    const runResult = run.json<{ ok: boolean; path: string }>()
+    expect(runResult.ok).toBe(true)
 
+    // The backup loop (see core/background-loops.ts) also runs one on
+    // startup since a fresh config dir has no backups yet, racing this
+    // test's own timing -- so assert the manual run's own backup shows up,
+    // not an absolute/relative count.
     const list = await ctx.app.inject({ method: 'GET', url: '/api/backup' })
-    expect(list.json<unknown[]>()).toHaveLength(1)
+    const names = list.json<Array<{ name: string }>>().map((b) => b.name)
+    expect(names).toContain(runResult.path.split(/[\\/]/).pop())
   })
 })

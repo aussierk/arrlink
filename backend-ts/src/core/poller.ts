@@ -53,7 +53,7 @@ function jitterFactor(): number {
 
 /** Resolves after `ms`, or immediately on abort -- never rejects, so callers
  * just check `signal.aborted` after each await. */
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
+export function sleep(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve()
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms)

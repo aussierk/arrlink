@@ -29,6 +29,7 @@ import { registerBackupRoutes } from './api/backup.js'
 import { registerVocabularyRoutes } from './api/vocabulary.js'
 import { registerLogsRoutes } from './api/logs.js'
 import { Poller } from './core/poller.js'
+import { authSweepLoop, backupLoop } from './core/background-loops.js'
 import { DEFAULT_ROOTS, auditRuleRoots } from './core/template.js'
 
 export interface AppContext {
@@ -113,8 +114,21 @@ export async function createApp(settings: Settings): Promise<AppContext> {
 
   poller.start()
 
+  const authSweepAbort = new AbortController()
+  const backupLoopAbort = new AbortController()
+  const authSweepDone = authSweepLoop(db, settingsStore, settings, authSweepAbort.signal)
+  const backupLoopDone = backupLoop(db, settingsStore, settings, backupLoopAbort.signal)
+
   const close = async (): Promise<void> => {
     poller.stop()
+    authSweepAbort.abort()
+    backupLoopAbort.abort()
+    // abort() only stops the loop *after* its current iteration -- backupLoop
+    // in particular opens its own separate sqlite handle for the online
+    // backup, so waiting here (not just fire-and-forget) matters: closing
+    // the main db / removing the config dir while that handle is still open
+    // fails hard on Windows (EBUSY).
+    await Promise.all([authSweepDone, backupLoopDone])
     await app.close()
     closeDb(db)
     await releaseInstanceLock(lockPath)
