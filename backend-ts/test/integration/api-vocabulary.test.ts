@@ -24,7 +24,7 @@ describe('GET /api/vocabulary', () => {
   it('422s for a non-rich category', async () => {
     const res = await ctx.app.inject({
       method: 'GET',
-      url: '/api/vocabulary?category=custom&appType=radarr',
+      url: '/api/vocabulary?category=custom&app_type=radarr',
     })
     expect(res.statusCode).toBe(422)
   })
@@ -43,7 +43,7 @@ describe('GET /api/vocabulary', () => {
       .run()
     const res = await ctx.app.inject({
       method: 'GET',
-      url: '/api/vocabulary?category=genre&appType=radarr',
+      url: '/api/vocabulary?category=genre&app_type=radarr',
     })
     expect(res.statusCode).toBe(200)
     expect(res.json<Array<{ value: string }>>().map((r) => r.value)).toEqual(['Horror'])
@@ -64,7 +64,7 @@ describe('POST /api/vocabulary/import/trash', () => {
   it('422s for an invalid app_type', async () => {
     const res = await ctx.app.inject({
       method: 'POST',
-      url: '/api/vocabulary/import/trash?appType=nope',
+      url: '/api/vocabulary/import/trash?app_type=nope',
     })
     expect(res.statusCode).toBe(422)
   })

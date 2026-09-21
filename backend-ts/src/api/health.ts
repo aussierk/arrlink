@@ -25,7 +25,7 @@ export function registerHealthRoutes(app: FastifyInstance, opts: HealthOptions):
     return {
       status: dbOk ? 'ok' : 'degraded',
       version: VERSION,
-      schemaVersion,
+      schema_version: schemaVersion,
       db: dbOk ? 'ok' : 'error',
     }
   })

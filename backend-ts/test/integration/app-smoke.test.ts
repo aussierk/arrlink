@@ -24,10 +24,10 @@ describe('app smoke', () => {
   it('GET /api/health reports ok with a schema version', async () => {
     const res = await ctx.app.inject({ method: 'GET', url: '/api/health' })
     expect(res.statusCode).toBe(200)
-    const body = res.json<{ status: string; db: string; schemaVersion: string | null }>()
+    const body = res.json<{ status: string; db: string; schema_version: string | null }>()
     expect(body.status).toBe('ok')
     expect(body.db).toBe('ok')
-    expect(body.schemaVersion).toBeTruthy()
+    expect(body.schema_version).toBeTruthy()
   })
 
   it('sets hardening headers on every response, including 404s', async () => {

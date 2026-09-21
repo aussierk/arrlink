@@ -23,7 +23,7 @@ describe('GET /api/presets', () => {
   it('lists presets for a valid app_type', async () => {
     const res = await ctx.app.inject({
       method: 'GET',
-      url: '/api/presets?appType=radarr',
+      url: '/api/presets?app_type=radarr',
     })
     expect(res.statusCode).toBe(200)
     const body = res.json<{ presets: Array<{ key: string }> }>()
@@ -31,7 +31,7 @@ describe('GET /api/presets', () => {
   })
 
   it('422s for an invalid app_type', async () => {
-    const res = await ctx.app.inject({ method: 'GET', url: '/api/presets?appType=nope' })
+    const res = await ctx.app.inject({ method: 'GET', url: '/api/presets?app_type=nope' })
     expect(res.statusCode).toBe(422)
   })
 })
@@ -41,11 +41,11 @@ describe('POST /api/presets/apply', () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/presets/apply',
-      payload: { presetKey: 'kids', appType: 'radarr' },
+      payload: { preset_key: 'kids', app_type: 'radarr' },
     })
     expect(res.statusCode).toBe(201)
-    const body = res.json<{ rule: { dirTemplate: string } }>()
-    expect(body.rule.dirTemplate).toBe('/media/movies/kids')
+    const body = res.json<{ rule: { dir_template: string } }>()
+    expect(body.rule.dir_template).toBe('/media/movies/kids')
 
     const list = await ctx.app.inject({ method: 'GET', url: '/api/rules' })
     expect(list.json<unknown[]>()).toHaveLength(1)
@@ -55,7 +55,7 @@ describe('POST /api/presets/apply', () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/presets/apply',
-      payload: { presetKey: 'kids', appType: 'radarr', baseFolder: '/etc' },
+      payload: { preset_key: 'kids', app_type: 'radarr', base_folder: '/etc' },
     })
     expect(res.statusCode).toBe(422)
   })
@@ -64,7 +64,7 @@ describe('POST /api/presets/apply', () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/presets/apply',
-      payload: { presetKey: 'does-not-exist', appType: 'radarr' },
+      payload: { preset_key: 'does-not-exist', app_type: 'radarr' },
     })
     expect(res.statusCode).toBe(422)
   })

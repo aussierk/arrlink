@@ -57,13 +57,13 @@ describe('GET /api/settings/effective', () => {
     const res = await ctx.app.inject({ method: 'GET', url: '/api/settings/effective' })
     expect(res.statusCode).toBe(200)
     const body = res.json<{
-      allowedRoots: string[]
-      fsFallback: string
-      appTitle: string
+      allowed_roots: string[]
+      fs_fallback: string
+      app_title: string
     }>()
-    expect(body.allowedRoots).toEqual(['/media'])
-    expect(body.fsFallback).toBe('skip')
-    expect(body.appTitle).toBe('ArrLink')
+    expect(body.allowed_roots).toEqual(['/media'])
+    expect(body.fs_fallback).toBe('skip')
+    expect(body.app_title).toBe('ArrLink')
   })
 })
 
@@ -72,7 +72,7 @@ describe('PUT /api/settings/auth', () => {
     const res = await ctx.app.inject({
       method: 'PUT',
       url: '/api/settings/auth',
-      payload: { passwordEnabled: true },
+      payload: { password_enabled: true },
     })
     expect(res.statusCode).toBe(422)
   })
@@ -81,12 +81,12 @@ describe('PUT /api/settings/auth', () => {
     const res = await ctx.app.inject({
       method: 'PUT',
       url: '/api/settings/auth',
-      payload: { passwordEnabled: true, uiPassword: 'correct-horse-battery' },
+      payload: { password_enabled: true, ui_password: 'correct-horse-battery' },
     })
     expect(res.statusCode).toBe(200)
-    const body = res.json<{ passwordEnabled: boolean; uiPasswordSet: boolean }>()
-    expect(body.passwordEnabled).toBe(true)
-    expect(body.uiPasswordSet).toBe(true)
+    const body = res.json<{ password_enabled: boolean; ui_password_set: boolean }>()
+    expect(body.password_enabled).toBe(true)
+    expect(body.ui_password_set).toBe(true)
   })
 })
 
@@ -95,7 +95,7 @@ describe('PUT /api/settings/logging', () => {
     const res = await ctx.app.inject({
       method: 'PUT',
       url: '/api/settings/logging',
-      payload: { logLevel: 'verbose', logSizeLimitMb: 10 },
+      payload: { log_level: 'verbose', log_size_limit_mb: 10 },
     })
     expect(res.statusCode).toBe(422)
   })
@@ -104,9 +104,9 @@ describe('PUT /api/settings/logging', () => {
     const res = await ctx.app.inject({
       method: 'PUT',
       url: '/api/settings/logging',
-      payload: { logLevel: 'DEBUG', logSizeLimitMb: 25 },
+      payload: { log_level: 'DEBUG', log_size_limit_mb: 25 },
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ logLevel: 'debug', logSizeLimitMb: 25 })
+    expect(res.json()).toEqual({ log_level: 'debug', log_size_limit_mb: 25 })
   })
 })

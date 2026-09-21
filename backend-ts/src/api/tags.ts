@@ -52,7 +52,7 @@ const TagCategorySchema = z.object({
 const TagInSchema = z.object({ label: z.string().min(1).max(100) })
 const TagPushSchema = z.object({
   label: z.string().min(1).max(100),
-  appIds: z.array(z.number().int()).min(1).max(50),
+  app_ids: z.array(z.number().int()).min(1).max(50),
 })
 
 function conditionMatchesLabel(
@@ -132,9 +132,13 @@ function enrichTags(
     .filter((r) => ruleAppliesToApp(r, appId, appType))
 
   return tags.map((t) => ({
-    ...t,
+    id: t.id,
+    app_id: t.appId,
+    label: t.label,
+    imported_at: t.importedAt,
+    category: t.category,
     count: usage !== null ? (usage.get(t.label) ?? 0) : t.count,
-    ruleCount: rules.filter((r) => ruleMatchesLabel(r, t.label)).length,
+    rule_count: rules.filter((r) => ruleMatchesLabel(r, t.label)).length,
   }))
 }
 
@@ -268,13 +272,13 @@ export function registerTagsRoutes(app: FastifyInstance, opts: TagsRouteOptions)
     const parsed = TagPushSchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const label = parsed.data.label.trim()
-    const results: Array<{ appId: number; ok: boolean; detail: string | null }> = []
+    const results: Array<{ app_id: number; ok: boolean; detail: string | null }> = []
     let ok = 0
     let failed = 0
-    for (const appId of [...new Set(parsed.data.appIds)]) {
+    for (const appId of [...new Set(parsed.data.app_ids)]) {
       const row = db.select().from(apps).where(eq(apps.id, appId)).get()
       if (!row) {
-        results.push({ appId, ok: false, detail: 'app not found' })
+        results.push({ app_id: appId, ok: false, detail: 'app not found' })
         failed += 1
         continue
       }
@@ -283,7 +287,7 @@ export function registerTagsRoutes(app: FastifyInstance, opts: TagsRouteOptions)
         await adapter.createTag(label)
       } catch (e) {
         const detail = e instanceof AdapterError ? e.detail : String(e)
-        results.push({ appId, ok: false, detail })
+        results.push({ app_id: appId, ok: false, detail })
         failed += 1
         continue
       }
@@ -291,11 +295,11 @@ export function registerTagsRoutes(app: FastifyInstance, opts: TagsRouteOptions)
         const tags = await adapter.fetchTags()
         syncAppTags(db, appId, tags)
         db.update(apps).set({ lastError: null }).where(eq(apps.id, appId)).run()
-        results.push({ appId, ok: true, detail: null })
+        results.push({ app_id: appId, ok: true, detail: null })
         ok += 1
       } catch (e) {
         results.push({
-          appId,
+          app_id: appId,
           ok: true,
           detail: `created, but re-import failed: ${String(e)}`,
         })

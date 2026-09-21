@@ -27,10 +27,10 @@ describe('backup settings + run', () => {
     const put = await ctx.app.inject({
       method: 'PUT',
       url: '/api/backup/settings',
-      payload: { enabled: false, retentionDays: 3, intervalHours: 12 },
+      payload: { enabled: false, retention_days: 3, interval_hours: 12 },
     })
     expect(put.statusCode).toBe(200)
-    expect(put.json()).toEqual({ enabled: false, retentionDays: 3, intervalHours: 12 })
+    expect(put.json()).toEqual({ enabled: false, retention_days: 3, interval_hours: 12 })
 
     const run = await ctx.app.inject({ method: 'POST', url: '/api/backup/run' })
     expect(run.statusCode).toBe(200)

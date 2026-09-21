@@ -9,7 +9,8 @@ import type { SettingsStore } from '../db/settings-store.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Event log endpoints + SSE live stream. Ported from api/logs.py. */
+/** Event log endpoints + SSE live stream. Ported from api/logs.py.
+ * Wire format is snake_case throughout, matching web/ and the Python backend. */
 
 export interface LogsRouteOptions {
   db: DbClient
@@ -28,8 +29,19 @@ const ClientErrorSchema = z.object({
 
 type EventRow = typeof events.$inferSelect
 
+function eventOut(row: EventRow): Record<string, unknown> {
+  return {
+    id: row.id,
+    ts: row.ts,
+    level: row.level,
+    app_id: row.appId,
+    rule_id: row.ruleId,
+    message: row.message,
+  }
+}
+
 function sseLine(row: EventRow): string {
-  return `id: ${row.id}\ndata: ${JSON.stringify(row)}\n\n`
+  return `id: ${row.id}\ndata: ${JSON.stringify(eventOut(row))}\n\n`
 }
 
 export function registerLogsRoutes(app: FastifyInstance, opts: LogsRouteOptions): void {
@@ -52,8 +64,8 @@ export function registerLogsRoutes(app: FastifyInstance, opts: LogsRouteOptions)
     getCurrentUser(request, db, settingsStore, env)
     const q = request.query as {
       level?: string
-      appId?: string
-      ruleId?: string
+      app_id?: string
+      rule_id?: string
       limit?: string
     }
     const limit = Math.min(
@@ -62,8 +74,8 @@ export function registerLogsRoutes(app: FastifyInstance, opts: LogsRouteOptions)
     )
     const conditions = []
     if (q.level) conditions.push(eq(events.level, q.level))
-    if (q.appId !== undefined) conditions.push(eq(events.appId, Number(q.appId)))
-    if (q.ruleId !== undefined) conditions.push(eq(events.ruleId, Number(q.ruleId)))
+    if (q.app_id !== undefined) conditions.push(eq(events.appId, Number(q.app_id)))
+    if (q.rule_id !== undefined) conditions.push(eq(events.ruleId, Number(q.rule_id)))
     return db
       .select()
       .from(events)
@@ -71,6 +83,7 @@ export function registerLogsRoutes(app: FastifyInstance, opts: LogsRouteOptions)
       .orderBy(desc(events.id))
       .limit(limit)
       .all()
+      .map(eventOut)
   })
 
   // SSE: initial 50 events, then live. `limit` bounds it for tests; omitted = infinite.

@@ -19,7 +19,7 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-async function createApp1(): Promise<{ id: number; apiKeyMasked: string }> {
+async function createApp1(): Promise<{ id: number; api_key_masked: string }> {
   const res = await ctx.app.inject({
     method: 'POST',
     url: '/api/apps',
@@ -27,7 +27,7 @@ async function createApp1(): Promise<{ id: number; apiKeyMasked: string }> {
       name: 'Radarr',
       type: 'radarr',
       url: 'radarr.local:7878',
-      apiKey: 'supersecretkey',
+      api_key: 'supersecretkey',
     },
   })
   return res.json()
@@ -36,7 +36,7 @@ async function createApp1(): Promise<{ id: number; apiKeyMasked: string }> {
 describe('POST /api/apps', () => {
   it('creates an app, normalizes the URL, and masks the key', async () => {
     const body = await createApp1()
-    expect(body.apiKeyMasked).toBe('••••tkey')
+    expect(body.api_key_masked).toBe('••••tkey')
 
     const res = await ctx.app.inject({ method: 'GET', url: `/api/apps/${body.id}` })
     const got = res.json<{ url: string; enabled: boolean }>()
@@ -48,7 +48,7 @@ describe('POST /api/apps', () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/apps',
-      payload: { name: 'Radarr', type: 'radarr', url: 'http://x', apiKey: '' },
+      payload: { name: 'Radarr', type: 'radarr', url: 'http://x', api_key: '' },
     })
     expect(res.statusCode).toBe(422)
   })
@@ -58,9 +58,9 @@ describe('GET /api/apps/summary', () => {
   it('reports zeroed link counts with no orphaned rules initially', async () => {
     const res = await ctx.app.inject({ method: 'GET', url: '/api/apps/summary' })
     expect(res.statusCode).toBe(200)
-    const body = res.json<{ activeLinks: number; orphanedRules: string[] }>()
-    expect(body.activeLinks).toBe(0)
-    expect(body.orphanedRules).toEqual([])
+    const body = res.json<{ active_links: number; orphaned_rules: string[] }>()
+    expect(body.active_links).toBe(0)
+    expect(body.orphaned_rules).toEqual([])
   })
 })
 
@@ -70,17 +70,17 @@ describe('PATCH /api/apps/:appId', () => {
     const res = await ctx.app.inject({
       method: 'PATCH',
       url: `/api/apps/${created.id}`,
-      payload: { name: 'Radarr HD', type: 'radarr', url: 'http://x', apiKey: '' },
+      payload: { name: 'Radarr HD', type: 'radarr', url: 'http://x', api_key: '' },
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json<{ apiKeyMasked: string }>().apiKeyMasked).toBe('••••tkey')
+    expect(res.json<{ api_key_masked: string }>().api_key_masked).toBe('••••tkey')
   })
 
   it('404s for an unknown app', async () => {
     const res = await ctx.app.inject({
       method: 'PATCH',
       url: '/api/apps/999',
-      payload: { name: 'x', type: 'radarr', url: 'http://x', apiKey: 'k' },
+      payload: { name: 'x', type: 'radarr', url: 'http://x', api_key: 'k' },
     })
     expect(res.statusCode).toBe(404)
   })

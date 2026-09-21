@@ -16,7 +16,8 @@ import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
 /** Vocabulary read surface + "refresh now" triggers for the poller's
- * background syncs. Ported from api/vocabulary.py. */
+ * background syncs. Ported from api/vocabulary.py. Wire format is
+ * snake_case, matching web/ and the Python backend. */
 
 export interface VocabularyRouteOptions {
   db: DbClient
@@ -33,16 +34,20 @@ export function registerVocabularyRoutes(
   // Known values for one scope: shared vocabulary plus this app's own rows.
   app.get('/api/vocabulary', (request) => {
     getCurrentUser(request, db, settingsStore, env)
-    const q = request.query as { category?: string; appType?: string; appId?: string }
+    const q = request.query as {
+      category?: string
+      app_type?: string
+      app_id?: string
+    }
     const category = q.category ?? ''
-    const appType = q.appType ?? ''
+    const appType = q.app_type ?? ''
     if (!RICH_CATEGORIES.has(category)) {
       throw new HttpError(
         422,
         `category must be one of ${[...RICH_CATEGORIES].sort().join(', ')}`,
       )
     }
-    const appId = q.appId !== undefined ? Number(q.appId) : null
+    const appId = q.app_id !== undefined ? Number(q.app_id) : null
     const scope =
       appId !== null
         ? or(isNull(vocabularyTable.appId), eq(vocabularyTable.appId, appId))
@@ -64,7 +69,12 @@ export function registerVocabularyRoutes(
       )
       .orderBy(vocabularyTable.value)
       .all()
-    return rows
+    return rows.map((r) => ({
+      value: r.value,
+      source: r.source,
+      external_id: r.externalId,
+      app_id: r.appId,
+    }))
   })
 
   // Force-trigger the poller's daily TMDB sync -- useful right after
@@ -85,7 +95,7 @@ export function registerVocabularyRoutes(
   // Force-trigger the TRaSH Guides quality-naming sync for one app type.
   app.post('/api/vocabulary/import/trash', async (request) => {
     getCurrentUser(request, db, settingsStore, env)
-    const appType = (request.query as { appType?: string }).appType ?? ''
+    const appType = (request.query as { app_type?: string }).app_type ?? ''
     if (appType !== 'radarr' && appType !== 'sonarr') {
       throw new HttpError(422, "app_type must be 'radarr' or 'sonarr'")
     }

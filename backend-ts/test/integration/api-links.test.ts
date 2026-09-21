@@ -31,7 +31,7 @@ beforeEach(async () => {
   const res = await ctx.app.inject({
     method: 'POST',
     url: '/api/apps',
-    payload: { name: 'Radarr', type: 'radarr', url: 'http://x', apiKey: 'k' },
+    payload: { name: 'Radarr', type: 'radarr', url: 'http://x', api_key: 'k' },
   })
   appId = res.json<{ id: number }>().id
 })

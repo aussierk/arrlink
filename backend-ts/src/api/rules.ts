@@ -8,6 +8,7 @@ import type { DbClient } from '../db/client.js'
 import { logEvent } from '../db/events.js'
 import { apps, rules as rulesTable } from '../db/schema.js'
 import type { SettingsStore } from '../db/settings-store.js'
+import type { Condition } from '../core/matching.js'
 import { planLinks, type PlannerRule } from '../core/planner.js'
 import { snapshotItems } from '../core/snapshot.js'
 import {
@@ -26,7 +27,10 @@ import {
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Rules CRUD, validation, and preview. Ported from api/rules.py. */
+/** Rules CRUD, validation, and preview. Ported from api/rules.py. Wire format
+ * is snake_case throughout, matching web/ and the Python backend; internally
+ * (DB storage, the matching/planner engine) stays camelCase -- see
+ * conditionToInternal/conditionToWire below for the boundary. */
 
 export interface RulesRouteOptions {
   db: DbClient
@@ -47,9 +51,9 @@ const ConditionInSchema = z
       'collection',
       'custom',
     ]),
-    matchType: z.enum(['exact', 'list', 'regex', 'vocabulary']),
+    match_type: z.enum(['exact', 'list', 'regex', 'vocabulary']),
     // "vocabulary" intentionally carries an empty match_value
-    matchValue: z.string().max(2000),
+    match_value: z.string().max(2000),
     join: z.enum(['AND', 'OR']).nullable().default(null),
     // null/absent = "tag"; "native" matches real Radarr/Sonarr metadata, rich categories only.
     source: z.enum(['tag', 'native']).nullable().default(null),
@@ -63,18 +67,18 @@ const ConditionInSchema = z
           'for genre/language/quality/certification/collection',
       })
     }
-    if (c.matchType === 'regex') {
+    if (c.match_type === 'regex') {
       try {
-        new RegExp(c.matchValue)
+        new RegExp(c.match_value)
       } catch (e) {
         ctx.addIssue({
           code: 'custom',
           message: `condition '${c.category}': invalid regex: ${String(e)}`,
         })
       }
-    } else if (c.matchType === 'list') {
+    } else if (c.match_type === 'list') {
       if (
-        c.matchValue
+        c.match_value
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean).length === 0
@@ -84,8 +88,8 @@ const ConditionInSchema = z
           message: `condition '${c.category}': list requires at least one comma-separated tag`,
         })
       }
-    } else if (c.matchType === 'exact') {
-      if (!c.matchValue.trim()) {
+    } else if (c.match_type === 'exact') {
+      if (!c.match_value.trim()) {
         ctx.addIssue({
           code: 'custom',
           message: `condition '${c.category}': exact match requires a value`,
@@ -94,20 +98,42 @@ const ConditionInSchema = z
     }
   })
 
+type ConditionIn = z.infer<typeof ConditionInSchema>
+
+function conditionToInternal(c: ConditionIn): Condition {
+  return {
+    category: c.category,
+    matchType: c.match_type,
+    matchValue: c.match_value,
+    join: c.join,
+    source: c.source,
+  }
+}
+
+function conditionToWire(c: Condition): Record<string, unknown> {
+  return {
+    category: c.category,
+    match_type: c.matchType,
+    match_value: c.matchValue,
+    join: c.join,
+    source: c.source ?? null,
+  }
+}
+
 const RuleInSchema = z
   .object({
     name: z.string().min(1).max(50),
-    appScope: z.number().int().nullable().default(null),
-    appTypeScope: z.enum(['radarr', 'sonarr']).nullable().default(null),
+    app_scope: z.number().int().nullable().default(null),
+    app_type_scope: z.enum(['radarr', 'sonarr']).nullable().default(null),
     conditions: z.array(ConditionInSchema).min(1).max(8),
-    dirTemplate: z.string().min(1).max(300),
-    filenameTemplate: z.string().max(300).nullable().default(null),
+    dir_template: z.string().min(1).max(300),
+    filename_template: z.string().max(300).nullable().default(null),
     enabled: z.boolean().default(true),
-    unlinkOnMismatch: z.boolean().default(true),
+    unlink_on_mismatch: z.boolean().default(true),
     priority: z.number().int().min(1).max(1000).default(100),
   })
   .superRefine((body, ctx) => {
-    if (body.appScope !== null && body.appTypeScope !== null) {
+    if (body.app_scope !== null && body.app_type_scope !== null) {
       ctx.addIssue({
         code: 'custom',
         message:
@@ -139,19 +165,19 @@ const RuleInSchema = z
         })
       }
     })
-    if (body.dirTemplate.includes('\\')) {
+    if (body.dir_template.includes('\\')) {
       ctx.addIssue({
         code: 'custom',
         message: 'dir_template must not contain backslashes',
       })
     }
-    if (!body.dirTemplate.startsWith('/')) {
+    if (!body.dir_template.startsWith('/')) {
       ctx.addIssue({
         code: 'custom',
         message: 'dir_template must be an absolute path (e.g. /media/movies/{$user})',
       })
     }
-    if (body.filenameTemplate !== null && body.filenameTemplate.includes('\\')) {
+    if (body.filename_template !== null && body.filename_template.includes('\\')) {
       ctx.addIssue({
         code: 'custom',
         message: 'filename_template must not contain backslashes',
@@ -160,8 +186,8 @@ const RuleInSchema = z
     // Catch a placeholder typo here rather than have it fail later, per-item, at match time.
     const known = new Set([...FIXED_PLACEHOLDERS, ...seen])
     for (const [field, tmpl] of [
-      ['dir_template', body.dirTemplate],
-      ['filename_template', body.filenameTemplate],
+      ['dir_template', body.dir_template],
+      ['filename_template', body.filename_template],
     ] as const) {
       if (tmpl === null) continue
       for (const name of findPlaceholders(tmpl)) {
@@ -227,11 +253,11 @@ function representativeAppId(
 }
 
 function vocabularyWarnings(db: DbClient, body: RuleIn): string[] {
-  const appType = resolveAppType(db, body.appScope, body.appTypeScope)
-  const appId = representativeAppId(db, body.appScope, body.appTypeScope)
+  const appType = resolveAppType(db, body.app_scope, body.app_type_scope)
+  const appId = representativeAppId(db, body.app_scope, body.app_type_scope)
   const warnings: string[] = []
   for (const c of body.conditions) {
-    warnings.push(...validateConditionValues(c, db, appType, appId))
+    warnings.push(...validateConditionValues(conditionToInternal(c), db, appType, appId))
   }
   return warnings
 }
@@ -241,20 +267,26 @@ function ruleOut(
   linkCount = 0,
   lastLinkAt: number | null = null,
 ): Record<string, unknown> {
-  let conditions: unknown[]
+  let conditions: Condition[]
   try {
-    conditions = JSON.parse(row.conditionsJson) as unknown[]
+    conditions = JSON.parse(row.conditionsJson) as Condition[]
   } catch {
     conditions = []
   }
-  const { conditionsJson: _omit, ...rest } = row
   return {
-    ...rest,
+    id: row.id,
+    name: row.name,
+    app_scope: row.appScope,
+    app_type_scope: row.appTypeScope,
+    dir_template: row.dirTemplate,
+    filename_template: row.filenameTemplate,
     enabled: Boolean(row.enabled),
-    unlinkOnMismatch: Boolean(row.unlinkOnMismatch),
-    conditions,
-    linkCount,
-    lastLinkAt,
+    unlink_on_mismatch: Boolean(row.unlinkOnMismatch),
+    priority: row.priority,
+    created_at: row.createdAt,
+    conditions: conditions.map(conditionToWire),
+    link_count: linkCount,
+    last_link_at: lastLinkAt,
   }
 }
 
@@ -299,23 +331,23 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     getCurrentUser(request, db, settingsStore, env)
     const body = parseBody(request.body)
     if (
-      body.appScope !== null &&
-      !db.select({ id: apps.id }).from(apps).where(eq(apps.id, body.appScope)).get()
+      body.app_scope !== null &&
+      !db.select({ id: apps.id }).from(apps).where(eq(apps.id, body.app_scope)).get()
     ) {
       throw new HttpError(422, 'app_scope references unknown app')
     }
-    checkDirTemplateJail(settingsStore, body.dirTemplate)
+    checkDirTemplateJail(settingsStore, body.dir_template)
     const res = db
       .insert(rulesTable)
       .values({
         name: body.name,
-        appScope: body.appScope,
-        appTypeScope: body.appTypeScope,
-        conditionsJson: JSON.stringify(body.conditions),
-        dirTemplate: body.dirTemplate,
-        filenameTemplate: body.filenameTemplate,
+        appScope: body.app_scope,
+        appTypeScope: body.app_type_scope,
+        conditionsJson: JSON.stringify(body.conditions.map(conditionToInternal)),
+        dirTemplate: body.dir_template,
+        filenameTemplate: body.filename_template,
         enabled: body.enabled ? 1 : 0,
-        unlinkOnMismatch: body.unlinkOnMismatch ? 1 : 0,
+        unlinkOnMismatch: body.unlink_on_mismatch ? 1 : 0,
         priority: body.priority,
       })
       .run()
@@ -323,7 +355,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     logEvent(db, 'info', `rule added: ${body.name}`, null, id)
     const out = ruleOut(db.select().from(rulesTable).where(eq(rulesTable.id, id)).get()!)
     reply.code(201)
-    return { ...out, vocabularyWarnings: vocabularyWarnings(db, body) }
+    return { ...out, vocabulary_warnings: vocabularyWarnings(db, body) }
   })
 
   app.patch('/api/rules/:ruleId', (request) => {
@@ -340,22 +372,22 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     }
     const body = parseBody(request.body)
     if (
-      body.appScope !== null &&
-      !db.select({ id: apps.id }).from(apps).where(eq(apps.id, body.appScope)).get()
+      body.app_scope !== null &&
+      !db.select({ id: apps.id }).from(apps).where(eq(apps.id, body.app_scope)).get()
     ) {
       throw new HttpError(422, 'app_scope references unknown app')
     }
-    checkDirTemplateJail(settingsStore, body.dirTemplate)
+    checkDirTemplateJail(settingsStore, body.dir_template)
     db.update(rulesTable)
       .set({
         name: body.name,
-        appScope: body.appScope,
-        appTypeScope: body.appTypeScope,
-        conditionsJson: JSON.stringify(body.conditions),
-        dirTemplate: body.dirTemplate,
-        filenameTemplate: body.filenameTemplate,
+        appScope: body.app_scope,
+        appTypeScope: body.app_type_scope,
+        conditionsJson: JSON.stringify(body.conditions.map(conditionToInternal)),
+        dirTemplate: body.dir_template,
+        filenameTemplate: body.filename_template,
         enabled: body.enabled ? 1 : 0,
-        unlinkOnMismatch: body.unlinkOnMismatch ? 1 : 0,
+        unlinkOnMismatch: body.unlink_on_mismatch ? 1 : 0,
         priority: body.priority,
       })
       .where(eq(rulesTable.id, ruleId))
@@ -363,7 +395,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     const out = ruleOut(
       db.select().from(rulesTable).where(eq(rulesTable.id, ruleId)).get()!,
     )
-    return { ...out, vocabularyWarnings: vocabularyWarnings(db, body) }
+    return { ...out, vocabulary_warnings: vocabularyWarnings(db, body) }
   })
 
   app.delete('/api/rules/:ruleId', (request, reply) => {
@@ -385,8 +417,8 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
   app.post('/api/rules/preview', async (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const body = parseBody(request.body)
-    const query = request.query as { appId?: string; live?: string }
-    const appId = Number(query.appId)
+    const query = request.query as { app_id?: string; live?: string }
+    const appId = Number(query.app_id)
     const live = query.live === 'true' || query.live === '1'
     if (!Number.isFinite(appId)) throw new HttpError(422, 'app_id is required')
 
@@ -409,13 +441,13 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     const rule: PlannerRule = {
       id: 0,
       name: body.name || '(preview)',
-      conditions: body.conditions,
-      dirTemplate: body.dirTemplate,
-      filenameTemplate: body.filenameTemplate,
+      conditions: body.conditions.map(conditionToInternal),
+      dirTemplate: body.dir_template,
+      filenameTemplate: body.filename_template,
       enabled: true,
       priority: body.priority,
-      appScope: body.appScope,
-      appTypeScope: body.appTypeScope,
+      appScope: body.app_scope,
+      appTypeScope: body.app_type_scope,
     }
     const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [
       ...DEFAULT_ROOTS,
@@ -448,19 +480,19 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     )
 
     return {
-      appId,
-      appName: row.name,
+      app_id: appId,
+      app_name: row.name,
       source,
-      snapshotAt: source === 'snapshot' ? row.lastPollAt : null,
+      snapshot_at: source === 'snapshot' ? row.lastPollAt : null,
       total: planned.length,
       sample: planned.slice(0, 50).map((p) => ({
-        itemTitle: p.itemTitle,
-        srcPath: p.srcPath,
-        dstPath: p.dstPath,
+        item_title: p.itemTitle,
+        src_path: p.srcPath,
+        dst_path: p.dstPath,
       })),
       errors: errors.slice(0, 50).map((e) => ({
-        itemTitle: e.itemTitle,
-        srcPath: e.srcPath,
+        item_title: e.itemTitle,
+        src_path: e.srcPath,
         error: e.error,
       })),
     }

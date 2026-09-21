@@ -17,12 +17,40 @@ import { normalizeFsFallback } from '../config/env.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Browse/delete/repair hardlinks. Ported from api/links.py. */
+/** Browse/delete/repair hardlinks. Ported from api/links.py. Wire format is
+ * snake_case, matching web/ and the Python backend. */
 
 export interface LinksRouteOptions {
   db: DbClient
   settingsStore: SettingsStore
   env: Settings
+}
+
+type LinkRow = typeof links.$inferSelect
+
+function linkOut(
+  row: LinkRow,
+  ruleName: string | null,
+  appName: string | null,
+  appType: string | null,
+): Record<string, unknown> {
+  return {
+    id: row.id,
+    rule_id: row.ruleId,
+    app_id: row.appId,
+    item_id: row.itemId,
+    file_id: row.fileId,
+    src_path: row.srcPath,
+    dst_path: row.dstPath,
+    inode: row.inode,
+    status: row.status,
+    created_at: row.createdAt,
+    match_key: row.matchKey,
+    missing_strikes: row.missingStrikes,
+    rule_name: ruleName,
+    app_name: appName,
+    app_type: appType,
+  }
 }
 
 export function registerLinksRoutes(app: FastifyInstance, opts: LinksRouteOptions): void {
@@ -31,14 +59,14 @@ export function registerLinksRoutes(app: FastifyInstance, opts: LinksRouteOption
   app.get('/api/links', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const q = request.query as {
-      appId?: string
-      ruleId?: string
+      app_id?: string
+      rule_id?: string
       status?: string
       limit?: string
       offset?: string
     }
-    const appId = q.appId !== undefined ? Number(q.appId) : undefined
-    const ruleId = q.ruleId !== undefined ? Number(q.ruleId) : undefined
+    const appId = q.app_id !== undefined ? Number(q.app_id) : undefined
+    const ruleId = q.rule_id !== undefined ? Number(q.rule_id) : undefined
     const status = q.status !== undefined ? q.status : 'active'
     const limit = Math.min(
       5000,
@@ -76,12 +104,7 @@ export function registerLinksRoutes(app: FastifyInstance, opts: LinksRouteOption
       .all()
 
     return {
-      items: rows.map((r) => ({
-        ...r.link,
-        ruleName: r.ruleName,
-        appName: r.appName,
-        appType: r.appType,
-      })),
+      items: rows.map((r) => linkOut(r.link, r.ruleName, r.appName, r.appType)),
       total,
       limit,
       offset,

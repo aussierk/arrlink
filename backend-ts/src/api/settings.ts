@@ -18,7 +18,8 @@ import { FS_FALLBACK_MODES } from '../config/env.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Runtime settings: a JSON key/value store in SQLite. Ported from api/settings.py. */
+/** Runtime settings: a JSON key/value store in SQLite. Ported from
+ * api/settings.py. Wire format is snake_case, matching web/ and Python. */
 
 export interface SettingsRouteOptions {
   db: DbClient
@@ -45,25 +46,25 @@ const PROTECTED_SETTING_KEYS = new Set<SettingKey>([
 ])
 
 const AuthSettingsSchema = z.object({
-  passwordEnabled: z.boolean().default(false),
-  oidcEnabled: z.boolean().default(false),
-  autoLogin: z.boolean().default(true),
-  uiUsername: z.string().default(''),
-  uiPassword: z.string().default(''),
-  oidcIssuer: z.string().default(''),
-  oidcClientId: z.string().default(''),
-  oidcClientSecret: z.string().default(''),
+  password_enabled: z.boolean().default(false),
+  oidc_enabled: z.boolean().default(false),
+  auto_login: z.boolean().default(true),
+  ui_username: z.string().default(''),
+  ui_password: z.string().default(''),
+  oidc_issuer: z.string().default(''),
+  oidc_client_id: z.string().default(''),
+  oidc_client_secret: z.string().default(''),
 })
 
-const TmdbSettingsSchema = z.object({ apiKey: z.string().default('') })
+const TmdbSettingsSchema = z.object({ api_key: z.string().default('') })
 
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warning', 'error'])
 const LOG_SIZE_MB_MIN = 1
 const LOG_SIZE_MB_MAX = 1000
 
 const LoggingSettingsSchema = z.object({
-  logLevel: z.string(),
-  logSizeLimitMb: z.number().int(),
+  log_level: z.string(),
+  log_size_limit_mb: z.number().int(),
 })
 
 const SettingValueSchema = z.object({ value: z.unknown() })
@@ -76,16 +77,16 @@ function authView(
   const auth = effectiveAuth(settingsStore, env)
   const st = lockout.status(db, (auth.uiUsername || 'admin').trim().toLowerCase())
   return {
-    passwordEnabled: auth.passwordEnabled,
-    oidcEnabled: auth.oidcEnabled,
-    autoLogin: Boolean(auth.autoLogin),
-    uiUsername: auth.uiUsername,
-    uiPasswordSet: Boolean(auth.uiPassword),
-    passwordLocked: st.locked,
-    passwordLockedUntil: st.lockedUntil,
-    oidcIssuer: auth.oidcIssuer || '',
-    oidcClientId: auth.oidcClientId || '',
-    oidcClientSecretSet: Boolean(auth.oidcClientSecret),
+    password_enabled: auth.passwordEnabled,
+    oidc_enabled: auth.oidcEnabled,
+    auto_login: Boolean(auth.autoLogin),
+    ui_username: auth.uiUsername,
+    ui_password_set: Boolean(auth.uiPassword),
+    password_locked: st.locked,
+    password_locked_until: st.lockedUntil,
+    oidc_issuer: auth.oidcIssuer || '',
+    oidc_client_id: auth.oidcClientId || '',
+    oidc_client_secret_set: Boolean(auth.oidcClientSecret),
   }
 }
 
@@ -103,22 +104,22 @@ export function registerSettingsRoutes(
   app.get('/api/settings/effective', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     return {
-      globalUnlinkOnMismatch: Boolean(
+      global_unlink_on_mismatch: Boolean(
         settingsStore.getSetting('global_unlink_on_mismatch', true),
       ),
-      fsFallback: resolveFsFallback(
+      fs_fallback: resolveFsFallback(
         settingsStore,
         env.fsFallback as (typeof FS_FALLBACK_MODES)[number],
       ),
-      fsFallbackModes: [...FS_FALLBACK_MODES],
-      allowedRoots: settingsStore.getSetting<string[]>('allowed_roots') ?? [
+      fs_fallback_modes: [...FS_FALLBACK_MODES],
+      allowed_roots: settingsStore.getSetting<string[]>('allowed_roots') ?? [
         ...DEFAULT_ROOTS,
       ],
-      appTitle: settingsStore.getSetting<string>('app_title') || 'ArrLink',
-      appUrl: effectiveAppUrl(settingsStore, env),
-      displayLanguage: settingsStore.getSetting<string>('display_language') || 'en',
-      displayTimezone: settingsStore.getSetting<string>('display_timezone') || 'UTC',
-      bindAddress: '0.0.0.0',
+      app_title: settingsStore.getSetting<string>('app_title') || 'ArrLink',
+      app_url: effectiveAppUrl(settingsStore, env),
+      display_language: settingsStore.getSetting<string>('display_language') || 'en',
+      display_timezone: settingsStore.getSetting<string>('display_timezone') || 'UTC',
+      bind_address: '0.0.0.0',
       port: env.port,
     }
   })
@@ -136,43 +137,44 @@ export function registerSettingsRoutes(
 
     // Validate against the post-save values so we never lock everyone out.
     const effPw =
-      body.uiPassword ||
+      body.ui_password ||
       settingsStore.getSetting<string>('auth_password') ||
       env.uiPasswordHash ||
       ''
     const effIssuer =
-      body.oidcIssuer ||
+      body.oidc_issuer ||
       settingsStore.getSetting<string>('oidc_issuer') ||
       env.oidcIssuer ||
       ''
     const effCid =
-      body.oidcClientId ||
+      body.oidc_client_id ||
       settingsStore.getSetting<string>('oidc_client_id') ||
       env.oidcClientId ||
       ''
-    if (body.passwordEnabled && !effPw) {
+    if (body.password_enabled && !effPw) {
       throw new HttpError(422, 'a UI password is required to enable password login')
     }
-    if (body.oidcEnabled && !(effIssuer && effCid)) {
+    if (body.oidc_enabled && !(effIssuer && effCid)) {
       throw new HttpError(
         422,
         'OIDC issuer and client ID are required to enable OIDC login',
       )
     }
-    settingsStore.setSetting('auth_password_enabled', body.passwordEnabled)
-    settingsStore.setSetting('auth_oidc_enabled', body.oidcEnabled)
-    settingsStore.setSetting('oidc_auto_login', body.autoLogin)
-    if (body.uiUsername) settingsStore.setSetting('auth_username', body.uiUsername)
-    if (body.uiPassword)
-      settingsStore.setSetting('auth_password', await hashPassword(body.uiPassword))
-    if (body.oidcIssuer) settingsStore.setSetting('oidc_issuer', body.oidcIssuer)
-    if (body.oidcClientId) settingsStore.setSetting('oidc_client_id', body.oidcClientId)
-    if (body.oidcClientSecret)
-      settingsStore.setSetting('oidc_client_secret', body.oidcClientSecret)
+    settingsStore.setSetting('auth_password_enabled', body.password_enabled)
+    settingsStore.setSetting('auth_oidc_enabled', body.oidc_enabled)
+    settingsStore.setSetting('oidc_auto_login', body.auto_login)
+    if (body.ui_username) settingsStore.setSetting('auth_username', body.ui_username)
+    if (body.ui_password)
+      settingsStore.setSetting('auth_password', await hashPassword(body.ui_password))
+    if (body.oidc_issuer) settingsStore.setSetting('oidc_issuer', body.oidc_issuer)
+    if (body.oidc_client_id)
+      settingsStore.setSetting('oidc_client_id', body.oidc_client_id)
+    if (body.oidc_client_secret)
+      settingsStore.setSetting('oidc_client_secret', body.oidc_client_secret)
     logEvent(
       db,
       'info',
-      `auth settings updated (password=${body.passwordEnabled}, oidc=${body.oidcEnabled})`,
+      `auth settings updated (password=${body.password_enabled}, oidc=${body.oidc_enabled})`,
     )
     return authView(db, settingsStore, env)
   })
@@ -180,8 +182,10 @@ export function registerSettingsRoutes(
   app.get('/api/settings/tmdb', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     return {
-      apiKeySet: Boolean((settingsStore.getSetting<string>('tmdb_api_key') || '').trim()),
-      defaultKeyConfigured: Boolean(process.env.TMDB_API_KEY),
+      api_key_set: Boolean(
+        (settingsStore.getSetting<string>('tmdb_api_key') || '').trim(),
+      ),
+      default_key_configured: Boolean(process.env.TMDB_API_KEY),
     }
   })
 
@@ -189,24 +193,26 @@ export function registerSettingsRoutes(
     getCurrentUser(request, db, settingsStore, env)
     const parsed = TmdbSettingsSchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
-    if (parsed.data.apiKey) settingsStore.setSetting('tmdb_api_key', parsed.data.apiKey)
+    if (parsed.data.api_key) settingsStore.setSetting('tmdb_api_key', parsed.data.api_key)
     return {
-      apiKeySet: Boolean((settingsStore.getSetting<string>('tmdb_api_key') || '').trim()),
-      defaultKeyConfigured: Boolean(process.env.TMDB_API_KEY),
+      api_key_set: Boolean(
+        (settingsStore.getSetting<string>('tmdb_api_key') || '').trim(),
+      ),
+      default_key_configured: Boolean(process.env.TMDB_API_KEY),
     }
   })
 
   app.get('/api/settings/logging', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const { level, sizeMb } = effectiveLoggingSettings(settingsStore, env)
-    return { logLevel: level, logSizeLimitMb: sizeMb }
+    return { log_level: level, log_size_limit_mb: sizeMb }
   })
 
   app.put('/api/settings/logging', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const parsed = LoggingSettingsSchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
-    const level = parsed.data.logLevel.toLowerCase()
+    const level = parsed.data.log_level.toLowerCase()
     if (!VALID_LOG_LEVELS.has(level)) {
       throw new HttpError(
         422,
@@ -214,8 +220,8 @@ export function registerSettingsRoutes(
       )
     }
     if (
-      parsed.data.logSizeLimitMb < LOG_SIZE_MB_MIN ||
-      parsed.data.logSizeLimitMb > LOG_SIZE_MB_MAX
+      parsed.data.log_size_limit_mb < LOG_SIZE_MB_MIN ||
+      parsed.data.log_size_limit_mb > LOG_SIZE_MB_MAX
     ) {
       throw new HttpError(
         422,
@@ -223,14 +229,14 @@ export function registerSettingsRoutes(
       )
     }
     settingsStore.setSetting('log_level', level)
-    settingsStore.setSetting('log_size_limit_mb', parsed.data.logSizeLimitMb)
+    settingsStore.setSetting('log_size_limit_mb', parsed.data.log_size_limit_mb)
     // Live-apply lands with the pino wiring; only persists for now.
     logEvent(
       db,
       'info',
-      `logging settings updated (level=${level}, size_mb=${parsed.data.logSizeLimitMb})`,
+      `logging settings updated (level=${level}, size_mb=${parsed.data.log_size_limit_mb})`,
     )
-    return { logLevel: level, logSizeLimitMb: parsed.data.logSizeLimitMb }
+    return { log_level: level, log_size_limit_mb: parsed.data.log_size_limit_mb }
   })
 
   app.put('/api/settings/:key', (request) => {

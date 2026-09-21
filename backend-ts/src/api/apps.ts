@@ -13,7 +13,8 @@ import { DEFAULT_ROOTS, auditRuleRoots } from '../core/template.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** Apps CRUD: storage, connection tests, and tag import. Ported from api/apps.py. */
+/** Apps CRUD: storage, connection tests, and tag import. Ported from api/apps.py.
+ * Wire format is snake_case throughout, matching web/ and the Python backend. */
 
 type AppRow = typeof apps.$inferSelect
 
@@ -29,9 +30,9 @@ const AppInSchema = z.object({
   type: z.enum(['radarr', 'sonarr']),
   url: z.string().min(4).max(200),
   // Blank on update keeps the existing key; required non-empty on create.
-  apiKey: z.string().max(200).default(''),
+  api_key: z.string().max(200).default(''),
   enabled: z.boolean().default(true),
-  pollIntervalS: z.number().int().min(10).max(3600).default(300),
+  poll_interval_s: z.number().int().min(10).max(3600).default(300),
 })
 
 function normalizeUrl(v: string): string {
@@ -41,12 +42,19 @@ function normalizeUrl(v: string): string {
 }
 
 function appOut(row: AppRow): Record<string, unknown> {
-  const { apiKey, ...rest } = row
-  const key = apiKey || ''
+  const key = row.apiKey || ''
   return {
-    ...rest,
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    url: row.url,
     enabled: Boolean(row.enabled),
-    apiKeyMasked: key.length > 4 ? `••••${key.slice(-4)}` : '••••',
+    poll_interval_s: row.pollIntervalS,
+    last_poll_at: row.lastPollAt,
+    last_error: row.lastError,
+    item_count: row.itemCount,
+    created_at: row.createdAt,
+    api_key_masked: key.length > 4 ? `••••${key.slice(-4)}` : '••••',
   }
 }
 
@@ -84,10 +92,10 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
       ...DEFAULT_ROOTS,
     ]
     return {
-      activeLinks: active?.c ?? 0,
-      staleLinks: stale?.c ?? 0,
-      missingLinks: missing?.c ?? 0,
-      orphanedRules: auditRuleRoots(ruleRows, roots),
+      active_links: active?.c ?? 0,
+      stale_links: stale?.c ?? 0,
+      missing_links: missing?.c ?? 0,
+      orphaned_rules: auditRuleRoots(ruleRows, roots),
     }
   })
 
@@ -104,7 +112,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
     const parsed = AppInSchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const body = parsed.data
-    if (!body.apiKey.trim())
+    if (!body.api_key.trim())
       throw new HttpError(422, 'api_key is required to create an app')
 
     const res = db
@@ -113,9 +121,9 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
         name: body.name,
         type: body.type,
         url: normalizeUrl(body.url),
-        apiKey: body.apiKey,
+        apiKey: body.api_key,
         enabled: body.enabled ? 1 : 0,
-        pollIntervalS: body.pollIntervalS,
+        pollIntervalS: body.poll_interval_s,
       })
       .run()
     const id = Number(res.lastInsertRowid)
@@ -151,7 +159,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
       }
     }
     // blank api_key = keep the existing one (the UI can't recover the real key)
-    const apiKey = body.apiKey.trim() || row.apiKey
+    const apiKey = body.api_key.trim() || row.apiKey
     db.update(apps)
       .set({
         name: body.name,
@@ -159,7 +167,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
         url: normalizeUrl(body.url),
         apiKey,
         enabled: body.enabled ? 1 : 0,
-        pollIntervalS: body.pollIntervalS,
+        pollIntervalS: body.poll_interval_s,
       })
       .where(eq(apps.id, appId))
       .run()
@@ -181,7 +189,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
     const parsed = AppInSchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const body = parsed.data
-    const adapter = getAdapter(body.type, normalizeUrl(body.url), body.apiKey)
+    const adapter = getAdapter(body.type, normalizeUrl(body.url), body.api_key)
     try {
       const info = await adapter.ping()
       return { ok: true, name: info.name, version: info.version }

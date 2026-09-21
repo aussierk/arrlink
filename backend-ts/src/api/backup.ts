@@ -3,12 +3,18 @@ import { z } from 'zod'
 import type { Settings } from '../config/env.js'
 import type { DbClient } from '../db/client.js'
 import type { SettingsStore } from '../db/settings-store.js'
-import { effectiveBackupSettings, listBackups, runBackupCycle } from '../core/backup.js'
+import {
+  effectiveBackupSettings,
+  listBackups,
+  runBackupCycle,
+  type BackupInfo,
+} from '../core/backup.js'
 import { logEvent } from '../db/events.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
 
-/** DB backup endpoints. Ported from api/backup.py. */
+/** DB backup endpoints. Ported from api/backup.py. Wire format is snake_case,
+ * matching web/ and the Python backend. */
 
 export interface BackupRouteOptions {
   db: DbClient
@@ -18,9 +24,13 @@ export interface BackupRouteOptions {
 
 const BackupSettingsSchema = z.object({
   enabled: z.boolean(),
-  retentionDays: z.number().int(),
-  intervalHours: z.number().int(),
+  retention_days: z.number().int(),
+  interval_hours: z.number().int(),
 })
+
+function backupOut(b: BackupInfo): Record<string, unknown> {
+  return { name: b.name, size: b.size, created_at: b.createdAt }
+}
 
 export function registerBackupRoutes(
   app: FastifyInstance,
@@ -30,7 +40,7 @@ export function registerBackupRoutes(
 
   app.get('/api/backup', (request) => {
     getCurrentUser(request, db, settingsStore, env)
-    return listBackups(env.backupDir)
+    return listBackups(env.backupDir).map(backupOut)
   })
 
   app.get('/api/backup/settings', (request) => {
@@ -39,7 +49,7 @@ export function registerBackupRoutes(
       settingsStore,
       env,
     )
-    return { enabled, retentionDays, intervalHours }
+    return { enabled, retention_days: retentionDays, interval_hours: intervalHours }
   })
 
   app.put('/api/backup/settings', (request) => {
@@ -48,13 +58,13 @@ export function registerBackupRoutes(
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const body = parsed.data
     settingsStore.setSetting('backup_enabled', body.enabled)
-    settingsStore.setSetting('backup_retention_days', body.retentionDays)
-    settingsStore.setSetting('backup_interval_hours', body.intervalHours)
+    settingsStore.setSetting('backup_retention_days', body.retention_days)
+    settingsStore.setSetting('backup_interval_hours', body.interval_hours)
     logEvent(
       db,
       'info',
-      `backup settings updated (enabled=${body.enabled}, retention_days=${body.retentionDays}, ` +
-        `interval_hours=${body.intervalHours})`,
+      `backup settings updated (enabled=${body.enabled}, retention_days=${body.retention_days}, ` +
+        `interval_hours=${body.interval_hours})`,
     )
     return body
   })

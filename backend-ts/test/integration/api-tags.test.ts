@@ -16,7 +16,7 @@ beforeEach(async () => {
   const res = await ctx.app.inject({
     method: 'POST',
     url: '/api/apps',
-    payload: { name: 'Radarr', type: 'radarr', url: 'http://x', apiKey: 'k' },
+    payload: { name: 'Radarr', type: 'radarr', url: 'http://x', api_key: 'k' },
   })
   appId = res.json<{ id: number }>().id
 })
@@ -37,7 +37,7 @@ describe('POST /api/apps/:appId/tags/import-manual', () => {
     expect(res.json<{ imported: number }>().imported).toBe(4)
 
     const list = await ctx.app.inject({ method: 'GET', url: `/api/apps/${appId}/tags` })
-    const tags = list.json<Array<{ label: string; count: number; ruleCount: number }>>()
+    const tags = list.json<Array<{ label: string; count: number; rule_count: number }>>()
     expect(tags.map((t) => t.label).sort()).toEqual(['family', 'kids'])
     expect(tags.find((t) => t.label === 'kids')?.count).toBe(3)
   })
@@ -104,7 +104,7 @@ describe('POST /api/tags/push', () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/tags/push',
-      payload: { label: 'family', appIds: [appId] },
+      payload: { label: 'family', app_ids: [appId] },
     })
     expect(res.statusCode).toBe(200)
     const body = res.json<{ ok: number; failed: number }>()

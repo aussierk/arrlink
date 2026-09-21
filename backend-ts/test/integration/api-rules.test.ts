@@ -22,9 +22,9 @@ afterEach(async () => {
 function ruleBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     name: 'kids',
-    dirTemplate: '/media/kids',
+    dir_template: '/media/kids',
     conditions: [
-      { category: 'user', matchType: 'exact', matchValue: 'kids', join: null },
+      { category: 'user', match_type: 'exact', match_value: 'kids', join: null },
     ],
     ...overrides,
   }
@@ -41,17 +41,17 @@ describe('POST /api/rules', () => {
     const body = res.json<{
       id: number
       conditions: unknown[]
-      vocabularyWarnings: string[]
+      vocabulary_warnings: string[]
     }>()
     expect(body.conditions).toHaveLength(1)
-    expect(body.vocabularyWarnings).toEqual([])
+    expect(body.vocabulary_warnings).toEqual([])
   })
 
   it('rejects a dir_template outside the allowed roots', async () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/rules',
-      payload: ruleBody({ dirTemplate: '/etc/passwd' }),
+      payload: ruleBody({ dir_template: '/etc/passwd' }),
     })
     expect(res.statusCode).toBe(422)
   })
@@ -60,7 +60,7 @@ describe('POST /api/rules', () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/rules',
-      payload: ruleBody({ dirTemplate: '/media/{$nope}' }),
+      payload: ruleBody({ dir_template: '/media/{$nope}' }),
     })
     expect(res.statusCode).toBe(422)
   })
@@ -71,8 +71,8 @@ describe('POST /api/rules', () => {
       url: '/api/rules',
       payload: ruleBody({
         conditions: [
-          { category: 'user', matchType: 'exact', matchValue: 'kids', join: null },
-          { category: 'genre', matchType: 'exact', matchValue: 'Comedy', join: null },
+          { category: 'user', match_type: 'exact', match_value: 'kids', join: null },
+          { category: 'genre', match_type: 'exact', match_value: 'Comedy', join: null },
         ],
       }),
     })
@@ -85,7 +85,7 @@ describe('POST /api/rules', () => {
       url: '/api/rules',
       payload: ruleBody({
         conditions: [
-          { category: 'user', matchType: 'regex', matchValue: '(unclosed', join: null },
+          { category: 'user', match_type: 'regex', match_value: '(unclosed', join: null },
         ],
       }),
     })
@@ -111,7 +111,7 @@ describe('GET/PATCH/DELETE /api/rules/:ruleId', () => {
     expect(patch.json<{ name: string; priority: number }>().priority).toBe(50)
 
     const list = await ctx.app.inject({ method: 'GET', url: '/api/rules' })
-    expect(list.json<Array<{ id: number; linkCount: number }>>()).toHaveLength(1)
+    expect(list.json<Array<{ id: number; link_count: number }>>()).toHaveLength(1)
 
     const del = await ctx.app.inject({ method: 'DELETE', url: `/api/rules/${id}` })
     expect(del.statusCode).toBe(204)
@@ -136,7 +136,7 @@ describe('POST /api/rules/preview', () => {
   it('404s for an unknown app', async () => {
     const res = await ctx.app.inject({
       method: 'POST',
-      url: '/api/rules/preview?appId=999',
+      url: '/api/rules/preview?app_id=999',
       payload: ruleBody(),
     })
     expect(res.statusCode).toBe(404)
@@ -146,12 +146,12 @@ describe('POST /api/rules/preview', () => {
     const appRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/apps',
-      payload: { name: 'Radarr', type: 'radarr', url: 'http://x', apiKey: 'k' },
+      payload: { name: 'Radarr', type: 'radarr', url: 'http://x', api_key: 'k' },
     })
     const appId = appRes.json<{ id: number }>().id
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rules/preview?appId=${appId}`,
+      url: `/api/rules/preview?app_id=${appId}`,
       payload: ruleBody(),
     })
     expect(res.statusCode).toBe(502)
