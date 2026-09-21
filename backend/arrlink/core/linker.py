@@ -236,6 +236,23 @@ def _retire(
     db.execute("UPDATE links SET status='missing' WHERE id=?", (row["id"],))
 
 
+def force_unlink_rule_links(db: State, rule_id: int) -> int:
+    """Unconditionally remove every link belonging to a rule being deleted,
+    ignoring unlink_on_mismatch -- must run before the rule row is deleted,
+    since links.rule_id is ON DELETE SET NULL."""
+    rows = db.query(
+        "SELECT id, dst_path FROM links WHERE rule_id=? AND status IN ('active','stale')",
+        (rule_id,),
+    )
+    removed = 0
+    for row in rows:
+        r = remove_link(row["dst_path"])
+        if r.ok:
+            removed += 1
+        db.execute("UPDATE links SET status='missing' WHERE id=?", (row["id"],))
+    return removed
+
+
 def _create(db, p: PlannedLink, app_id: int, res, fallback, now) -> None:
     """Create one planned link (idempotent)."""
     parent = os.path.dirname(p.dst_path)

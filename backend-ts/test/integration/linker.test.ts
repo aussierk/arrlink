@@ -19,7 +19,7 @@ import {
   links as linksTable,
   rules as rulesTable,
 } from '../../src/db/schema.js'
-import { RECONCILE_TUNABLES, reconcile } from '../../src/core/linker.js'
+import { RECONCILE_TUNABLES, forceUnlinkRuleLinks, reconcile } from '../../src/core/linker.js'
 import type { PlannedLink } from '../../src/core/planner.js'
 import { inodeOf } from '../../src/core/fsutil.js'
 
@@ -230,6 +230,57 @@ describe('reconcile: retire (missing source)', () => {
     expect(res.removed).toBe(0)
     const row = db.select().from(linksTable).all()[0]
     expect(row.status).toBe('stale')
+  })
+})
+
+describe('forceUnlinkRuleLinks', () => {
+  it('removes the link even though the rule itself opted in and the caller passes the opposite default', () => {
+    db.update(rulesTable).set({ unlinkOnMismatch: 1 }).where(eq(rulesTable.id, ruleId)).run()
+    const src = join(mediaDir, 'a.mkv')
+    writeFileSync(src, 'hello')
+    const dst = join(linkedDir, 'kids', 'a.mkv')
+    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true, [linkedDir])
+    expect(existsSync(dst)).toBe(true)
+
+    const removed = forceUnlinkRuleLinks(db, ruleId, [linkedDir])
+
+    expect(removed).toBe(1)
+    expect(existsSync(dst)).toBe(false)
+    const row = db.select().from(linksTable).all()[0]
+    expect(row.status).toBe('missing')
+  })
+
+  it('only touches links belonging to the given rule', () => {
+    const otherRuleId = db
+      .insert(rulesTable)
+      .values({ name: 'other', dirTemplate: join(linkedDir, 'other') })
+      .run().lastInsertRowid as number
+    const otherFileId = makeFile('b.mkv')
+    const srcA = join(mediaDir, 'a.mkv')
+    const srcB = join(mediaDir, 'b.mkv')
+    writeFileSync(srcA, 'hello')
+    writeFileSync(srcB, 'world')
+    const dstA = join(linkedDir, 'kids', 'a.mkv')
+    const dstB = join(linkedDir, 'other', 'b.mkv')
+    reconcile(
+      db,
+      appId,
+      'Radarr',
+      [
+        plan({ srcPath: srcA }),
+        plan({ ruleId: otherRuleId, fileId: otherFileId, srcPath: srcB, dstPath: dstB }),
+      ],
+      new Set([srcA, srcB]),
+      true,
+      [linkedDir],
+    )
+    expect(existsSync(dstA)).toBe(true)
+    expect(existsSync(dstB)).toBe(true)
+
+    forceUnlinkRuleLinks(db, ruleId, [linkedDir])
+
+    expect(existsSync(dstA)).toBe(false)
+    expect(existsSync(dstB)).toBe(true)
   })
 })
 

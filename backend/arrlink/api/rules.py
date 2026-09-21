@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ..arr.base import AdapterError
 from ..arr.factory import get_adapter
+from ..core.linker import force_unlink_rule_links
 from ..core.planner import plan_links
 from ..core.template import (
     DEFAULT_ROOTS,
@@ -339,10 +340,11 @@ def delete_rule(
     existing = db.query_one(
         "SELECT app_scope, app_type_scope FROM rules WHERE id=?", (rule_id,)
     )
-    cur = db.execute("DELETE FROM rules WHERE id=?", (rule_id,))
-    db.commit()
-    if cur.rowcount == 0:
+    if not existing:
         raise HTTPException(404, "rule not found")
+    force_unlink_rule_links(db, rule_id)
+    db.execute("DELETE FROM rules WHERE id=?", (rule_id,))
+    db.commit()
     db.log_event("info", f"rule deleted: {rule_id}")
     # So the deleted rule's links retire promptly instead of waiting for the
     # next natural poll.

@@ -278,6 +278,24 @@ function retire(
   db.update(links).set({ status: 'missing' }).where(eq(links.id, row.id)).run()
 }
 
+/** Unconditionally removes every link belonging to a rule being deleted,
+ * ignoring unlinkOnMismatch -- must run before the rule row is deleted, since
+ * links.ruleId is ON DELETE SET NULL. */
+export function forceUnlinkRuleLinks(db: DbClient, ruleId: number, roots: string[]): number {
+  const rows = db
+    .select({ id: links.id, dstPath: links.dstPath })
+    .from(links)
+    .where(and(eq(links.ruleId, ruleId), inArray(links.status, ['active', 'stale'])))
+    .all()
+  let removed = 0
+  for (const row of rows) {
+    const r = removeLink(row.dstPath, roots)
+    if (r.ok) removed += 1
+    db.update(links).set({ status: 'missing' }).where(eq(links.id, row.id)).run()
+  }
+  return removed
+}
+
 /** Create one planned link (idempotent). */
 function create(
   db: DbClient,

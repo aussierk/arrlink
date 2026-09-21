@@ -9,6 +9,7 @@ import { logEvent } from '../db/events.js'
 import { apps, rules as rulesTable } from '../db/schema.js'
 import type { SettingsStore } from '../db/settings-store.js'
 import type { Condition } from '../core/matching.js'
+import { forceUnlinkRuleLinks } from '../core/linker.js'
 import { planLinks, type PlannerRule } from '../core/planner.js'
 import type { Poller } from '../core/poller.js'
 import { snapshotItems } from '../core/snapshot.js'
@@ -440,15 +441,14 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
       .from(rulesTable)
       .where(eq(rulesTable.id, ruleId))
       .get()
-    const res = db.delete(rulesTable).where(eq(rulesTable.id, ruleId)).run()
-    if (res.changes === 0) throw new HttpError(404, 'rule not found')
+    if (!existing) throw new HttpError(404, 'rule not found')
+    const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [...DEFAULT_ROOTS]
+    forceUnlinkRuleLinks(db, ruleId, roots)
+    db.delete(rulesTable).where(eq(rulesTable.id, ruleId)).run()
     logEvent(db, 'info', `rule deleted: ${ruleId}`)
     // So the deleted rule's links retire promptly instead of waiting for the
     // next natural poll.
-    triggerRescan(
-      getPoller(),
-      scopeAppIds(db, existing!.appScope, existing!.appTypeScope),
-    )
+    triggerRescan(getPoller(), scopeAppIds(db, existing.appScope, existing.appTypeScope))
     reply.code(204).send()
   })
 

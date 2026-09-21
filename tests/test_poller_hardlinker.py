@@ -600,6 +600,38 @@ def test_unlink_off_keeps_link(client, radarr_media):
     assert os.path.exists(dst)
 
 
+def test_deleting_a_rule_always_force_unlinks_regardless_of_defaults(client, radarr_media):
+    """Global default off, rule's own unlink_on_mismatch on -- deleting the
+    rule must still remove its links."""
+    origin, media = radarr_media
+    app_id = _add_app(client, origin)
+
+    assert client.put(
+        "/api/settings/global_unlink_on_mismatch", json={"value": False}
+    ).status_code == 200
+
+    r = client.post(
+        "/api/rules",
+        json={
+            "name": "kids",
+            "conditions": [
+                {"category": "custom", "match_type": "exact", "match_value": "kids", "join": None},
+            ],
+            "dir_template": f"{media.linked_dir}/kids",
+            "unlink_on_mismatch": True,
+        },
+    )
+    assert r.status_code == 201, r.text
+    rid = r.json()["id"]
+
+    _poll(client, app_id)
+    dst = f"{media.linked_dir}/kids/Kids Movie.2019.mkv"
+    assert os.path.exists(dst)
+
+    assert client.delete(f"/api/rules/{rid}").status_code == 204
+    assert not os.path.exists(dst)
+
+
 # ---------------------------------------------------------------------------
 # SSE stream + links API
 # ---------------------------------------------------------------------------
