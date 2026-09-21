@@ -22,6 +22,7 @@ from arrlink.core.planner import plan_links
 from arrlink.core.template import (
     TemplateError,
     build_context,
+    resolve_destination,
     resolve_template,
 )
 from arrlink.main import create_app
@@ -127,6 +128,39 @@ def test_planner_multi_rule_and_file():
 # ---------------------------------------------------------------------------
 # template engine
 # ---------------------------------------------------------------------------
+
+
+def test_resolve_destination_appends_source_dirname():
+    # dir_template expresses only the categorization prefix; the item's own
+    # destination folder name (Radarr's own naming, tmdbid disambiguator
+    # included) is appended automatically, not hand-reconstructed.
+    d, f = resolve_destination(
+        "/linked/movies/{$genre}",
+        None,
+        _matched("genre", "Comedy"),
+        "Radarr",
+        "Aloha Scooby-Doo!",
+        2005,
+        "/media/movies/Aloha Scooby-Doo! (2005) [tmdbid-24615]/Aloha Scooby-Doo!.mkv",
+        ["/linked"],
+        item_path="/media/movies/Aloha Scooby-Doo! (2005) [tmdbid-24615]",
+    )
+    assert d == "/linked/movies/Comedy/Aloha Scooby-Doo! (2005) [tmdbid-24615]"
+    assert f == "Aloha Scooby-Doo!.mkv"
+
+
+def test_resolve_destination_no_append_without_item_path():
+    d, _ = resolve_destination(
+        "/linked/movies/kids",
+        None,
+        _matched("custom", "kids"),
+        "Radarr",
+        "T",
+        2010,
+        "/media/movies/T.mkv",
+        ["/linked"],
+    )
+    assert d == "/linked/movies/kids"
 
 
 def test_dir_template_regex_capture_group():
@@ -287,7 +321,10 @@ def build_radarr(origin: str):
                 "title": "Inception",
                 "year": 2010,
                 "tags": ["4k", "## - alice"],
-                "movieFile": {"path": "/media/movies/Inception.2010.2160p.mkv", "size": 12345},
+                "movieFile": {
+                    "path": "/media/movies/Inception (2010)/Inception.2010.2160p.mkv",
+                    "size": 12345,
+                },
             },
             {
                 "id": 2,
@@ -403,7 +440,7 @@ def test_preview_exact(client, radarr):
     assert body["sample"][0] == {
         "item_title": "Kids Movie",
         "src_path": "/media/movies/Kids Movie/Kids Movie.2019.mkv",
-        "dst_path": "/linked/movies/kids/Kids Movie.2019.mkv",
+        "dst_path": "/linked/movies/kids/Kids Movie/Kids Movie.2019.mkv",
     }
     assert body["errors"] == []
 
@@ -422,7 +459,10 @@ def test_preview_regex_user(client, radarr):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["total"] == 1
-    assert body["sample"][0]["dst_path"] == "/linked/movies/users/alice/Inception.2010.2160p.mkv"
+    assert (
+        body["sample"][0]["dst_path"]
+        == "/linked/movies/users/alice/Inception (2010)/Inception.2010.2160p.mkv"
+    )
 
 
 def test_preview_filename_template(client, radarr):
@@ -439,7 +479,7 @@ def test_preview_filename_template(client, radarr):
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["sample"][0]["dst_path"] == "/linked/movies/kids/Kids Movie.mkv"
+    assert body["sample"][0]["dst_path"] == "/linked/movies/kids/Kids Movie/Kids Movie.mkv"
 
 
 def test_preview_no_matches(client, radarr):

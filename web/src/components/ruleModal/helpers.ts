@@ -40,11 +40,19 @@ export function categoryLabel(cat: string): string {
 
 export type FormState = Omit<RuleInput, 'conditions'>
 
+// Fallback root when the deployment's allowed_roots haven't loaded yet (or
+// are empty) — matches the backend's own DEFAULT_BASE in core/presets.py.
+export const DEFAULT_BASE_ROOT = '/media'
+
+export function dirTemplateFor(base: string, serviceType: string | null): string {
+  return `${base}${serviceType === 'sonarr' ? '/tv' : '/movies'}`
+}
+
 export const emptyForm: FormState = {
   name: '',
   app_scope: null,
   app_type_scope: null,
-  dir_template: '/media/movies',
+  dir_template: dirTemplateFor(DEFAULT_BASE_ROOT, 'radarr'),
   filename_template: null,
   enabled: true,
   unlink_on_mismatch: true,
@@ -53,7 +61,9 @@ export const emptyForm: FormState = {
 
 // dir_template values that count as "the user hasn't touched it yet", so
 // picking a service can swap movies<->tv without clobbering real input.
-export const PRISTINE_DIRS = ['/media/movies', '/media/tv']
+export function pristineDirs(base: string): string[] {
+  return [dirTemplateFor(base, 'radarr'), dirTemplateFor(base, 'sonarr')]
+}
 
 type ServiceScope = Pick<FormState, 'app_scope' | 'app_type_scope'>
 

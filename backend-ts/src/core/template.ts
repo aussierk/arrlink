@@ -50,6 +50,11 @@ export interface TemplateContext {
   srcBasename: string
   srcStem: string
   srcExt: string
+  /** Basename of the item's own source directory (e.g. Radarr/Sonarr's
+   * "Aloha Scooby-Doo! (2005) [tmdbid-24615]") -- auto-appended as the final
+   * dirPath segment by resolveDestination, the dir-level equivalent of
+   * srcBasename's filename fallback. */
+  srcDirname: string
 }
 
 function clean(value: string): string {
@@ -159,6 +164,7 @@ export function buildContext(
   itemTitle: string,
   itemYear: number | null,
   srcPath: string,
+  itemPath = '',
 ): TemplateContext {
   const base = basename(srcPath)
   const ext = extname(base)
@@ -177,6 +183,7 @@ export function buildContext(
     srcBasename: base,
     srcStem: stem,
     srcExt: ext,
+    srcDirname: itemPath ? basename(itemPath) : '',
   }
 }
 
@@ -191,9 +198,26 @@ export function resolveDestination(
   itemYear: number | null,
   srcPath: string,
   roots: string[],
+  itemPath = '',
 ): { dirPath: string; filename: string } {
-  const ctx = buildContext(matchedConditions, appName, itemTitle, itemYear, srcPath)
-  const dirPath = sanitizeDirPath(resolveTemplate(dirTemplate, ctx))
+  const ctx = buildContext(
+    matchedConditions,
+    appName,
+    itemTitle,
+    itemYear,
+    srcPath,
+    itemPath,
+  )
+  let dirPath = sanitizeDirPath(resolveTemplate(dirTemplate, ctx))
+  // dirTemplate expresses only the categorization prefix (e.g.
+  // ".../movies/{$genre}"); the item's own destination folder name is never
+  // hand-reconstructed -- it's always the source's own directory basename
+  // (Radarr/Sonarr's own naming, disambiguators like [tmdbid-...] included),
+  // appended automatically underneath, mirroring how a blank filenameTemplate
+  // falls back to srcBasename below.
+  if (ctx.srcDirname) {
+    dirPath = sanitizeDirPath(dirPath + sep + ctx.srcDirname)
+  }
   checkJail(dirPath, roots)
 
   let filename: string

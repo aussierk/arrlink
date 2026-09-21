@@ -446,7 +446,7 @@ def test_preview_native_genre_condition(client, radarr):
     body = r.json()
     assert body["total"] == 1
     assert body["sample"][0]["item_title"] == "Kids Cartoon"
-    assert body["sample"][0]["dst_path"] == "/media/movies/Animation/kc.mkv"
+    assert body["sample"][0]["dst_path"] == "/media/movies/Animation/Kids Cartoon/kc.mkv"
 
 
 def test_preview_native_certification_and_collection(client, radarr):

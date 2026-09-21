@@ -5,6 +5,7 @@ import {
   TemplateError,
   buildContext,
   checkJail,
+  resolveDestination,
   resolveTemplate,
   sanitizeDirPath,
   sanitizeFilename,
@@ -110,6 +111,40 @@ describe('template placeholders', () => {
       '/media/movies/T.mkv',
     )
     expect(() => resolveTemplate('/linked/{$nope}', ctx)).toThrow(/unknown placeholder/)
+  })
+})
+
+describe('resolveDestination dir auto-append', () => {
+  it("appends the item's own source directory basename under the rule's categorization prefix", () => {
+    const { dirPath, filename } = resolveDestination(
+      '/linked/movies/{$genre}',
+      null,
+      matched('genre', 'Comedy'),
+      'Radarr',
+      'Aloha Scooby-Doo!',
+      2005,
+      '/media/movies/Aloha Scooby-Doo! (2005) [tmdbid-24615]/Aloha Scooby-Doo!.mkv',
+      ['/linked'],
+      '/media/movies/Aloha Scooby-Doo! (2005) [tmdbid-24615]',
+    )
+    expect(dirPath).toBe(
+      P('', 'linked', 'movies', 'Comedy', 'Aloha Scooby-Doo! (2005) [tmdbid-24615]'),
+    )
+    expect(filename).toBe('Aloha Scooby-Doo!.mkv')
+  })
+
+  it('leaves dirPath unchanged when no item path is given', () => {
+    const { dirPath } = resolveDestination(
+      '/linked/movies/kids',
+      null,
+      matched('custom', 'kids'),
+      'Radarr',
+      'T',
+      2010,
+      '/media/movies/T.mkv',
+      ['/linked'],
+    )
+    expect(dirPath).toBe(P('', 'linked', 'movies', 'kids'))
   })
 })
 

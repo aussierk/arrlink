@@ -91,8 +91,14 @@ function mockRadarr(movies: RadarrMovie[]): void {
   vi.stubGlobal('fetch', fetchMock)
 }
 
-function movieFile(name: string): string {
-  const p = join(mediaDir, name)
+// Radarr always reports each movie's file inside that movie's own folder
+// (never loose at the media root), so the adapter derives Item.path from
+// dirname(movieFile.path) -- resolveDestination now auto-appends that
+// folder's basename under the rule's dir_template, mirroring these tests.
+function movieFile(name: string, folder = 'Movie1'): string {
+  const d = join(mediaDir, folder)
+  mkdirSync(d, { recursive: true })
+  const p = join(d, name)
   writeFileSync(p, 'hello')
   return p
 }
@@ -177,7 +183,7 @@ describe('Poller.rescan', () => {
       .get()
     expect(fileRow).toBeDefined()
 
-    const dst = join(linkedDir, 'kids', 'movie1.mkv')
+    const dst = join(linkedDir, 'kids', 'Movie1', 'movie1.mkv')
     expect(existsSync(dst)).toBe(true)
     expect(readFileSync(dst, 'utf-8')).toBe('hello')
     expect(inodeOf(dst)).toBe(inodeOf(src))
@@ -206,7 +212,7 @@ describe('Poller.rescan', () => {
     const itemRow = db.select().from(appItems).where(eq(appItems.appId, appId)).get()
     expect(itemRow?.itemId).toBe(1001)
 
-    const dst = join(linkedDir, 'kids', 'movie1.mkv')
+    const dst = join(linkedDir, 'kids', 'Movie1', 'movie1.mkv')
     expect(existsSync(dst)).toBe(true)
 
     const linkRow = db.select().from(linksTable).where(eq(linksTable.dstPath, dst)).get()
@@ -232,15 +238,15 @@ describe('Poller.rescan', () => {
     mockRadarr([{ id: 1, title: 'Movie1', year: 2020, tags: [1], moviePath: src }])
     const poller = new Poller(db, settings)
     await poller.rescan(appId)
-    expect(existsSync(join(linkedDir, 'kids', 'movie1.mkv'))).toBe(true)
+    expect(existsSync(join(linkedDir, 'kids', 'Movie1', 'movie1.mkv'))).toBe(true)
 
-    const renamed = join(mediaDir, 'movie1-renamed.mkv')
+    const renamed = join(mediaDir, 'Movie1', 'movie1-renamed.mkv')
     renameSync(src, renamed) // real OS rename -- keeps the inode, unlike delete+recreate
     mockRadarr([{ id: 1, title: 'Movie1', year: 2020, tags: [1], moviePath: renamed }])
     await poller.rescan(appId)
 
-    expect(existsSync(join(linkedDir, 'kids', 'movie1.mkv'))).toBe(false)
-    expect(existsSync(join(linkedDir, 'kids', 'movie1-renamed.mkv'))).toBe(true)
+    expect(existsSync(join(linkedDir, 'kids', 'Movie1', 'movie1.mkv'))).toBe(false)
+    expect(existsSync(join(linkedDir, 'kids', 'Movie1', 'movie1-renamed.mkv'))).toBe(true)
     expect(db.select().from(linksTable).all()).toHaveLength(1)
   })
 
@@ -267,7 +273,7 @@ describe('Poller.rescan', () => {
     mockRadarr([{ id: 1, title: 'Movie1', year: 2020, tags: [1], moviePath: src }])
     const poller = new Poller(db, settings)
     await poller.rescan(appId)
-    const dst = join(linkedDir, 'kids', 'movie1.mkv')
+    const dst = join(linkedDir, 'kids', 'Movie1', 'movie1.mkv')
     expect(existsSync(dst)).toBe(true)
 
     mockRadarr([]) // app no longer reports the movie at all
@@ -296,7 +302,7 @@ describe('Poller.rescan', () => {
     mockRadarr([{ id: 1, title: 'Movie1', year: 2020, tags: [1], moviePath: src }])
     const poller = new Poller(db, settings)
     await poller.rescan(appId)
-    const dst = join(linkedDir, 'kids', 'movie1.mkv')
+    const dst = join(linkedDir, 'kids', 'Movie1', 'movie1.mkv')
     expect(existsSync(dst)).toBe(true)
 
     // tag no longer reported on this item -> rule stops matching, but the
@@ -312,13 +318,10 @@ describe('Poller.rescan', () => {
   })
 
   it('prunes the now-empty directory structure a rule created, once its last link is retired', async () => {
-    // Mirrors a real template like `movies/English/{$title}/` -- two levels
-    // of directories the template created just for this one file.
-    db.update(rulesTable)
-      .set({ dirTemplate: join(linkedDir, 'kids', 'Movie1 (2020)') })
-      .where(eq(rulesTable.name, 'kids'))
-      .run()
-    const src = movieFile('movie1.mkv')
+    // The rule's dir_template is just the categorization prefix; the item's
+    // own source folder name ("Movie1 (2020)") is appended automatically,
+    // giving the same two nested levels a hand-reconstructed template used to.
+    const src = movieFile('movie1.mkv', 'Movie1 (2020)')
     mockRadarr([{ id: 1, title: 'Movie1', year: 2020, tags: [1], moviePath: src }])
     const poller = new Poller(db, settings)
     await poller.rescan(appId)

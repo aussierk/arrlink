@@ -129,6 +129,7 @@ def plan_links(
         item_id = it.get("db_id") if it.get("db_id") is not None else it["id"]
         title = it.get("title") or ""
         year = it.get("year")
+        item_path = it.get("path") or ""
         tags = it.get("tags") or []
         native = _native_values(it)
         files = [_as_dict(f) for f in (it.get("files") or [])]
@@ -161,6 +162,7 @@ def plan_links(
                             year,
                             src,
                             roots,
+                            item_path,
                         )
                     except TemplateError as e:
                         errors.append(

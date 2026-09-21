@@ -12,10 +12,12 @@ import { useRuleVocabulary } from './ruleModal/useRuleVocabulary'
 import {
   CATEGORY_ORDER,
   decodeServiceValue,
+  DEFAULT_BASE_ROOT,
+  dirTemplateFor,
   emptyForm,
   encodeServiceValue,
   nextMatchValueForSelection,
-  PRISTINE_DIRS,
+  pristineDirs,
   reorderConditions,
   type FormState,
 } from './ruleModal/helpers'
@@ -76,12 +78,33 @@ export default function RuleModal({
   const [busy, setBusy] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [presets, setPresets] = useState<PresetItem[]>([])
+  // First configured allowed root, used as the base for new-rule/preset dir
+  // templates instead of a hardcoded /media — falls back to it until loaded.
+  const [baseRoot, setBaseRoot] = useState(DEFAULT_BASE_ROOT)
 
   useEffect(() => {
     api
       .listApps()
       .then(setApps)
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    api
+      .getEffectiveSettings()
+      .then((s) => {
+        const root = s.allowed_roots[0]
+        if (!root) return
+        setBaseRoot(root)
+        // Swap the still-untouched default onto the real root once it loads.
+        setForm((f) =>
+          !editing && pristineDirs(DEFAULT_BASE_ROOT).includes(f.dir_template)
+            ? { ...f, dir_template: dirTemplateFor(root, f.app_type_scope) }
+            : f,
+        )
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const selectedApp = apps.find((a) => a.id === form.app_scope)
@@ -98,10 +121,10 @@ export default function RuleModal({
 
   useEffect(() => {
     api
-      .listPresets(serviceType)
+      .listPresets(serviceType, baseRoot)
       .then((r) => setPresets(r.presets))
       .catch(() => setPresets([]))
-  }, [serviceType])
+  }, [serviceType, baseRoot])
 
   useEffect(() => {
     if (representativeAppId === null) {
@@ -267,10 +290,8 @@ export default function RuleModal({
                   scope.app_type_scope) ||
                 null
               const dir =
-                !editing && PRISTINE_DIRS.includes(form.dir_template)
-                  ? nextType === 'sonarr'
-                    ? '/media/tv'
-                    : '/media/movies'
+                !editing && pristineDirs(baseRoot).includes(form.dir_template)
+                  ? dirTemplateFor(baseRoot, nextType)
                   : form.dir_template
               setForm({ ...form, ...scope, dir_template: dir })
             }}

@@ -505,6 +505,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
         title: it.title,
         year: it.year,
         tags: it.tags,
+        path: it.path,
         genres: it.genres,
         certification: it.certification,
         collection: it.collection,

@@ -46,6 +46,11 @@ class TemplateContext:
     src_basename: str
     src_stem: str
     src_ext: str
+    # basename of the item's own source directory (e.g. Radarr/Sonarr's
+    # "Aloha Scooby-Doo! (2005) [tmdbid-24615]") -- auto-appended as the
+    # final dir_path segment by resolve_destination, the dir-level
+    # equivalent of src_basename's filename fallback.
+    src_dirname: str
 
 
 def _clean(value: str) -> str:
@@ -161,6 +166,7 @@ def build_context(
     item_title: str,
     item_year: int | None,
     src_path: str,
+    item_path: str = "",
 ) -> TemplateContext:
     basename = os.path.basename(src_path)
     stem, ext = os.path.splitext(basename)
@@ -177,6 +183,7 @@ def build_context(
         src_basename=basename,
         src_stem=stem,
         src_ext=ext,
+        src_dirname=os.path.basename(item_path.rstrip("/\\")) if item_path else "",
     )
 
 
@@ -189,13 +196,22 @@ def resolve_destination(
     item_year: int | None,
     src_path: str,
     roots: list[str],
+    item_path: str = "",
 ) -> tuple[str, str]:
     """Resolve a rule + item + file to (dir_path, filename).
 
     Raises :class:`TemplateError` on any invalid template or jail violation.
     """
-    ctx = build_context(matched_conditions, app_name, item_title, item_year, src_path)
+    ctx = build_context(matched_conditions, app_name, item_title, item_year, src_path, item_path)
     dir_path = sanitize_dir_path(resolve_template(dir_template, ctx))
+    # The rule's dir_template expresses only the categorization prefix (e.g.
+    # ".../movies/{$genre}"); the item's own destination folder name is
+    # never hand-reconstructed -- it's always the source's own directory
+    # basename (Radarr/Sonarr's own naming, disambiguators like [tmdbid-...]
+    # included), appended automatically underneath, mirroring how a blank
+    # filename_template falls back to src_basename below.
+    if ctx.src_dirname:
+        dir_path = sanitize_dir_path(dir_path + "/" + ctx.src_dirname)
     check_jail(dir_path, roots)
 
     if filename_template:

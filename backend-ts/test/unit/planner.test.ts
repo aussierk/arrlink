@@ -55,6 +55,7 @@ describe('planLinks', () => {
         title: 'Inception',
         year: 2010,
         tags: ['4k', '## - alice'],
+        path: '',
         files: [
           { id: null, absPath: '/media/movies/Inception.2010.2160p.mkv', inode: null },
         ],
@@ -64,6 +65,7 @@ describe('planLinks', () => {
         title: 'Kids Movie',
         year: 2019,
         tags: ['kids'],
+        path: '',
         files: [
           {
             id: null,
@@ -106,6 +108,7 @@ describe('planLinks', () => {
         title: 'Kids Movie',
         year: 2019,
         tags: ['kids'],
+        path: '',
         files: [
           {
             id: null,
@@ -135,6 +138,7 @@ describe('planLinks', () => {
         title: 'T',
         year: null,
         tags: ['x'],
+        path: '',
         files: [{ id: null, absPath: '/m/t.mkv', inode: null }],
       },
     ]
@@ -156,6 +160,7 @@ describe('planLinks', () => {
         title: 'T',
         year: null,
         tags: ['x'],
+        path: '',
         files: [{ id: null, absPath: '/m/t.mkv', inode: null }],
       },
     ]
@@ -182,6 +187,7 @@ describe('planLinks', () => {
         title: 'T',
         year: null,
         tags: ['4k-hdr', '4k-sdr'],
+        path: '',
         files: [{ id: null, absPath: '/m/t.mkv', inode: null }],
       },
     ]
@@ -204,6 +210,7 @@ describe('planLinks', () => {
         title: 'T',
         year: null,
         tags: ['x'],
+        path: '',
         filesStale: true,
         files: [{ id: 5, absPath: '/m/t.mkv', inode: 999 }],
       },
@@ -233,6 +240,7 @@ describe('planLinks', () => {
         title: 'T',
         year: null,
         tags: ['x'],
+        path: '',
         files: [{ id: null, absPath: '/m/t.mkv', inode: null }],
       },
     ]

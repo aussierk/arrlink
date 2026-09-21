@@ -53,6 +53,7 @@ export interface PlannerItem {
   title: string
   year: number | null
   tags: string[]
+  path: string
   genres?: string[]
   certification?: string | null
   collection?: string | null
@@ -150,6 +151,7 @@ export function planLinks(
               item.year,
               src,
               roots,
+              item.path,
             ))
           } catch (e) {
             if (e instanceof TemplateError) {
