@@ -49,6 +49,7 @@ const ConditionInSchema = z
       'user',
       'genre',
       'language',
+      'audio_language',
       'quality',
       'certification',
       'collection',
@@ -67,7 +68,7 @@ const ConditionInSchema = z
         code: 'custom',
         message:
           `condition '${c.category}': native-metadata matching is only available ` +
-          'for genre/language/quality/certification/collection',
+          'for genre/language/audio_language/quality/certification/collection',
       })
     }
     if (c.match_type === 'regex') {
@@ -131,6 +132,11 @@ const RuleInSchema = z
     conditions: z.array(ConditionInSchema).min(1).max(8),
     dir_template: z.string().min(1).max(300),
     filename_template: z.string().max(300).nullable().default(null),
+    // "source" (default): the item's own source folder name is always
+    // appended under dir_template automatically. "custom": that append is
+    // skipped, and dir_template alone must resolve the full destination
+    // folder name (the pre-9b72b2d behavior).
+    dir_naming_mode: z.enum(['source', 'custom']).default('source'),
     enabled: z.boolean().default(true),
     unlink_on_mismatch: z.boolean().default(true),
     priority: z.number().int().min(1).max(1000).default(100),
@@ -267,6 +273,7 @@ function ruleOut(
     app_type_scope: row.appTypeScope,
     dir_template: row.dirTemplate,
     filename_template: row.filenameTemplate,
+    dir_naming_mode: row.dirNamingMode,
     enabled: Boolean(row.enabled),
     unlink_on_mismatch: Boolean(row.unlinkOnMismatch),
     priority: row.priority,
@@ -376,6 +383,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
         conditionsJson: JSON.stringify(body.conditions.map(conditionToInternal)),
         dirTemplate: body.dir_template,
         filenameTemplate: body.filename_template,
+        dirNamingMode: body.dir_naming_mode,
         enabled: body.enabled ? 1 : 0,
         unlinkOnMismatch: body.unlink_on_mismatch ? 1 : 0,
         priority: body.priority,
@@ -414,6 +422,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
         conditionsJson: JSON.stringify(body.conditions.map(conditionToInternal)),
         dirTemplate: body.dir_template,
         filenameTemplate: body.filename_template,
+        dirNamingMode: body.dir_naming_mode,
         enabled: body.enabled ? 1 : 0,
         unlinkOnMismatch: body.unlink_on_mismatch ? 1 : 0,
         priority: body.priority,
@@ -442,7 +451,9 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
       .where(eq(rulesTable.id, ruleId))
       .get()
     if (!existing) throw new HttpError(404, 'rule not found')
-    const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [...DEFAULT_ROOTS]
+    const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [
+      ...DEFAULT_ROOTS,
+    ]
     forceUnlinkRuleLinks(db, ruleId, roots)
     db.delete(rulesTable).where(eq(rulesTable.id, ruleId)).run()
     logEvent(db, 'info', `rule deleted: ${ruleId}`)
@@ -489,6 +500,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
       conditions: body.conditions.map(conditionToInternal),
       dirTemplate: body.dir_template,
       filenameTemplate: body.filename_template,
+      dirNamingMode: body.dir_naming_mode,
       enabled: true,
       priority: body.priority,
       appScope: body.app_scope,
@@ -511,6 +523,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
         collection: it.collection,
         qualityProfileName: it.qualityProfileName,
         originalLanguage: it.originalLanguage,
+        audioLanguages: it.audioLanguages,
         filesStale: it.filesStale,
         files: it.files.map((f) => ({
           id: f.id ?? null,

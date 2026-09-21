@@ -8,6 +8,20 @@
       "when": 1789762942498,
       "tag": "0000_keen_logan",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790019695381,
+      "tag": "0001_shocking_slyde",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790030483496,
+      "tag": "0002_lazy_photon",
+      "breakpoints": true
     }
   ]
 }

@@ -51,6 +51,7 @@ function presetOut(p: RenderedPreset): Record<string, unknown> {
     category: p.category,
     match_type: p.matchType,
     match_value: p.matchValue,
+    source: p.source,
     subpath: p.subpath,
     default_base_folder: p.defaultBaseFolder,
     base_folder: p.baseFolder,
@@ -142,10 +143,10 @@ export function registerPresetsRoutes(
       throw e
     }
 
-    const [matchType, matchValue] = preset.matchers[body.app_type]
+    const [matchType, matchValue, source] = preset.matchers[body.app_type]
     const name = body.name || `preset:${preset.key}`
     const conditionsJson = JSON.stringify([
-      { category: preset.category, matchType, matchValue, join: null },
+      { category: preset.category, matchType, matchValue, join: null, source },
     ])
     const res = db
       .insert(rulesTable)

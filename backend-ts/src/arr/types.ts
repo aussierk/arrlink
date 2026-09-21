@@ -55,6 +55,12 @@ export interface Item {
   qualityProfileId: number | null
   qualityProfileName: string | null
   originalLanguage: string | null
+  /** The downloaded file's own audio track language(s) -- distinct from
+   * originalLanguage (the title's production language): a foreign film with
+   * an English dub, or multiple audio tracks, means these can differ.
+   * undefined (not []) means "not refetched this poll" (Sonarr's delta-fetch
+   * skip) -- the poller keeps the last stored value instead of clearing it. */
+  audioLanguages?: string[]
   statsFingerprint?: string | null
   filesStale?: boolean
   /** app_items.id once stored -- distinct from `id` (the adapter's external

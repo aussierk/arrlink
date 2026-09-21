@@ -133,7 +133,7 @@ describe('resolveDestination dir auto-append', () => {
     expect(filename).toBe('Aloha Scooby-Doo!.mkv')
   })
 
-  it('leaves dirPath unchanged when no item path is given', () => {
+  it("skips the append when the caller passes no item path (a rule's opt-out to custom naming)", () => {
     const { dirPath } = resolveDestination(
       '/linked/movies/kids',
       null,

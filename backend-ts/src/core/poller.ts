@@ -84,6 +84,7 @@ function rowToPlannerRule(row: RuleRow): PlannerRule {
     conditions,
     dirTemplate: row.dirTemplate,
     filenameTemplate: row.filenameTemplate,
+    dirNamingMode: row.dirNamingMode === 'custom' ? 'custom' : 'source',
     enabled: Boolean(row.enabled),
     priority: row.priority,
   }
@@ -283,7 +284,14 @@ export class Poller {
 
     const stale =
       this.vocabStale('quality', appId, appType, 'instance', INSTANCE_VOCAB_STALE_S) ||
-      this.vocabStale('language', appId, appType, 'instance', INSTANCE_VOCAB_STALE_S)
+      this.vocabStale('language', appId, appType, 'instance', INSTANCE_VOCAB_STALE_S) ||
+      this.vocabStale(
+        'audio_language',
+        appId,
+        appType,
+        'instance',
+        INSTANCE_VOCAB_STALE_S,
+      )
     if (!stale) return
     try {
       const app = this.db.select().from(apps).where(eq(apps.id, appId)).get()
@@ -304,6 +312,19 @@ export class Poller {
       syncVocabularyRows(
         this.db,
         'language',
+        appType,
+        appId,
+        languages
+          .filter((l) => l.name)
+          .map((l): [string, string] => [l.name, String(l.id)]),
+        'instance',
+      )
+      // Same instance language list, offered as suggestions for audio_language
+      // too -- it's the same Radarr/Sonarr language taxonomy, just matched
+      // against the file's audio track instead of the title's production language.
+      syncVocabularyRows(
+        this.db,
+        'audio_language',
         appType,
         appId,
         languages
@@ -445,6 +466,17 @@ export class Poller {
     }
     const files = item.files
 
+    // audioLanguages undefined means the adapter didn't recompute it this poll
+    // (Sonarr's delta-fetch skip, same trigger as the files rehydration above)
+    // -- keep the last stored value instead of clearing it.
+    if (item.audioLanguages === undefined) {
+      item.audioLanguages =
+        existing !== undefined
+          ? (JSON.parse(existing.audioLanguagesJson || '[]') as string[])
+          : []
+    }
+    const audioLanguagesJson = JSON.stringify([...item.audioLanguages].sort())
+
     const statsFp = item.statsFingerprint ?? null
     let itemDbId: number
     if (existing === undefined) {
@@ -467,6 +499,7 @@ export class Poller {
           qualityProfileId: item.qualityProfileId,
           qualityProfileName: item.qualityProfileName,
           originalLanguage: item.originalLanguage,
+          audioLanguagesJson,
           statsFingerprint: statsFp,
         })
         .run()
@@ -486,6 +519,7 @@ export class Poller {
         existing.qualityProfileId !== item.qualityProfileId ||
         existing.qualityProfileName !== item.qualityProfileName ||
         existing.originalLanguage !== item.originalLanguage ||
+        existing.audioLanguagesJson !== audioLanguagesJson ||
         existing.statsFingerprint !== statsFp ||
         (existing.missingStrikes || 0) !== 0
       if (changed) {
@@ -505,6 +539,7 @@ export class Poller {
             qualityProfileId: item.qualityProfileId,
             qualityProfileName: item.qualityProfileName,
             originalLanguage: item.originalLanguage,
+            audioLanguagesJson,
             statsFingerprint: statsFp,
           })
           .where(eq(appItems.id, itemDbId))
@@ -677,6 +712,7 @@ export class Poller {
       collection: it.collection,
       qualityProfileName: it.qualityProfileName,
       originalLanguage: it.originalLanguage,
+      audioLanguages: it.audioLanguages,
       filesStale: it.filesStale,
       files: it.files.map((f) => ({
         id: f.id ?? null,

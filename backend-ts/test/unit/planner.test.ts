@@ -219,6 +219,64 @@ describe('planLinks', () => {
     expect(planned[0].srcInode).toBeNull()
   })
 
+  it('dirNamingMode "custom" opts a rule out of the auto-appended source folder name', () => {
+    const items: PlannerItem[] = [
+      {
+        id: 1,
+        title: 'Kids Movie',
+        year: 2019,
+        tags: ['kids'],
+        path: '/media/movies/Kids Movie (2019) [tmdbid-1]',
+        files: [
+          {
+            id: null,
+            absPath: '/media/movies/Kids Movie (2019) [tmdbid-1]/Kids Movie.2019.mkv',
+            inode: null,
+          },
+        ],
+      },
+    ]
+    const baseRule: Partial<PlannerRule> = {
+      dirTemplate: '/linked/movies/kids',
+      conditions: [
+        { category: 'custom', matchType: 'exact', matchValue: 'kids', join: null },
+      ],
+    }
+
+    const sourceMode = planLinks(
+      [rule({ ...baseRule, dirNamingMode: 'source' })],
+      items,
+      'Radarr',
+      1,
+      ['/linked'],
+    )
+    expect(sourceMode.planned[0].dstPath).toBe(
+      P(
+        '',
+        'linked',
+        'movies',
+        'kids',
+        'Kids Movie (2019) [tmdbid-1]',
+        'Kids Movie.2019.mkv',
+      ),
+    )
+
+    const customMode = planLinks(
+      [rule({ ...baseRule, dirNamingMode: 'custom' })],
+      items,
+      'Radarr',
+      1,
+      ['/linked'],
+    )
+    expect(customMode.planned[0].dstPath).toBe(
+      P('', 'linked', 'movies', 'kids', 'Kids Movie.2019.mkv'),
+    )
+
+    // absent dirNamingMode defaults to "source", same as sourceMode above
+    const defaulted = planLinks([rule(baseRule)], items, 'Radarr', 1, ['/linked'])
+    expect(defaulted.planned[0].dstPath).toBe(sourceMode.planned[0].dstPath)
+  })
+
   it('sorts active rules by priority then id', () => {
     const rules: PlannerRule[] = [
       rule({

@@ -44,6 +44,7 @@ interface RadarrMovie {
   certification?: string
   qualityProfileId?: number
   originalLanguage?: { name: string }
+  audioLanguages?: string[]
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -76,7 +77,16 @@ function mockRadarr(movies: RadarrMovie[]): void {
             title: m.title,
             year: m.year,
             tags: m.tags,
-            movieFile: m.moviePath ? { path: m.moviePath, size: 12 } : null,
+            movieFile: m.moviePath
+              ? {
+                  path: m.moviePath,
+                  size: 12,
+                  languages: (m.audioLanguages ?? []).map((name, i) => ({
+                    id: i + 1,
+                    name,
+                  })),
+                }
+              : null,
             genres: m.genres ?? [],
             certification: m.certification ?? null,
             collection: null,
@@ -194,6 +204,31 @@ describe('Poller.rescan', () => {
     const appRow = db.select().from(apps).where(eq(apps.id, appId)).get()
     expect(appRow?.itemCount).toBe(1)
     expect(appRow?.lastError).toBeNull()
+  })
+
+  it("stores the file's own audio language(s), distinct from originalLanguage", async () => {
+    const src = movieFile('movie1.mkv')
+    mockRadarr([
+      {
+        id: 1,
+        title: 'Movie1',
+        year: 2020,
+        tags: [1],
+        moviePath: src,
+        originalLanguage: { name: 'Spanish' },
+        audioLanguages: ['English', 'Spanish'],
+      },
+    ])
+
+    const poller = new Poller(db, settings)
+    await poller.rescan(appId)
+
+    const itemRow = db.select().from(appItems).where(eq(appItems.appId, appId)).get()
+    expect(itemRow?.originalLanguage).toBe('Spanish')
+    expect(JSON.parse(itemRow?.audioLanguagesJson ?? '[]')).toEqual([
+      'English',
+      'Spanish',
+    ])
   })
 
   it('hardlinks correctly when the external item id differs from app_items.id', async () => {

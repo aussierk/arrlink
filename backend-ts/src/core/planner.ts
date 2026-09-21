@@ -37,6 +37,11 @@ export interface PlannerRule {
   conditions: Condition[]
   dirTemplate: string
   filenameTemplate: string | null
+  // "source" (default, and assumed when absent): the item's own source
+  // folder name is always appended under dirTemplate automatically.
+  // "custom": that append is skipped -- dirTemplate alone must resolve the
+  // full destination folder name (the pre-9b72b2d behavior).
+  dirNamingMode?: 'source' | 'custom'
   enabled: boolean
   priority: number
 }
@@ -59,6 +64,8 @@ export interface PlannerItem {
   collection?: string | null
   qualityProfileName?: string | null
   originalLanguage?: string | null
+  /** The downloaded file's own audio track(s) -- see arr/types.ts's Item.audioLanguages. */
+  audioLanguages?: string[]
   filesStale?: boolean
   files: PlannerFile[]
 }
@@ -89,6 +96,7 @@ function nativeValues(it: PlannerItem): Record<string, string[]> {
     collection: it.collection ? [it.collection] : [],
     quality: it.qualityProfileName ? [it.qualityProfileName] : [],
     language: it.originalLanguage ? [it.originalLanguage] : [],
+    audio_language: it.audioLanguages ?? [],
   }
 }
 
@@ -130,6 +138,8 @@ export function planLinks(
       const cr = matchConditions(rule.conditions, tags, native)
       if (!cr.result) continue
       const variants = fanoutVariants(cr)
+      // "custom" opts a rule out of the auto-appended source folder name.
+      const itemPath = (rule.dirNamingMode ?? 'source') === 'source' ? item.path : ''
 
       for (const f of files) {
         const src = f.absPath
@@ -151,7 +161,7 @@ export function planLinks(
               item.year,
               src,
               roots,
-              item.path,
+              itemPath,
             ))
           } catch (e) {
             if (e instanceof TemplateError) {

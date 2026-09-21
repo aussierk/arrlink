@@ -14,6 +14,7 @@ import {
 interface RadarrMovieFile {
   path?: string
   size?: number
+  languages?: Array<{ id?: number; name?: string }>
 }
 
 interface RadarrMovieRow {
@@ -103,6 +104,13 @@ export class RadarrAdapter extends BaseAdapter {
       const qpId = toNumberOrNull(row.qualityProfileId)
       const qpName = qpId !== null ? (profileById.get(qpId) ?? null) : null
       const originalLanguage = row.originalLanguage?.name?.trim() || null
+      // movieFile.languages is the file's own audio track(s), always present
+      // alongside movieFile.path/size in the same /movie payload -- no extra call.
+      const audioLanguages = (
+        Array.isArray(movieFile.languages) ? movieFile.languages : []
+      )
+        .map((l) => l?.name?.trim())
+        .filter((n): n is string => Boolean(n))
       const apiSize = toNumberOrNull(movieFile.size)
 
       const itemDir = dirname(path)
@@ -141,6 +149,7 @@ export class RadarrAdapter extends BaseAdapter {
         qualityProfileId: qpId,
         qualityProfileName: qpName,
         originalLanguage,
+        audioLanguages,
       })
     }
     return items

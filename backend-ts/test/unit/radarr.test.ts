@@ -20,7 +20,11 @@ const MOVIES = [
     title: 'Inception',
     year: 2010,
     tags: [3, 2], // 4k, ## - alice
-    movieFile: { path: '/media/movies/Inception.2010.2160p.mkv', size: 12345 },
+    movieFile: {
+      path: '/media/movies/Inception.2010.2160p.mkv',
+      size: 12345,
+      languages: [{ id: 1, name: 'English' }],
+    },
   },
   {
     id: 2,
@@ -116,6 +120,9 @@ describe('RadarrAdapter.fetchItems normalization', () => {
     expect(inception.files[0].size).toBe(12345)
     expect(inception.files[0].mtime).toBeNull()
     expect(inception.files[0].inode).toBeNull()
+    // movieFile.languages -- the file's own audio track(s), distinct from
+    // originalLanguage (the title's production language).
+    expect(inception.audioLanguages).toEqual(['English'])
 
     const kids = items[1]
     expect(kids.path).toBe('/media/movies/Kids Movie')

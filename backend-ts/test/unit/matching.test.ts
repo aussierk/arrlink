@@ -173,6 +173,43 @@ describe('matchConditions', () => {
     expect(tag.result).toBe(false)
   })
 
+  it('treats audio_language as a distinct native category from language', () => {
+    // A foreign-language film with an English dub: originalLanguage stays
+    // "Spanish" (production language), but the file's own audio track is
+    // "English" -- the two categories must not be conflated.
+    const native = { language: ['Spanish'], audio_language: ['English'] }
+
+    const matchesFileLanguage = matchConditions(
+      [
+        {
+          category: 'audio_language',
+          matchType: 'exact',
+          matchValue: 'English',
+          join: null,
+          source: 'native',
+        },
+      ],
+      [],
+      native,
+    )
+    expect(matchesFileLanguage.result).toBe(true)
+
+    const missesOriginalLanguage = matchConditions(
+      [
+        {
+          category: 'language',
+          matchType: 'exact',
+          matchValue: 'English',
+          join: null,
+          source: 'native',
+        },
+      ],
+      [],
+      native,
+    )
+    expect(missesOriginalLanguage.result).toBe(false)
+  })
+
   it('records every matching tag for a category, not just the first (fan-out source)', () => {
     const r = matchConditions(
       [{ category: 'custom', matchType: 'regex', matchValue: '^4k', join: null }],

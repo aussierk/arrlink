@@ -18,6 +18,7 @@ export const RICH_CATEGORIES = new Set([
   'collection',
   'quality',
   'language',
+  'audio_language',
 ])
 
 function isRecord(v: unknown): v is Record<string, unknown> {

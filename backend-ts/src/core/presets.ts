@@ -12,7 +12,13 @@ export interface Preset {
   name: string
   description: string
   category: string
-  matchers: Record<string, [matchType: string, matchValue: string]>
+  // source is null ("tag", the default) or 'native' -- see
+  // core/matching.ts's Condition and RICH_CATEGORIES in core/vocabulary.ts
+  // for what "native" means and which categories support it.
+  matchers: Record<
+    string,
+    [matchType: string, matchValue: string, source: 'native' | null]
+  >
   /** Appended to the base folder; may contain {$...} placeholders. */
   subpath: string
 }
@@ -24,8 +30,8 @@ export const PRESETS: Preset[] = [
     description: "One subfolder per user, from '2 - alice' style tags.",
     category: 'user',
     matchers: {
-      radarr: ['regex', '^\\d+\\s*-\\s*(?P<user>.+)$'],
-      sonarr: ['regex', '^\\d+\\s*-\\s*(?P<user>.+)$'],
+      radarr: ['regex', '^\\d+\\s*-\\s*(?P<user>.+)$', null],
+      sonarr: ['regex', '^\\d+\\s*-\\s*(?P<user>.+)$', null],
     },
     subpath: '/{$user}',
   },
@@ -35,8 +41,8 @@ export const PRESETS: Preset[] = [
     description: 'One subfolder per rating, directly under the base folder.',
     category: 'certification',
     matchers: {
-      radarr: ['regex', '^(G|PG|PG-13|R|NC-17)$'],
-      sonarr: ['regex', '^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$'],
+      radarr: ['regex', '^(G|PG|PG-13|R|NC-17)$', null],
+      sonarr: ['regex', '^(TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)$', null],
     },
     subpath: '/{$certification}',
   },
@@ -46,8 +52,8 @@ export const PRESETS: Preset[] = [
     description: 'Everything kids-related into a single kids folder.',
     category: 'custom',
     matchers: {
-      radarr: ['list', 'kids,children,family,G,PG'],
-      sonarr: ['list', 'kids,family,TV-Y,TV-Y7,TV-G,TV-PG'],
+      radarr: ['list', 'kids,children,family,G,PG', null],
+      sonarr: ['list', 'kids,family,TV-Y,TV-Y7,TV-G,TV-PG', null],
     },
     subpath: '/kids',
   },
@@ -57,8 +63,8 @@ export const PRESETS: Preset[] = [
     description: 'High-res / HDR content into a 4k folder.',
     category: 'quality',
     matchers: {
-      radarr: ['list', '4k,uhd,2160p,hdr,dolby'],
-      sonarr: ['list', '4k,uhd,2160p,hdr,dolby'],
+      radarr: ['list', '4k,uhd,2160p,hdr,dolby', null],
+      sonarr: ['list', '4k,uhd,2160p,hdr,dolby', null],
     },
     subpath: '/4k',
   },
@@ -68,42 +74,38 @@ export const PRESETS: Preset[] = [
     description: 'Full-HD content into a 1080p folder.',
     category: 'quality',
     matchers: {
-      radarr: ['list', '1080p,fhd,1080,high'],
-      sonarr: ['list', '1080p,fhd,1080,high'],
+      radarr: ['list', '1080p,fhd,1080,high', null],
+      sonarr: ['list', '1080p,fhd,1080,high', null],
     },
     subpath: '/1080p',
   },
   {
     key: 'genre',
     name: 'Genre',
-    description: 'One subfolder per genre. Pick the genres you want.',
+    description: "One subfolder per genre, from Radarr/Sonarr's own genre metadata.",
     category: 'genre',
+    // Native metadata, not tags: a hardcoded tag list can't enumerate every
+    // genre a library will ever have, and most libraries don't carry
+    // genre-named tags at all. A catch-all regex against the item's real
+    // genres is complete by construction and fans out via the planner's
+    // existing multi-genre variant handling.
     matchers: {
-      radarr: [
-        'list',
-        'action,adventure,animation,comedy,crime,drama,documentary,family,horror,mystery,romance,sci-fi,thriller,western',
-      ],
-      sonarr: [
-        'list',
-        'action,adventure,animation,comedy,crime,drama,documentary,family,horror,mystery,romance,sci-fi,thriller,western',
-      ],
+      radarr: ['regex', '.+', 'native'],
+      sonarr: ['regex', '.+', 'native'],
     },
     subpath: '/{$genre}',
   },
   {
     key: 'language',
     name: 'Language',
-    description: 'One subfolder per language. Pick the languages you want.',
+    description:
+      "One subfolder per language, from Radarr/Sonarr's own language metadata.",
     category: 'language',
+    // Same rationale as "genre" above: native metadata via a catch-all
+    // regex instead of an enumerated tag list.
     matchers: {
-      radarr: [
-        'list',
-        'english,spanish,french,german,japanese,korean,italian,chinese,hindi,portuguese,dutch,russian',
-      ],
-      sonarr: [
-        'list',
-        'english,spanish,french,german,japanese,korean,italian,chinese,hindi,portuguese,dutch,russian',
-      ],
+      radarr: ['regex', '.+', 'native'],
+      sonarr: ['regex', '.+', 'native'],
     },
     subpath: '/{$language}',
   },
@@ -128,6 +130,7 @@ export interface RenderedPreset {
   category: string
   matchType: string
   matchValue: string
+  source: 'native' | null
   subpath: string
   defaultBaseFolder?: string
   baseFolder?: string
@@ -139,7 +142,7 @@ export interface RenderedPreset {
 export function listPresetsForType(appType: string, base?: string): RenderedPreset[] {
   const b = base || defaultBaseFolder(appType)
   return PRESETS.map((p) => {
-    const [matchType, matchValue] = p.matchers[appType]
+    const [matchType, matchValue, source] = p.matchers[appType]
     return {
       key: p.key,
       name: p.name,
@@ -147,6 +150,7 @@ export function listPresetsForType(appType: string, base?: string): RenderedPres
       category: p.category,
       matchType,
       matchValue,
+      source,
       subpath: p.subpath,
       defaultBaseFolder: defaultBaseFolder(appType),
       dirTemplate: dirTemplate(b, p.subpath),
@@ -163,13 +167,14 @@ export function renderPreset(
   const p = getPreset(key)
   if (!p) return undefined
   const b = base || defaultBaseFolder(appType)
-  const [matchType, matchValue] = p.matchers[appType]
+  const [matchType, matchValue, source] = p.matchers[appType]
   return {
     key: p.key,
     name: p.name,
     category: p.category,
     matchType,
     matchValue,
+    source,
     subpath: p.subpath,
     baseFolder: b,
     dirTemplate: dirTemplate(b, p.subpath),

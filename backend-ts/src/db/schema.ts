@@ -51,26 +51,40 @@ export const tags = sqliteTable(
     appIdLabelUnique: uniqueIndex('tags_app_id_label_unique').on(t.appId, t.label),
     categoryCheck: check(
       'tags_category_check',
-      sql`${t.category} IS NULL OR ${t.category} IN ('genre','certification','collection','quality','language','user','custom')`,
+      sql`${t.category} IS NULL OR ${t.category} IN ('genre','certification','collection','quality','language','audio_language','user','custom')`,
     ),
   }),
 )
 
-export const rules = sqliteTable('rules', {
-  id: int('id').primaryKey({ autoIncrement: true }),
-  name: text('name').notNull(),
-  appScope: int('app_scope').references(() => apps.id, { onDelete: 'set null' }),
-  appTypeScope: text('app_type_scope'),
-  conditionsJson: text('conditions_json').notNull().default('[]'),
-  dirTemplate: text('dir_template').notNull(),
-  filenameTemplate: text('filename_template'),
-  enabled: int('enabled').notNull().default(1),
-  unlinkOnMismatch: int('unlink_on_mismatch').notNull().default(1),
-  priority: int('priority').notNull().default(100),
-  createdAt: real('created_at')
-    .notNull()
-    .default(sql`(strftime('%s','now'))`),
-})
+export const rules = sqliteTable(
+  'rules',
+  {
+    id: int('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    appScope: int('app_scope').references(() => apps.id, { onDelete: 'set null' }),
+    appTypeScope: text('app_type_scope'),
+    conditionsJson: text('conditions_json').notNull().default('[]'),
+    dirTemplate: text('dir_template').notNull(),
+    filenameTemplate: text('filename_template'),
+    // "source" (default): the item's own source folder name is always
+    // appended under dirTemplate automatically. "custom": that append is
+    // skipped, and dirTemplate alone must resolve the full destination
+    // folder name (the pre-9b72b2d behavior).
+    dirNamingMode: text('dir_naming_mode').notNull().default('source'),
+    enabled: int('enabled').notNull().default(1),
+    unlinkOnMismatch: int('unlink_on_mismatch').notNull().default(1),
+    priority: int('priority').notNull().default(100),
+    createdAt: real('created_at')
+      .notNull()
+      .default(sql`(strftime('%s','now'))`),
+  },
+  (t) => ({
+    dirNamingModeCheck: check(
+      'rules_dir_naming_mode_check',
+      sql`${t.dirNamingMode} IN ('source', 'custom')`,
+    ),
+  }),
+)
 
 export const appItems = sqliteTable(
   'app_items',
@@ -94,6 +108,9 @@ export const appItems = sqliteTable(
     qualityProfileId: int('quality_profile_id'),
     qualityProfileName: text('quality_profile_name'),
     originalLanguage: text('original_language'),
+    // The downloaded file's own audio track(s), distinct from originalLanguage
+    // (the title's production language) -- see arr/types.ts's Item.audioLanguages.
+    audioLanguagesJson: text('audio_languages_json').notNull().default('[]'),
     statsFingerprint: text('stats_fingerprint'),
   },
   (t) => ({
@@ -222,7 +239,7 @@ export const vocabulary = sqliteTable(
     // migration SQL -- Drizzle's schema DSL can't express expression indexes.
     categoryCheck: check(
       'vocabulary_category_check',
-      sql`${t.category} IN ('genre','certification','collection','quality','language')`,
+      sql`${t.category} IN ('genre','certification','collection','quality','language','audio_language')`,
     ),
     appTypeCheck: check(
       'vocabulary_app_type_check',

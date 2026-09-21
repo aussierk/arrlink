@@ -32,6 +32,7 @@ interface SonarrSeriesRow {
 interface SonarrEpisodeFileRow {
   path?: string
   size?: number
+  languages?: Array<{ id?: number; name?: string }>
 }
 
 interface SeriesMeta {
@@ -167,13 +168,16 @@ export class SonarrAdapter extends BaseAdapter {
     const fetchedEntries = await mapWithConcurrency(
       toFetch,
       FILE_FETCH_CONCURRENCY,
-      async (sid): Promise<[number, MediaFile[]]> => {
+      async (
+        sid,
+      ): Promise<[number, { files: MediaFile[]; audioLanguages: string[] }]> => {
         const data = await this.getJson(`/api/v3/episodefile?seriesId=${sid}`)
         if (!Array.isArray(data)) {
           throw new AdapterError(`unexpected episodefile payload for series ${sid}`)
         }
         const seriesPath = meta.get(sid)!.path
-        const specs = (data as SonarrEpisodeFileRow[])
+        const rows = data as SonarrEpisodeFileRow[]
+        const specs = rows
           .filter((f) => f && typeof f === 'object' && f.path)
           .map((f) => ({ path: String(f.path), size: f.size }))
 
@@ -182,7 +186,18 @@ export class SonarrAdapter extends BaseAdapter {
         const files = specs.map((s) =>
           statFile(s.path, seriesPath, s.size, stats.get(s.path)),
         )
-        return [sid, files]
+        // Union of every episode file's audio track(s) -- a series' episodes
+        // aren't guaranteed to share one dub/language mix.
+        const audioLanguages = [
+          ...new Set(
+            rows.flatMap((f) =>
+              (Array.isArray(f.languages) ? f.languages : [])
+                .map((l) => l?.name?.trim())
+                .filter((n): n is string => Boolean(n)),
+            ),
+          ),
+        ]
+        return [sid, { files, audioLanguages }]
       },
     )
     const fetched = new Map(fetchedEntries)
@@ -204,11 +219,11 @@ export class SonarrAdapter extends BaseAdapter {
         statsFingerprint: m.statsFingerprint,
       }
       if (fetched.has(sid)) {
-        const itemFiles = fetched.get(sid)!
+        const { files: itemFiles, audioLanguages } = fetched.get(sid)!
         if (itemFiles.length === 0) continue // series with no files on disk
-        items.push({ ...common, files: itemFiles, filesStale: false })
+        items.push({ ...common, files: itemFiles, audioLanguages, filesStale: false })
       } else {
-        // unchanged -- poller rehydrates files from stored app_files rows.
+        // unchanged -- poller rehydrates files (and audioLanguages) from stored rows.
         items.push({ ...common, files: [], filesStale: true })
       }
     }

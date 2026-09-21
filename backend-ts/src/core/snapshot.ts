@@ -43,6 +43,7 @@ export function snapshotItems(db: DbClient, appId: number): Item[] {
     qualityProfileId: r.qualityProfileId,
     qualityProfileName: r.qualityProfileName,
     originalLanguage: r.originalLanguage,
+    audioLanguages: JSON.parse(r.audioLanguagesJson || '[]') as string[],
     dbId: r.id,
   }))
 }

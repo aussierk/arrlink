@@ -11,6 +11,7 @@ const VERSION = '4.0.12.3001'
 interface SeriesFile {
   path: string
   size: number
+  languages?: string[]
 }
 
 interface Series {
@@ -53,12 +54,17 @@ class Tv {
     return s
   }
 
-  addEpisode(seriesIndex: number, relPath: string, data = 'episode data'): void {
+  addEpisode(
+    seriesIndex: number,
+    relPath: string,
+    data = 'episode data',
+    languages?: string[],
+  ): void {
     const s = this.series[seriesIndex]
     const full = join(s.path, relPath)
     mkdirSync(join(full, '..'), { recursive: true })
     writeFileSync(full, data)
-    s.files.push({ path: full, size: statSync(full).size })
+    s.files.push({ path: full, size: statSync(full).size, languages })
   }
 
   setSeriesTags(index: number, labels: string[]): void {
@@ -87,7 +93,12 @@ class Tv {
   filesBySeries(seriesId: number): unknown[] {
     const s = this.series.find((x) => x.id === seriesId)
     if (!s) return []
-    return s.files.map((f, i) => ({ id: i + 1, path: f.path, size: f.size }))
+    return s.files.map((f, i) => ({
+      id: i + 1,
+      path: f.path,
+      size: f.size,
+      languages: f.languages?.map((name, li) => ({ id: li + 1, name })),
+    }))
   }
 
   tagPayload(): unknown[] {
@@ -198,6 +209,33 @@ describe('SonarrAdapter.fetchItems normalization', () => {
     const family = items.find((i) => i.id === 2)!
     expect(new Set(family.tags)).toEqual(new Set(['kids']))
     expect(family.files[0].relPath).toBe('Family Show - S01E01 - Start.mkv')
+  })
+
+  it("unions episode files' own audio languages, distinct from originalLanguage", async () => {
+    tv.series[0].files = [] // The Show, re-added below with per-episode languages
+    tv.addEpisode(0, 'The Show - S01E01 - Pilot.mkv', 'pilot data', ['English'])
+    tv.addEpisode(0, 'The Show - S01E02 - Second.mkv', 'second data', [
+      'English',
+      'Spanish',
+    ])
+    stubSonarr(tv)
+    const items = await new SonarrAdapter(mediaOrigin(), API_KEY, 5000).fetchItems()
+    const show = items.find((i) => i.id === 1)!
+    expect(new Set(show.audioLanguages)).toEqual(new Set(['English', 'Spanish']))
+  })
+
+  it('leaves audioLanguages undefined (not []) when the delta-fetch skips episodefile', async () => {
+    tv.series[0].files = []
+    tv.addEpisode(0, 'The Show - S01E01 - Pilot.mkv', 'pilot data', ['English'])
+    stubSonarr(tv)
+    const adapter = new SonarrAdapter(mediaOrigin(), API_KEY, 5000)
+    const first = await adapter.fetchItems()
+    const known = new Map(first.map((i) => [i.id, i.statsFingerprint!]))
+
+    const second = await adapter.fetchItems(known)
+    const show = second.find((i) => i.id === 1)!
+    expect(show.filesStale).toBe(true)
+    expect(show.audioLanguages).toBeUndefined()
   })
 
   it('drops an unknown tag id instead of leaking it as a literal string', async () => {
