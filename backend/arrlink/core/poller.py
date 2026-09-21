@@ -394,6 +394,9 @@ class Poller:
                         ),
                     )
 
+            # backfill so the planner writes links.item_id as the FK, not the external id
+            item.db_id = item_db_id
+
             # --- files: match by rel_path, else by inode (rename) ---------
             by_relpath = {fr["rel_path"]: fr for fr in existing_files}
             by_inode = {fr["inode"]: fr for fr in existing_files if fr["inode"] is not None}

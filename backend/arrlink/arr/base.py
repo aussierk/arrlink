@@ -130,6 +130,11 @@ class Item:
     original_language: str | None = None
     stats_fingerprint: str | None = None
     files_stale: bool = False
+    # app_items.id once stored -- distinct from `id` (the adapter's external
+    # item id). Backfilled by poller.py's _store_items_locked, same pattern as
+    # MediaFile.id, and is what the planner must use for links.item_id (an FK
+    # to app_items.id, not to the external id).
+    db_id: int | None = None
 
 
 class BaseAdapter(abc.ABC):

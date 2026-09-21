@@ -42,14 +42,14 @@ class Media:
             self._next_tag_id += 1
         return self._tag_ids[label]
 
-    def add(self, path, title, year, tags):
+    def add(self, path, title, year, tags, movie_id=None):
         full = os.path.join(self.media_dir, path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, "wb") as f:
             f.write(f"{title} data".encode())
         self.movies.append(
             {
-                "id": len(self.movies) + 1,
+                "id": movie_id if movie_id is not None else len(self.movies) + 1,
                 "title": title,
                 "year": year,
                 "tags": [self.tag_id(t) for t in tags],
@@ -219,6 +219,29 @@ def test_import_creates_hardlinks(client, radarr_media):
     # dashboard summary
     s = client.get("/api/apps/summary").json()
     assert s["active_links"] == 2
+
+
+def test_hardlinks_when_external_item_id_differs_from_internal_row_id(client, radarr_media):
+    """Regression: links.item_id is an FK to app_items.id (internal), not the
+    adapter's external item id. A real Radarr library almost never has ids
+    starting contiguously at 1 in lockstep with app_items, so this uses a
+    non-trivial external id -- otherwise the test would pass even with the
+    bug, since the first-ever item in a fresh DB happens to get internal id 1
+    too."""
+    origin, media = radarr_media
+    media.movies.clear()
+    media.add("Standalone.2021.mkv", "Standalone", 2021, ["kids"], movie_id=1001)
+    app_id = _add_app(client, origin)
+    _make_rule(client, "kids", "kids", f"{media.linked_dir}/kids")
+
+    result = _poll(client, app_id)
+    assert result["ok"] is True
+
+    dst = f"{media.linked_dir}/kids/Standalone.2021.mkv"
+    assert os.path.exists(dst)
+
+    links = client.get("/api/links?status=active").json()["items"]
+    assert len(links) == 1
 
 
 # ---------------------------------------------------------------------------

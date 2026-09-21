@@ -43,5 +43,6 @@ export function snapshotItems(db: DbClient, appId: number): Item[] {
     qualityProfileId: r.qualityProfileId,
     qualityProfileName: r.qualityProfileName,
     originalLanguage: r.originalLanguage,
+    dbId: r.id,
   }))
 }

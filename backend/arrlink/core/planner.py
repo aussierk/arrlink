@@ -121,7 +121,12 @@ def plan_links(
     errors: list[PlanError] = []
     for item in items:
         it = _as_dict(item)
-        item_id = it["id"]
+        # links.item_id is an FK to app_items.id, not the adapter's external
+        # item id -- _store_items_locked() (called earlier in poll_once)
+        # backfills db_id onto every item reconcile_app() sees. Fall back to
+        # "id" for callers that plan against ad hoc items with no DB row yet
+        # (unit tests, dry-run preview) -- those never persist a PlannedLink.
+        item_id = it.get("db_id") if it.get("db_id") is not None else it["id"]
         title = it.get("title") or ""
         year = it.get("year")
         tags = it.get("tags") or []
