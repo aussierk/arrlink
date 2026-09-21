@@ -7,7 +7,7 @@ import json
 import re
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 
 from ..arr.base import AdapterError
@@ -177,6 +177,43 @@ def _rule_out(row) -> dict:
     return d
 
 
+def _scope_app_ids(app_scope: int | None, app_type_scope: str | None, db: State) -> list[int]:
+    """Enabled app ids a rule with this scope covers -- the same set the
+    poller itself would match via _rule_applies_to_app()."""
+    if app_scope is not None:
+        row = db.query_one("SELECT id FROM apps WHERE id=? AND enabled=1", (app_scope,))
+        return [row["id"]] if row else []
+    if app_type_scope is not None:
+        rows = db.query("SELECT id FROM apps WHERE type=? AND enabled=1", (app_type_scope,))
+    else:
+        rows = db.query("SELECT id FROM apps WHERE enabled=1")
+    return [r["id"] for r in rows]
+
+
+async def _rescan_apps(poller, app_ids: list[int]) -> None:
+    """Runs sequentially (not gathered), so an unscoped rule across many
+    configured apps doesn't fire a rescan burst all at once. poll_once()
+    already logs a warn event with any failure detail -- nothing further to
+    do with the result here."""
+    for app_id in dict.fromkeys(app_ids):  # de-dup, preserve order
+        await poller.rescan(app_id)
+
+
+def _trigger_rescan(
+    request: Request, background_tasks: BackgroundTasks, app_ids: list[int]
+) -> None:
+    """Saving/deleting a rule should apply immediately rather than silently
+    waiting for the next scheduled poll (or a user separately finding the
+    Rescan button) -- but a rescan is a real network round-trip per app, so
+    it must run as a FastAPI background task (after the response is sent)
+    rather than block the save/delete or fail it over an unrelated adapter
+    error."""
+    poller = getattr(request.app.state, "poller", None)
+    if poller is None or not app_ids:
+        return
+    background_tasks.add_task(_rescan_apps, poller, app_ids)
+
+
 def _check_dir_template_jail(db: State, dir_template: str) -> None:
     """Reject a dir_template whose static (non-placeholder) part already
     escapes the allowed roots -- the same conservative check /preview and
@@ -213,7 +250,13 @@ def get_rule(rule_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> d
 
 
 @router.post("", status_code=201)
-def create_rule(body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
+def create_rule(
+    body: RuleIn,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _user: CurrentUser,
+    db: State = Depends(get_db),
+) -> dict:
     if body.app_scope is not None and not db.query_one(
         "SELECT id FROM apps WHERE id=?", (body.app_scope,)
     ):
@@ -239,6 +282,9 @@ def create_rule(body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)) -
     db.log_event("info", f"rule added: {body.name}", rule_id=cur.lastrowid)
     out = _rule_out(db.query_one("SELECT * FROM rules WHERE id=?", (cur.lastrowid,)))
     out["vocabulary_warnings"] = _vocabulary_warnings(body, db)
+    _trigger_rescan(
+        request, background_tasks, _scope_app_ids(body.app_scope, body.app_type_scope, db)
+    )
     return out
 
 
@@ -246,10 +292,15 @@ def create_rule(body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)) -
 def update_rule(
     rule_id: int,
     body: RuleIn,
+    request: Request,
+    background_tasks: BackgroundTasks,
     _user: CurrentUser,
     db: State = Depends(get_db),
 ) -> dict:
-    if not db.query_one("SELECT id FROM rules WHERE id=?", (rule_id,)):
+    existing = db.query_one(
+        "SELECT app_scope, app_type_scope FROM rules WHERE id=?", (rule_id,)
+    )
+    if not existing:
         raise HTTPException(404, "rule not found")
     if body.app_scope is not None and not db.query_one(
         "SELECT id FROM apps WHERE id=?", (body.app_scope,)
@@ -276,16 +327,43 @@ def update_rule(
     db.commit()
     out = _rule_out(db.query_one("SELECT * FROM rules WHERE id=?", (rule_id,)))
     out["vocabulary_warnings"] = _vocabulary_warnings(body, db)
+    # Rescan the new scope, plus the old scope if it narrowed/moved -- e.g. a
+    # rule that used to apply to all apps and now only applies to one still
+    # needs the other apps rescanned so their now-stale links retire promptly.
+    _trigger_rescan(
+        request,
+        background_tasks,
+        [
+            *_scope_app_ids(body.app_scope, body.app_type_scope, db),
+            *_scope_app_ids(existing["app_scope"], existing["app_type_scope"], db),
+        ],
+    )
     return out
 
 
 @router.delete("/{rule_id}", status_code=204)
-def delete_rule(rule_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> None:
+def delete_rule(
+    rule_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _user: CurrentUser,
+    db: State = Depends(get_db),
+) -> None:
+    existing = db.query_one(
+        "SELECT app_scope, app_type_scope FROM rules WHERE id=?", (rule_id,)
+    )
     cur = db.execute("DELETE FROM rules WHERE id=?", (rule_id,))
     db.commit()
     if cur.rowcount == 0:
         raise HTTPException(404, "rule not found")
     db.log_event("info", f"rule deleted: {rule_id}")
+    # So the deleted rule's links retire promptly instead of waiting for the
+    # next natural poll.
+    _trigger_rescan(
+        request,
+        background_tasks,
+        _scope_app_ids(existing["app_scope"], existing["app_type_scope"], db),
+    )
 
 
 @router.post("/vocabulary-check")

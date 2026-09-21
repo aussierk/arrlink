@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..core import presets as presets_core
@@ -13,6 +13,7 @@ from ..core.template import DEFAULT_ROOTS, check_jail
 from ..deps import get_db
 from ..state import State
 from .auth import CurrentUser
+from .rules import _scope_app_ids, _trigger_rescan
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 
@@ -43,7 +44,13 @@ def list_presets(
 
 
 @router.post("/apply", status_code=201)
-def apply_preset(body: PresetApplyIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
+def apply_preset(
+    body: PresetApplyIn,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _user: CurrentUser,
+    db: State = Depends(get_db),
+) -> dict:
     preset = presets_core.get_preset(body.preset_key)
     if preset is None:
         raise HTTPException(422, f"unknown preset: {body.preset_key}")
@@ -93,6 +100,7 @@ def apply_preset(body: PresetApplyIn, _user: CurrentUser, db: State = Depends(ge
         rule_id=cur.lastrowid,
     )
     rule = db.query_one("SELECT * FROM rules WHERE id=?", (cur.lastrowid,))
+    _trigger_rescan(request, background_tasks, _scope_app_ids(body.app_scope, None, db))
     return {
         "preset_key": preset.key,
         "rule": _rule_out(rule),

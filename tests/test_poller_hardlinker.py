@@ -244,6 +244,93 @@ def test_hardlinks_when_external_item_id_differs_from_internal_row_id(client, ra
     assert len(links) == 1
 
 
+def test_saving_a_rule_triggers_an_automatic_rescan(client, radarr_media):
+    """Feature: previously, creating/updating/deleting a rule only wrote the
+    DB row -- nothing applied it until the app's next scheduled poll or an
+    explicit /rescan. Saving a rule now triggers a background rescan of the
+    app(s) it covers, so a rule takes effect immediately without a separate
+    manual step."""
+    origin, media = radarr_media
+    app_id = _add_app(client, origin)
+
+    r = client.post(
+        "/api/rules",
+        json={
+            "name": "kids",
+            "app_scope": app_id,
+            "conditions": [
+                {
+                    "category": "custom",
+                    "match_type": "exact",
+                    "match_value": "kids",
+                    "join": None,
+                },
+            ],
+            "dir_template": f"{media.linked_dir}/kids",
+            "filename_template": None,
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    # no explicit /rescan call anywhere above
+    dst = f"{media.linked_dir}/kids/Kids Movie.2019.mkv"
+    assert os.path.exists(dst)
+    assert client.get(f"/api/apps/{app_id}").json()["last_poll_at"] is not None
+
+
+def test_updating_and_deleting_a_rule_rescans_old_and_new_scope(client, radarr_media):
+    origin, media = radarr_media
+    app_a = _add_app(client, origin)
+    app_b_resp = client.post(
+        "/api/apps",
+        json={"name": "Radarr B", "type": "radarr", "url": origin, "api_key": API_KEY},
+    )
+    assert app_b_resp.status_code == 201
+    app_b = app_b_resp.json()["id"]
+
+    def last_poll_at(app_id: int):
+        return client.get(f"/api/apps/{app_id}").json()["last_poll_at"]
+
+    def reset_polls() -> None:
+        db = client.app.state.db
+        db.execute("UPDATE apps SET last_poll_at=NULL")
+        db.commit()
+
+    rule = client.post(
+        "/api/rules",
+        json={
+            "name": "kids",
+            "app_scope": app_a,
+            "conditions": [
+                {
+                    "category": "custom",
+                    "match_type": "exact",
+                    "match_value": "kids",
+                    "join": None,
+                },
+            ],
+            "dir_template": f"{media.linked_dir}/kids",
+            "filename_template": None,
+        },
+    ).json()
+    assert last_poll_at(app_a) is not None
+
+    # Re-scoping from A to B should rescan both: B because it's newly in
+    # scope, A because it's leaving scope and its now-stale links need
+    # retiring promptly rather than waiting for A's next natural poll.
+    reset_polls()
+    patch = client.patch(f"/api/rules/{rule['id']}", json={**rule, "app_scope": app_b})
+    assert patch.status_code == 200
+    assert last_poll_at(app_a) is not None
+    assert last_poll_at(app_b) is not None
+
+    # Deleting should rescan the rule's (now former) scope, B.
+    reset_polls()
+    d = client.delete(f"/api/rules/{rule['id']}")
+    assert d.status_code == 204
+    assert last_poll_at(app_b) is not None
+
+
 # ---------------------------------------------------------------------------
 # tag changes
 # ---------------------------------------------------------------------------
