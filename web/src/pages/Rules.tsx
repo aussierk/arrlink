@@ -50,6 +50,7 @@ const CATEGORIES: ConditionCategory[] = [
   'user',
   'genre',
   'language',
+  'audio_language',
   'quality',
   'certification',
   'collection',
@@ -60,6 +61,7 @@ const CATEGORY_LABEL_KEY: Record<string, string> = {
   user: 'rules.categoryLabel.user',
   genre: 'rules.categoryLabel.genre',
   language: 'rules.categoryLabel.language',
+  audio_language: 'rules.categoryLabel.audio_language',
   quality: 'rules.categoryLabel.quality',
   certification: 'rules.categoryLabel.certification',
   collection: 'rules.categoryLabel.collection',
@@ -288,6 +290,7 @@ export default function Rules() {
       conditions: r.conditions,
       dir_template: r.dir_template,
       filename_template: r.filename_template,
+      dir_naming_mode: r.dir_naming_mode,
       enabled: r.enabled,
       unlink_on_mismatch: r.unlink_on_mismatch,
       priority: r.priority,
@@ -563,7 +566,7 @@ export default function Rules() {
                     />
                   ) : (
                     <span className="text-fg-faint" aria-hidden="true">
-                      —
+                      -
                     </span>
                   )}
                 </td>

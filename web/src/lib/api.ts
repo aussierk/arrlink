@@ -142,14 +142,26 @@ export type AppInput = {
 export const DEFAULT_POLL_INTERVAL_S = 300
 
 export type ConditionCategory =
-  'user' | 'genre' | 'language' | 'quality' | 'certification' | 'collection' | 'custom'
+  | 'user'
+  | 'genre'
+  | 'language'
+  | 'audio_language'
+  | 'quality'
+  | 'certification'
+  | 'collection'
+  | 'custom'
 
-// The 5 categories with a real Radarr/Sonarr metadata equivalent and a
+// The rich categories: a real Radarr/Sonarr metadata equivalent and a
 // DB-backed vocabulary — the other two (user/custom) are purely tag-based,
 // unrestricted, and never offer "source: native" or "match_type: vocabulary".
+// "language" is the title's own production language (movie.originalLanguage /
+// series.originalLanguage); "audio_language" is the downloaded file's actual
+// audio track(s) (movieFile.languages / episodefile languages) — they can
+// differ, e.g. a foreign film with an English dub.
 export const RICH_CATEGORIES: ConditionCategory[] = [
   'genre',
   'language',
+  'audio_language',
   'quality',
   'certification',
   'collection',
@@ -186,6 +198,11 @@ export type RuleItem = {
   conditions: ConditionItem[]
   dir_template: string
   filename_template: string | null
+  // "source" (default): the item's own source folder name (Radarr/Sonarr's
+  // own naming, tmdbid/tvdbid disambiguators included) is always appended
+  // under dir_template automatically. "custom": that append is skipped, and
+  // dir_template alone must resolve the full destination folder name.
+  dir_naming_mode: 'source' | 'custom'
   enabled: boolean
   unlink_on_mismatch: boolean
   priority: number
@@ -205,6 +222,7 @@ export type RuleInput = {
   conditions: ConditionItem[]
   dir_template: string
   filename_template: string | null
+  dir_naming_mode: 'source' | 'custom'
   enabled: boolean
   unlink_on_mismatch: boolean
   priority: number
@@ -241,6 +259,9 @@ export type PresetItem = {
   category: ConditionCategory
   match_type: 'exact' | 'list' | 'regex'
   match_value: string
+  // See ConditionItem.source — presets for a RICH_CATEGORIES category may
+  // match native metadata instead of tags (e.g. Genre, Language).
+  source?: ConditionSource | null
   subpath: string
   default_base_folder: string
   dir_template: string
@@ -500,14 +521,14 @@ export function getDisplayTimezone(): string {
 }
 
 export function fmtTime(ts: number | null): string {
-  if (!ts) return '—'
+  if (!ts) return '-'
   return new Date(ts * 1000).toLocaleString(undefined, { timeZone: displayTimezone })
 }
 
 /** "3 minutes ago" / "in 2 hours" from a unix-seconds timestamp. Locale-aware
  * via Intl.RelativeTimeFormat; picks the largest sensible unit. */
 export function fmtRelative(ts: number | null): string {
-  if (!ts) return '—'
+  if (!ts) return '-'
   const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
   const diff = ts - Date.now() / 1000
   const abs = Math.abs(diff)

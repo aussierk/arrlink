@@ -67,7 +67,11 @@ describe('reorderConditions', () => {
   ): ConditionItem => ({ category, match_type: 'list', match_value: 'x', join })
 
   it('moves an item and renormalizes joins (index 0 is always null)', () => {
-    const conditions = [cond('genre', null), cond('language', 'AND'), cond('quality', 'OR')]
+    const conditions = [
+      cond('genre', null),
+      cond('language', 'AND'),
+      cond('quality', 'OR'),
+    ]
     const result = reorderConditions(conditions, 2, 0)
     expect(result.map((c) => c.category)).toEqual(['quality', 'genre', 'language'])
     expect(result[0].join).toBeNull()
@@ -139,9 +143,12 @@ describe('optionsForCategory', () => {
     imported_at: 0,
     category,
   })
-  const vocabEntry = (value: string): VocabularyEntry => ({
+  const vocabEntry = (
+    value: string,
+    source: VocabularyEntry['source'] = 'tmdb',
+  ): VocabularyEntry => ({
     value,
-    source: 'tmdb',
+    source,
     external_id: null,
     app_id: null,
   })
@@ -160,5 +167,40 @@ describe('optionsForCategory', () => {
 
   it('returns nothing for the user category', () => {
     expect(optionsForCategory('user', {}, [], ['a'])).toEqual([])
+  })
+
+  it('with source "native", surfaces only instance/observed vocabulary, never tag labels or the shared tmdb/trash catalog', () => {
+    const vocab: Vocab = {
+      language: [
+        vocabEntry('Spanish', 'tmdb'),
+        vocabEntry('English', 'instance'),
+        vocabEntry('French', 'observed'),
+      ],
+    }
+    const tags = [tag('English', 'language')]
+    expect(optionsForCategory('language', vocab, tags, [], 'native')).toEqual(
+      expect.arrayContaining(['English', 'French']),
+    )
+    expect(optionsForCategory('language', vocab, tags, [], 'native')).not.toContain(
+      'Spanish',
+    )
+  })
+
+  it('with source "tag" (or unset), surfaces the shared catalog + classified tags, never instance/observed-only values', () => {
+    const vocab: Vocab = {
+      language: [
+        vocabEntry('Spanish', 'tmdb'),
+        vocabEntry('English', 'instance'),
+        vocabEntry('French', 'observed'),
+      ],
+    }
+    const tags = [tag('German', 'language')]
+    const result = optionsForCategory('language', vocab, tags, [], 'tag')
+    expect(result).toEqual(expect.arrayContaining(['Spanish', 'German']))
+    expect(result).not.toContain('English')
+    expect(result).not.toContain('French')
+    // default (no source passed) matches the ConditionItem.source
+    // convention where undefined/null means 'tag'
+    expect(optionsForCategory('language', vocab, tags, [])).toEqual(result)
   })
 })

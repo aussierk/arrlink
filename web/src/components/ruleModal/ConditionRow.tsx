@@ -23,7 +23,7 @@ type Props = {
   index: number
   total: number
   usedCategories: Set<string>
-  optionsFor: (category: ConditionCategory) => string[]
+  optionsFor: (category: ConditionCategory, source?: ConditionSource | null) => string[]
   onUpdate: (patch: Partial<ConditionItem>) => void
   onToggleJoin: () => void
   onMoveUp: () => void
@@ -52,7 +52,7 @@ export default function ConditionRow({
 
   function renderValue() {
     if (c.match_type === 'vocabulary') {
-      const known = optionsFor(c.category)
+      const known = optionsFor(c.category, c.source)
       return (
         <p className="rounded-md border border-line bg-sunken/40 px-3 py-2 text-xs text-fg-muted">
           {t('ruleModal.vocabularyMatchHint', { count: known.length })}
@@ -104,7 +104,7 @@ export default function ConditionRow({
                 category: categoryLabel(c.category).toLowerCase(),
               })
         }
-        options={optionsFor(c.category)}
+        options={optionsFor(c.category, c.source)}
         selected={selected}
         onChange={(next) => onApplySelection(selected, next)}
         multiple={c.match_type === 'list'}
@@ -192,6 +192,16 @@ export default function ConditionRow({
                       // defaults there. Still overridable via Match Type.
                       match_type: cat === 'user' ? 'regex' : c.match_type,
                       match_value: '',
+                      // Genre defaults to Native: the arr instance's own
+                      // genre field is what most rules actually want, and
+                      // it's now backed by real per-item observed data (not
+                      // just the shared TMDB catalog) — still overridable
+                      // via the source toggle below. Non-rich categories
+                      // (user/custom) never allow "native" server-side, so
+                      // leaving one clears it rather than tripping that
+                      // validation on save.
+                      source:
+                        cat === 'genre' ? 'native' : RICH.has(cat) ? c.source : null,
                     })
                   }}
                 >

@@ -3,6 +3,7 @@ import {
   RICH_CATEGORIES,
   type ConditionCategory,
   type ConditionItem,
+  type ConditionSource,
   type RuleInput,
   type TagItem,
   type VocabularyEntry,
@@ -17,6 +18,7 @@ export const CATEGORY_ORDER: ConditionCategory[] = [
   'user',
   'genre',
   'language',
+  'audio_language',
   'quality',
   'certification',
   'collection',
@@ -27,6 +29,7 @@ const CATEGORY_LABEL_KEY: Record<string, string> = {
   user: 'ruleModal.categoryLabel.user',
   genre: 'ruleModal.categoryLabel.genre',
   language: 'ruleModal.categoryLabel.language',
+  audio_language: 'ruleModal.categoryLabel.audio_language',
   quality: 'ruleModal.categoryLabel.quality',
   certification: 'ruleModal.categoryLabel.certification',
   collection: 'ruleModal.categoryLabel.collection',
@@ -54,6 +57,7 @@ export const emptyForm: FormState = {
   app_type_scope: null,
   dir_template: dirTemplateFor(DEFAULT_BASE_ROOT, 'radarr'),
   filename_template: null,
+  dir_naming_mode: 'source',
   enabled: true,
   unlink_on_mismatch: true,
   priority: 100,
@@ -151,17 +155,38 @@ export function computeCustomOptions(tags: TagItem[], vocab: Vocab): string[] {
   return Array.from(new Set([...appTags, ...extra]))
 }
 
-/** Suggested values for a condition's category: vocabulary + manually
- * classified tags for a rich category, the custom-tags set for 'custom', or
- * nothing for 'user'. */
+// Vocabulary sources that reflect the app instance's own real metadata
+// (quality profiles / languages fetched from it, values observed on its
+// actual items) as opposed to a shared reference catalog (tmdb/trash) that's
+// merely a naming suggestion.
+const NATIVE_VOCAB_SOURCES = new Set<VocabularyEntry['source']>(['instance', 'observed'])
+
+/** Suggested values for a condition's category, aware of match source:
+ * 'native' (matches the item's real Radarr/Sonarr metadata, see
+ * matching.py's match_conditions) surfaces only vocabulary actually pulled
+ * from an instance or observed on its items; 'tag' (the default) surfaces
+ * the shared reference catalog (tmdb/trash) as naming suggestions plus
+ * manually classified tags, since tag matching never looks at native fields.
+ * Falls back to the custom-tags set for 'custom', or nothing for 'user'. */
 export function optionsForCategory(
   category: ConditionCategory,
   vocab: Vocab,
   tags: TagItem[],
   customOptions: string[],
+  source?: ConditionSource | null,
 ): string[] {
   if (RICH.has(category)) {
-    const fromVocab = (vocab[category] ?? []).map((v) => v.value)
+    const entries = vocab[category] ?? []
+    if (source === 'native') {
+      return Array.from(
+        new Set(
+          entries.filter((v) => NATIVE_VOCAB_SOURCES.has(v.source)).map((v) => v.value),
+        ),
+      )
+    }
+    const fromVocab = entries
+      .filter((v) => !NATIVE_VOCAB_SOURCES.has(v.source))
+      .map((v) => v.value)
     const fromClassifiedTags = tags
       .filter((t) => t.category === category)
       .map((t) => t.label)

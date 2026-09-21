@@ -92,7 +92,7 @@ export default function PreviewPanel({
                     ? new Date(data.snapshot_at * 1000).toLocaleTimeString(undefined, {
                         timeZone: getDisplayTimezone(),
                       })
-                    : '—',
+                    : '-',
                 })
               : t('previewPanel.fromLive')}
           </span>

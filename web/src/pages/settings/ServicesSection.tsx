@@ -138,7 +138,7 @@ export default function ServicesSection() {
           {apps.length === 0 && (
             <TableEmpty colSpan={8}>
               <Trans i18nKey="settingsServices.empty">
-                No services yet — click <span className="text-accent">Add service</span>.
+                No services yet. Click <span className="text-accent">Add service</span>.
               </Trans>
             </TableEmpty>
           )}

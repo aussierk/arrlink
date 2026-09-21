@@ -4,9 +4,9 @@ import { fmtRelative, fmtTime, readAuthErrorCookie, setDisplayTimezone } from '.
 describe('fmtTime', () => {
   afterEach(() => setDisplayTimezone('UTC'))
 
-  it('renders "—" for a missing timestamp', () => {
-    expect(fmtTime(null)).toBe('—')
-    expect(fmtTime(0)).toBe('—')
+  it('renders "-" for a missing timestamp', () => {
+    expect(fmtTime(null)).toBe('-')
+    expect(fmtTime(0)).toBe('-')
   })
 
   it('renders in the configured display timezone', () => {
@@ -24,8 +24,8 @@ describe('fmtTime', () => {
 describe('fmtRelative', () => {
   afterEach(() => vi.useRealTimers())
 
-  it('renders "—" for a missing timestamp', () => {
-    expect(fmtRelative(null)).toBe('—')
+  it('renders "-" for a missing timestamp', () => {
+    expect(fmtRelative(null)).toBe('-')
   })
 
   it('picks a sensible unit around "now"', () => {

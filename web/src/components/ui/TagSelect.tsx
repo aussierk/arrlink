@@ -7,7 +7,7 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from '@headlessui/react'
-import { Check, ChevronDown, Plus } from 'lucide-react'
+import { Check, ChevronDown, Plus, X } from 'lucide-react'
 
 /**
  * A closed-by-default dropdown for picking one or more tag values, with an
@@ -16,7 +16,12 @@ import { Check, ChevronDown, Plus } from 'lucide-react'
  *
  * Built on Headless UI's <Combobox>, so it now has real listbox/option
  * semantics: arrow-key navigation, type-ahead, aria-expanded /
- * aria-activedescendant, and Escape-to-close. Props are unchanged.
+ * aria-activedescendant, and Escape-to-close.
+ *
+ * In multi-select mode, all selected values render as removable chips above
+ * the picker (capped, with a "view all" expansion) so a large selection set
+ * stays visible and editable without opening the dropdown. Props are
+ * unchanged.
  */
 export default function TagSelect({
   placeholder,
@@ -37,6 +42,16 @@ export default function TagSelect({
 }) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState(false)
+
+  const CHIP_LIMIT = 8
+  const visibleChips =
+    multiple && selected.length > 0
+      ? expanded
+        ? selected
+        : selected.slice(0, CHIP_LIMIT)
+      : []
+  const hiddenChipCount = selected.length - visibleChips.length
 
   const q = query.trim().toLowerCase()
   const filtered = q ? options.filter((o) => o.toLowerCase().includes(q)) : options
@@ -60,14 +75,15 @@ export default function TagSelect({
       <ComboboxButton className="group flex w-full items-center justify-between gap-2 rounded-md border border-line-strong bg-sunken px-2 py-1.5 text-left text-sm text-fg focus-visible:focus-ring">
         {selected.length === 0 ? (
           <span className="text-fg-subtle">{placeholder}</span>
+        ) : multiple ? (
+          <span className="text-fg">
+            {t('tagSelect.selectedCount', { count: selected.length })}
+          </span>
         ) : (
           <span className="flex flex-wrap items-center gap-1 overflow-hidden">
             <span className="rounded-full border border-line-strong bg-surface px-2 py-0.5 text-xs text-fg">
               {selected[0]}
             </span>
-            {selected.length > 1 && (
-              <span className="text-xs text-fg-subtle">+{selected.length - 1} more</span>
-            )}
           </span>
         )}
         <ChevronDown className="size-4 shrink-0 text-fg-subtle transition-transform group-data-open:rotate-180" />
@@ -119,24 +135,66 @@ export default function TagSelect({
     </div>
   )
 
-  return multiple ? (
-    <Combobox
-      immediate
-      multiple
-      value={selected}
-      onChange={commit}
-      onClose={() => setQuery('')}
-    >
-      {inner}
-    </Combobox>
-  ) : (
-    <Combobox
-      immediate
-      value={selected[0] ?? null}
-      onChange={(next: string | null) => commit(next ? [next] : [])}
-      onClose={() => setQuery('')}
-    >
-      {inner}
-    </Combobox>
+  return (
+    <div>
+      {multiple && selected.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-1">
+          {visibleChips.map((v) => (
+            <span
+              key={v}
+              className="inline-flex items-center gap-1 rounded-full border border-line-strong bg-surface px-2 py-0.5 text-xs text-fg"
+            >
+              {v}
+              <button
+                type="button"
+                onClick={() => commit(selected.filter((s) => s !== v))}
+                aria-label={t('tagSelect.remove', { value: v })}
+                className="rounded-full text-fg-subtle hover:text-danger-fg focus-visible:focus-ring"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+          {hiddenChipCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="text-xs text-accent hover:underline"
+            >
+              {t('tagSelect.showAll', { count: selected.length })}
+            </button>
+          )}
+          {expanded && selected.length > CHIP_LIMIT && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="text-xs text-fg-subtle hover:underline"
+            >
+              {t('tagSelect.showFewer')}
+            </button>
+          )}
+        </div>
+      )}
+      {multiple ? (
+        <Combobox
+          immediate
+          multiple
+          value={selected}
+          onChange={commit}
+          onClose={() => setQuery('')}
+        >
+          {inner}
+        </Combobox>
+      ) : (
+        <Combobox
+          immediate
+          value={selected[0] ?? null}
+          onChange={(next: string | null) => commit(next ? [next] : [])}
+          onClose={() => setQuery('')}
+        >
+          {inner}
+        </Combobox>
+      )}
+    </div>
   )
 }

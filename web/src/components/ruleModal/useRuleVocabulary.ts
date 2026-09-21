@@ -4,6 +4,7 @@ import {
   RICH_CATEGORIES,
   type ConditionCategory,
   type ConditionItem,
+  type ConditionSource,
   type RuleInput,
   type TagItem,
 } from '../../lib/api'
@@ -33,17 +34,16 @@ export function useRuleVocabulary({ form, conditions, serviceType, tags }: Args)
   const [vocabWarnings, setVocabWarnings] = useState<string[]>([])
 
   useEffect(() => {
-    if (form.app_scope === null && form.app_type_scope === null) {
-      setVocab({})
-      return
-    }
     let cancelled = false
     // A specific instance (app_scope) asks for just that app's own known
-    // values; a type-scope (app_type_scope, no one specific instance) omits
-    // app_id so the backend unions every instance of that type instead of
-    // guessing at one representative that might not have synced the value
-    // another instance already knows about (e.g. language, which has no
-    // shared/global source at all -- only per-instance sync).
+    // values; a type-scope (app_type_scope, no one specific instance) — or
+    // no scope at all yet — omits app_id so the backend unions every
+    // instance of that type instead of guessing at one representative that
+    // might not have synced the value another instance already knows about
+    // (e.g. language, which has no shared/global source at all -- only
+    // per-instance sync). The backend already de-dupes that union by value,
+    // so an unscoped rule still gets real suggestions instead of an empty
+    // dropdown.
     void Promise.all(
       RICH_CATEGORIES.map((cat) =>
         api
@@ -80,8 +80,11 @@ export function useRuleVocabulary({ form, conditions, serviceType, tags }: Args)
 
   const customOptions = useMemo(() => computeCustomOptions(tags, vocab), [tags, vocab])
 
-  function optionsFor(category: ConditionCategory): string[] {
-    return optionsForCategory(category, vocab, tags, customOptions)
+  function optionsFor(
+    category: ConditionCategory,
+    source?: ConditionSource | null,
+  ): string[] {
+    return optionsForCategory(category, vocab, tags, customOptions, source)
   }
 
   return { vocabWarnings, optionsFor }

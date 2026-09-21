@@ -65,7 +65,7 @@ export default function ServicesCard({ apps }: { apps: AppItem[] | null }) {
                 {t('dashboard.nextPoll', {
                   time: a.last_poll_at
                     ? fmtRelative(a.last_poll_at + a.poll_interval_s)
-                    : '—',
+                    : '-',
                 })}
               </div>
               {a.last_error && <p className="text-xs text-danger-fg">{a.last_error}</p>}

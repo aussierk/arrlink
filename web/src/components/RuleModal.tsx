@@ -62,6 +62,7 @@ export default function RuleModal({
           app_type_scope: initial.app_type_scope,
           dir_template: initial.dir_template,
           filename_template: initial.filename_template,
+          dir_naming_mode: initial.dir_naming_mode,
           enabled: initial.enabled,
           unlink_on_mismatch: initial.unlink_on_mismatch,
           priority: initial.priority,
@@ -177,6 +178,9 @@ export default function RuleModal({
       match_type: next === 'user' ? 'regex' : 'list',
       match_value: '',
       join: conditions.length === 0 ? null : join,
+      // See ConditionRow's category <select> handler for why genre defaults
+      // to native.
+      source: next === 'genre' ? 'native' : null,
     }
     setConditions([...conditions, block])
   }
@@ -204,12 +208,20 @@ export default function RuleModal({
           match_type: p.match_type,
           match_value: p.match_value,
           join,
+          source: p.source ?? null,
         },
       ])
     } else {
       setConditions(
         conditions.map((c, i) =>
-          i === idx ? { ...c, match_type: p.match_type, match_value: p.match_value } : c,
+          i === idx
+            ? {
+                ...c,
+                match_type: p.match_type,
+                match_value: p.match_value,
+                source: p.source ?? null,
+              }
+            : c,
         ),
       )
     }
@@ -424,6 +436,39 @@ export default function RuleModal({
                   : 'ruleModal.dirTemplatePlaceholderMovies',
               )}
             />
+            <p className="text-xs text-fg-subtle">
+              {form.dir_naming_mode === 'source'
+                ? t('ruleModal.dirTemplateHintSource')
+                : t('ruleModal.dirTemplateHintCustom')}
+            </p>
+          </Field>
+          <Field label={t('ruleModal.dirNamingMode')}>
+            <div className="inline-flex rounded-md border border-line-strong p-0.5">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, dir_naming_mode: 'source' })}
+                aria-pressed={form.dir_naming_mode === 'source'}
+                className={`rounded px-2.5 py-1 text-xs ${
+                  form.dir_naming_mode === 'source'
+                    ? 'bg-accent-bg text-accent'
+                    : 'text-fg-soft hover:bg-fill'
+                }`}
+              >
+                {t('ruleModal.dirNamingModeSource')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, dir_naming_mode: 'custom' })}
+                aria-pressed={form.dir_naming_mode === 'custom'}
+                className={`rounded px-2.5 py-1 text-xs ${
+                  form.dir_naming_mode === 'custom'
+                    ? 'bg-accent-bg text-accent'
+                    : 'text-fg-soft hover:bg-fill'
+                }`}
+              >
+                {t('ruleModal.dirNamingModeCustom')}
+              </button>
+            </div>
           </Field>
           <Field label={t('ruleModal.filenameTemplate')}>
             <input

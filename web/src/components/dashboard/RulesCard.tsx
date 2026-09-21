@@ -31,7 +31,7 @@ export default function RulesCard({ rules }: { rules: RuleItem[] | null }) {
       <div className="grid grid-cols-3 gap-3 text-center">
         {stats.map(({ n, label, tone }) => (
           <div key={label} className="py-2">
-            <div className={`text-2xl font-semibold ${tone}`}>{n ?? '—'}</div>
+            <div className={`text-2xl font-semibold ${tone}`}>{n ?? '-'}</div>
             <div className="text-xs text-fg-subtle">{label}</div>
           </div>
         ))}

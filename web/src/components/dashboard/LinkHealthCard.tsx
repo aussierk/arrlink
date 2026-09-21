@@ -37,7 +37,7 @@ export default function LinkHealthCard({ summary }: { summary: Summary | null })
             to={`/?links=${status}#links`}
             className="rounded-md py-2 transition-colors hover:bg-fill focus-visible:focus-ring"
           >
-            <div className={`text-2xl font-semibold ${tone}`}>{n ?? '—'}</div>
+            <div className={`text-2xl font-semibold ${tone}`}>{n ?? '-'}</div>
             <div className="text-xs text-fg-subtle">{label}</div>
           </Link>
         ))}

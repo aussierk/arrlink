@@ -25,6 +25,7 @@ const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
   'collection',
   'quality',
   'language',
+  'audio_language',
   'user',
   'custom',
 ]
@@ -330,7 +331,7 @@ export default function Tags() {
                   {tag.rule_count > 0 ? (
                     <span className="text-accent">{tag.rule_count}</span>
                   ) : (
-                    <span className="text-fg-faint">—</span>
+                    <span className="text-fg-faint">-</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-fg-subtle">{fmtTime(tag.imported_at)}</td>
