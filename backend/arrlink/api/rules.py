@@ -138,30 +138,17 @@ def _resolve_app_type(app_scope: int | None, app_type_scope: str | None, db: Sta
     return None
 
 
-def _representative_app_id(
-    app_scope: int | None, app_type_scope: str | None, db: State
-) -> int | None:
-    """One concrete app id to check instance-scoped vocabulary against, when
-    the rule isn't pinned to a specific app (app_type_scope) — picks any
-    enabled app of that type, same "representative" idea RuleModal already
-    uses client-side for live preview."""
-    if app_scope is not None:
-        return app_scope
-    if app_type_scope is not None:
-        row = db.query_one(
-            "SELECT id FROM apps WHERE type=? AND enabled=1 ORDER BY id LIMIT 1",
-            (app_type_scope,),
-        )
-        return row["id"] if row else None
-    return None
-
-
 def _vocabulary_warnings(body: RuleIn, db: State) -> list[str]:
     app_type = _resolve_app_type(body.app_scope, body.app_type_scope, db)
-    app_id = _representative_app_id(body.app_scope, body.app_type_scope, db)
+    # Every enabled instance in scope, not just one representative -- so a
+    # type-scoped rule's warnings (and the value picker behind
+    # GET /api/vocabulary) see the union of each instance's own vocabulary
+    # instead of going silently empty/wrong just because there's no single
+    # app_id.
+    app_ids = _scope_app_ids(body.app_scope, body.app_type_scope, db)
     warnings: list[str] = []
     for c in body.conditions:
-        warnings.extend(validate_condition_values(c.model_dump(), db, app_type, app_id))
+        warnings.extend(validate_condition_values(c.model_dump(), db, app_type, app_ids))
     return warnings
 
 

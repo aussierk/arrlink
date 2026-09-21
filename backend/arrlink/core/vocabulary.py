@@ -101,21 +101,32 @@ async def sync_trash_vocabulary(db: State, app_type: str) -> int:
     return db.sync_vocabulary("quality", app_type, None, entries, "trash")
 
 
-def _vocabulary_values(db: State, category: str, app_type: str, app_id: int | None) -> set[str]:
+def _vocabulary_values(db: State, category: str, app_type: str, app_ids: list[int]) -> set[str]:
     """Every known value for a scope: the shared (app_id IS NULL) vocabulary,
-    this app's own instance-scoped vocabulary if any, and — the tag
-    classification bridge — any tag on this app manually classified into
-    this category (treated as an equally-valid member of the category)."""
-    rows = db.query(
-        "SELECT value FROM vocabulary WHERE category=? AND app_type=? AND "
-        "(app_id IS NULL OR app_id=?)",
-        (category, app_type, app_id),
-    )
+    plus every one of ``app_ids``' own instance-scoped vocabulary, and — the
+    tag classification bridge — any tag on those apps manually classified
+    into this category (treated as an equally-valid member of the category).
+    ``app_ids`` is a single instance for an app-scoped rule, every enabled
+    instance of that type for a type-scoped rule (see api/rules.py's
+    _scope_app_ids), or [] for a real poll/preview against one known app."""
+    if app_ids:
+        placeholders = ",".join("?" for _ in app_ids)
+        rows = db.query(
+            f"SELECT value FROM vocabulary WHERE category=? AND app_type=? AND "
+            f"(app_id IS NULL OR app_id IN ({placeholders}))",
+            (category, app_type, *app_ids),
+        )
+    else:
+        rows = db.query(
+            "SELECT value FROM vocabulary WHERE category=? AND app_type=? AND app_id IS NULL",
+            (category, app_type),
+        )
     values = {r["value"] for r in rows}
-    if app_id is not None:
+    if app_ids:
+        placeholders = ",".join("?" for _ in app_ids)
         tag_rows = db.query(
-            "SELECT label FROM tags WHERE app_id=? AND category=?",
-            (app_id, category),
+            f"SELECT label FROM tags WHERE app_id IN ({placeholders}) AND category=?",
+            (*app_ids, category),
         )
         values |= {r["label"] for r in tag_rows}
     return values
@@ -131,7 +142,8 @@ def expand_vocabulary_conditions(
         # rather than guessing, or raising, mid-poll.
         expand_to = lambda cat: set()  # noqa: E731
     else:
-        expand_to = lambda cat: _vocabulary_values(db, cat, app_type, app_id)  # noqa: E731
+        app_ids = [app_id] if app_id is not None else []
+        expand_to = lambda cat: _vocabulary_values(db, cat, app_type, app_ids)  # noqa: E731
 
     from .planner import _rule_conditions  # local import: avoid a cycle (planner doesn't import us)
 
@@ -156,21 +168,25 @@ def expand_vocabulary_conditions(
 
 
 def validate_condition_values(
-    cond: dict, db: State, app_type: str | None, app_id: int | None
+    cond: dict, db: State, app_type: str | None, app_ids: list[int]
 ) -> list[str]:
     """Soft-warning check: for exact/list conditions in a category with a
     known vocabulary, flag literal values not found in that vocabulary and
     not covered by a tag manually classified into the category. Regex has
     no finite value to check, so it's never flagged. No-ops (returns [])
     when app_type is unresolved or the vocabulary scope is completely empty
-    — avoids a false "unknown" flood before anyone's synced anything."""
+    — avoids a false "unknown" flood before anyone's synced anything.
+    ``app_ids`` should be every instance in the rule's scope (see
+    api/rules.py's _scope_app_ids), not just one representative instance --
+    otherwise a value only a *different* instance of the same type happens
+    to know about gets flagged as unknown."""
     category = cond.get("category")
     match_type = cond.get("match_type")
     if category not in RICH_CATEGORIES or match_type not in ("exact", "list"):
         return []
     if app_type is None:
         return []
-    known = _vocabulary_values(db, category, app_type, app_id)
+    known = _vocabulary_values(db, category, app_type, app_ids)
     if not known:
         return []
 

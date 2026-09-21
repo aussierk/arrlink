@@ -33,10 +33,15 @@ class RuleMatch:
     regex_match: re.Match | None = None
 
 
-def match_rule(match_type: str, match_value: str, item_tags: list[str]) -> RuleMatch | None:
+def match_rule(
+    match_type: str,
+    match_value: str,
+    item_tags: list[str],
+    case_insensitive: bool = False,
+) -> RuleMatch | None:
     """Return a :class:`RuleMatch` for the first item tag that satisfies the
     matcher, else None. See :func:`match_rule_all` for every satisfying tag."""
-    matches = match_rule_all(match_type, match_value, item_tags)
+    matches = match_rule_all(match_type, match_value, item_tags, case_insensitive=case_insensitive)
     return matches[0] if matches else None
 
 
@@ -51,16 +56,35 @@ def _parse_list_value(match_value: str) -> set[str]:
     return {s.strip() for s in match_value.split(",") if s.strip()}
 
 
-def match_rule_all(match_type: str, match_value: str, item_tags: list[str]) -> list[RuleMatch]:
+def match_rule_all(
+    match_type: str,
+    match_value: str,
+    item_tags: list[str],
+    case_insensitive: bool = False,
+) -> list[RuleMatch]:
     """Like :func:`match_rule`, but returns every item tag that satisfies the
     matcher instead of stopping at the first — used to fan a single condition
-    out into multiple destination links (one per matching tag)."""
+    out into multiple destination links (one per matching tag).
+
+    ``case_insensitive`` is for native-metadata conditions: Radarr/Sonarr's
+    own fields (originalLanguage.name, genres, certifications, quality
+    profile names) use a fixed, known Title Case convention, so comparing
+    case-insensitively there is safe and avoids a silent, unexplained
+    zero-match if a user types "english" instead of "English". Tag matching
+    stays case-sensitive since tags are free-form user data where case can
+    be meaningful."""
     if match_type == "exact":
         target = match_value.strip()
+        if case_insensitive:
+            target = target.casefold()
+            return [RuleMatch(tag=t) for t in item_tags if t.casefold() == target]
         return [RuleMatch(tag=t) for t in item_tags if t == target]
 
     if match_type == "list":
         targets = _parse_list_value(match_value)
+        if case_insensitive:
+            targets = {t.casefold() for t in targets}
+            return [RuleMatch(tag=t) for t in item_tags if t.casefold() in targets]
         return [RuleMatch(tag=t) for t in item_tags if t in targets]
 
     if match_type == "regex":
@@ -117,8 +141,11 @@ def match_conditions(
             if join == "OR" and running is True:
                 continue
 
-        values = native.get(cond["category"], []) if cond.get("source") == "native" else item_tags
-        hits = match_rule_all(cond["match_type"], cond["match_value"], values)
+        is_native = cond.get("source") == "native"
+        values = native.get(cond["category"], []) if is_native else item_tags
+        hits = match_rule_all(
+            cond["match_type"], cond["match_value"], values, case_insensitive=is_native
+        )
         hit = bool(hits)
         if i == 0:
             running = hit

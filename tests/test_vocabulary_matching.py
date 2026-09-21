@@ -193,6 +193,21 @@ def test_match_conditions_default_source_is_tag():
     assert r.result is True
 
 
+def test_match_conditions_native_source_is_case_insensitive_but_tags_are_not():
+    # Radarr/Sonarr's own fields are a fixed Title Case ("English", not
+    # "english") -- a user typing lowercase in the rule editor shouldn't get
+    # a silent zero-match.
+    exact = [_cond("language", "exact", "english", source="native")]
+    assert match_conditions(exact, item_tags=[], native={"language": ["English"]}).result is True
+
+    lst = [_cond("language", "list", "english,spanish", source="native")]
+    assert match_conditions(lst, item_tags=[], native={"language": ["English"]}).result is True
+
+    # same values, but as a plain (non-native) tag condition -- stays case-sensitive.
+    tag = [_cond("custom", "exact", "english")]
+    assert match_conditions(tag, item_tags=["English"], native={}).result is False
+
+
 def test_expand_vocabulary_conditions_and_validate(client):
     db = client.app.state.db
     db.execute(
@@ -215,7 +230,10 @@ def test_expand_vocabulary_conditions_and_validate(client):
     assert json.loads(expanded_unscoped[0]["conditions"][0]["match_value"]) == []
 
     warn = validate_condition_values(
-        {"category": "genre", "match_type": "exact", "match_value": "Horror"}, db, "radarr", app_id
+        {"category": "genre", "match_type": "exact", "match_value": "Horror"},
+        db,
+        "radarr",
+        [app_id],
     )
     assert len(warn) == 1
     assert (
@@ -223,7 +241,7 @@ def test_expand_vocabulary_conditions_and_validate(client):
             {"category": "genre", "match_type": "exact", "match_value": "Action"},
             db,
             "radarr",
-            app_id,
+            [app_id],
         )
         == []
     )
@@ -233,7 +251,7 @@ def test_expand_vocabulary_conditions_and_validate(client):
             {"category": "genre", "match_type": "regex", "match_value": "^Hor"},
             db,
             "radarr",
-            app_id,
+            [app_id],
         )
         == []
     )
@@ -358,6 +376,39 @@ def test_vocabulary_check_endpoint(client, radarr):
         },
     )
     assert r2.json()["warnings"] == []
+
+
+def test_vocabulary_check_unions_every_instance_for_a_type_scoped_rule(client, radarr):
+    db = client.app.state.db
+    app_a = _add_app(client, radarr)
+    r = client.post(
+        "/api/apps",
+        json={"name": "B", "type": "radarr", "url": "http://b", "api_key": "k"},
+    )
+    assert r.status_code == 201
+    app_b = r.json()["id"]
+
+    # A has a non-empty vocabulary (so the old single-representative check
+    # wouldn't just no-op on a totally empty set) but doesn't know
+    # "English" -- only B does. Old behavior: a type-scoped rule picked one
+    # "representative" instance (lowest enabled id, i.e. A here) to check
+    # against; "English" isn't in A's known set -> false-positive warning.
+    # Fixed behavior: unions every instance of that type -> "English" is
+    # known via B -> no warning.
+    db.sync_vocabulary("language", "radarr", app_a, [("Spanish", None)], "instance")
+    db.sync_vocabulary("language", "radarr", app_b, [("English", None)], "instance")
+
+    r = client.post(
+        "/api/rules/vocabulary-check",
+        json={
+            "name": "check",
+            "app_type_scope": "radarr",
+            "conditions": [_cond("language", "exact", "English", source="native")],
+            "dir_template": "/media/movies/{$language}",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["warnings"] == []
 
 
 def test_create_rule_response_includes_vocabulary_warnings(client, radarr):
@@ -603,10 +654,14 @@ def test_vocabulary_get_endpoint_scopes(client):
     genres = client.get(f"/api/vocabulary?category=genre&app_type=radarr&app_id={app_id}").json()
     assert {r["value"] for r in genres} == {"Action"}  # shared row visible via this app's scope too
 
-    # app_id omitted (None) -> only shared (app_id IS NULL) rows match; this
-    # instance-scoped "HD-1080p" row is correctly excluded
+    # app_id omitted (None) -> a type-scoped rule, not "no instance rows at
+    # all": unions every instance of this app_type's own vocabulary, so the
+    # instance-scoped "HD-1080p" row IS included (this used to silently
+    # exclude it, which is exactly the UX gap that left a type-scoped rule's
+    # value picker looking empty for categories like language/quality that
+    # have no shared/global source).
     quality = client.get("/api/vocabulary?category=quality&app_type=radarr").json()
-    assert quality == []
+    assert {r["value"] for r in quality} == {"HD-1080p"}
 
     assert client.get("/api/vocabulary?category=bogus&app_type=radarr").status_code == 422
 

@@ -24,15 +24,37 @@ def get_vocabulary(
     db: State = Depends(get_db),
 ) -> list[dict]:
     """Known values for one (category, app_type[, app_id]) scope: the
-    shared vocabulary plus this app's own instance-scoped rows, if any."""
+    shared vocabulary plus this app's own instance-scoped rows, if any.
+
+    With no app_id (a rule scoped by app_type rather than one instance),
+    unions across every instance of this app_type's own vocabulary instead
+    of just the shared rows -- so a category like "language" (which has no
+    shared/global source at all) still returns real suggestions instead of
+    an empty dropdown."""
     if category not in RICH_CATEGORIES:
         raise HTTPException(422, f"category must be one of {sorted(RICH_CATEGORIES)}")
-    rows = db.query(
-        "SELECT value, source, external_id, app_id FROM vocabulary WHERE "
-        "category=? AND app_type=? AND (app_id IS NULL OR app_id=?) ORDER BY value",
-        (category, app_type, app_id),
-    )
-    return [dict(r) for r in rows]
+    if app_id is not None:
+        rows = db.query(
+            "SELECT value, source, external_id, app_id FROM vocabulary WHERE "
+            "category=? AND app_type=? AND (app_id IS NULL OR app_id=?) ORDER BY value",
+            (category, app_type, app_id),
+        )
+    else:
+        rows = db.query(
+            "SELECT value, source, external_id, app_id FROM vocabulary WHERE "
+            "category=? AND app_type=? ORDER BY value",
+            (category, app_type),
+        )
+    # De-dupe by value when unioning across instances -- e.g. two Radarr
+    # instances both reporting "English" shouldn't show up twice.
+    seen: set[str] = set()
+    out: list[dict] = []
+    for r in rows:
+        if r["value"] in seen:
+            continue
+        seen.add(r["value"])
+        out.append(dict(r))
+    return out
 
 
 @router.post("/vocabulary/import/tmdb")
