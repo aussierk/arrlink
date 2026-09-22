@@ -31,15 +31,17 @@ export default function PresetSelect({
   // what onChange fired) or its internal selection state machine gets
   // confused -- a value permanently stuck at null broke mouse selection
   // entirely. So: let the click commit into state for one render, then reset
-  // it back to null right after applying it.
-  const [selected, setSelected] = useState<PresetItem | null>(null)
+  // it back to null right after applying it. Keyed by the preset's own
+  // string key (not the PresetItem object itself) to match the plain-string
+  // value pattern CategorySelect/TagSelect already use successfully.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   useEffect(() => {
-    if (selected) {
-      onSelect(selected)
-      setSelected(null)
-    }
-  }, [selected, onSelect])
+    if (selectedKey === null) return
+    const preset = presets.find((p) => p.key === selectedKey)
+    setSelectedKey(null)
+    if (preset) onSelect(preset)
+  }, [selectedKey, presets, onSelect])
 
   const q = query.trim().toLowerCase()
   const groups = CATEGORY_GROUP_ORDER.map((group) => ({
@@ -56,8 +58,8 @@ export default function PresetSelect({
   return (
     <Combobox
       immediate
-      value={selected}
-      onChange={setSelected}
+      value={selectedKey}
+      onChange={setSelectedKey}
       onClose={() => setQuery('')}
     >
       <div className="relative">
@@ -93,7 +95,7 @@ export default function PresetSelect({
                 {items.map((p) => (
                   <ComboboxOption
                     key={p.key}
-                    value={p}
+                    value={p.key}
                     title={p.dir_template}
                     className="flex w-full cursor-pointer flex-col gap-0.5 rounded px-2 py-1.5 text-left data-focus:bg-fill"
                   >
