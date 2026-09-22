@@ -22,6 +22,20 @@
       "when": 1790030483496,
       "tag": "0002_lazy_photon",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790033622885,
+      "tag": "0003_yielding_whistler",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790034179475,
+      "tag": "0004_optimal_vance_astro",
+      "breakpoints": true
     }
   ]
 }

@@ -5,10 +5,12 @@ import { scandirStats } from './scandir-stats.js'
 import {
   AdapterError,
   asStr,
+  mediaInfoValues,
   translateTagLabels,
   type AppInfo,
   type Item,
   type MediaFile,
+  type MediaInfo,
   type Tag,
 } from './types.js'
 
@@ -27,12 +29,17 @@ interface SonarrSeriesRow {
   qualityProfileId?: number | null
   originalLanguage?: { name?: string } | null
   statistics?: { episodeFileCount?: number; sizeOnDisk?: number } | null
+  network?: string
+  seriesType?: string
+  ratings?: { value?: number } | null
+  runtime?: number
 }
 
 interface SonarrEpisodeFileRow {
   path?: string
   size?: number
   languages?: Array<{ id?: number; name?: string }>
+  mediaInfo?: MediaInfo | null
 }
 
 interface SeriesMeta {
@@ -47,6 +54,10 @@ interface SeriesMeta {
   qualityProfileName: string | null
   originalLanguage: string | null
   statsFingerprint: string | null
+  network: string | null
+  seriesType: string | null
+  rating: number | null
+  runtime: number | null
 }
 
 function toNumberOrNull(v: unknown): number | null {
@@ -152,6 +163,11 @@ export class SonarrAdapter extends BaseAdapter {
         qualityProfileName: qpId !== null ? (profileById.get(qpId) ?? null) : null,
         originalLanguage: s.originalLanguage?.name?.trim() || null,
         statsFingerprint: seriesFingerprint(s),
+        network: (s.network ?? '').trim() || null,
+        seriesType: (s.seriesType ?? '').trim() || null,
+        // Sonarr reports one rating value, no per-source (imdb/tmdb) breakdown.
+        rating: toNumberOrNull(s.ratings?.value),
+        runtime: toNumberOrNull(s.runtime),
       })
     }
     if (meta.size === 0) return []
@@ -165,12 +181,19 @@ export class SonarrAdapter extends BaseAdapter {
       )
       .map(([sid]) => sid)
 
+    type FetchedFiles = {
+      files: MediaFile[]
+      audioLanguages: string[]
+      videoCodec: string[]
+      videoDynamicRange: string[]
+      audioCodec: string[]
+      audioChannels: string[]
+    }
+
     const fetchedEntries = await mapWithConcurrency(
       toFetch,
       FILE_FETCH_CONCURRENCY,
-      async (
-        sid,
-      ): Promise<[number, { files: MediaFile[]; audioLanguages: string[] }]> => {
+      async (sid): Promise<[number, FetchedFiles]> => {
         const data = await this.getJson(`/api/v3/episodefile?seriesId=${sid}`)
         if (!Array.isArray(data)) {
           throw new AdapterError(`unexpected episodefile payload for series ${sid}`)
@@ -186,8 +209,8 @@ export class SonarrAdapter extends BaseAdapter {
         const files = specs.map((s) =>
           statFile(s.path, seriesPath, s.size, stats.get(s.path)),
         )
-        // Union of every episode file's audio track(s) -- a series' episodes
-        // aren't guaranteed to share one dub/language mix.
+        // Union of every episode file's audio track(s)/mediaInfo -- a series'
+        // episodes aren't guaranteed to share one dub/language/encode mix.
         const audioLanguages = [
           ...new Set(
             rows.flatMap((f) =>
@@ -197,7 +220,21 @@ export class SonarrAdapter extends BaseAdapter {
             ),
           ),
         ]
-        return [sid, { files, audioLanguages }]
+        const media = rows.map((f) => mediaInfoValues(f.mediaInfo))
+        const unionOf = (key: keyof ReturnType<typeof mediaInfoValues>): string[] => [
+          ...new Set(media.flatMap((m) => m[key])),
+        ]
+        return [
+          sid,
+          {
+            files,
+            audioLanguages,
+            videoCodec: unionOf('videoCodec'),
+            videoDynamicRange: unionOf('videoDynamicRange'),
+            audioCodec: unionOf('audioCodec'),
+            audioChannels: unionOf('audioChannels'),
+          },
+        ]
       },
     )
     const fetched = new Map(fetchedEntries)
@@ -217,13 +254,34 @@ export class SonarrAdapter extends BaseAdapter {
         qualityProfileName: m.qualityProfileName,
         originalLanguage: m.originalLanguage,
         statsFingerprint: m.statsFingerprint,
+        network: m.network,
+        seriesType: m.seriesType,
+        rating: m.rating,
+        popularity: null, // no Sonarr equivalent
+        runtime: m.runtime,
       }
       if (fetched.has(sid)) {
-        const { files: itemFiles, audioLanguages } = fetched.get(sid)!
+        const {
+          files: itemFiles,
+          audioLanguages,
+          videoCodec,
+          videoDynamicRange,
+          audioCodec,
+          audioChannels,
+        } = fetched.get(sid)!
         if (itemFiles.length === 0) continue // series with no files on disk
-        items.push({ ...common, files: itemFiles, audioLanguages, filesStale: false })
+        items.push({
+          ...common,
+          files: itemFiles,
+          audioLanguages,
+          videoCodec,
+          videoDynamicRange,
+          audioCodec,
+          audioChannels,
+          filesStale: false,
+        })
       } else {
-        // unchanged -- poller rehydrates files (and audioLanguages) from stored rows.
+        // unchanged -- poller rehydrates files (and audioLanguages/mediaInfo) from stored rows.
         items.push({ ...common, files: [], filesStale: true })
       }
     }

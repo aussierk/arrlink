@@ -466,16 +466,22 @@ export class Poller {
     }
     const files = item.files
 
-    // audioLanguages undefined means the adapter didn't recompute it this poll
-    // (Sonarr's delta-fetch skip, same trigger as the files rehydration above)
-    // -- keep the last stored value instead of clearing it.
-    if (item.audioLanguages === undefined) {
-      item.audioLanguages =
-        existing !== undefined
-          ? (JSON.parse(existing.audioLanguagesJson || '[]') as string[])
-          : []
-    }
+    // undefined means the adapter didn't recompute these this poll (Sonarr's
+    // delta-fetch skip, same trigger as the files rehydration above) -- keep
+    // the last stored value instead of clearing it.
+    const stored = (json: string | undefined): string[] =>
+      JSON.parse(json || '[]') as string[]
+    item.audioLanguages ??= existing !== undefined ? stored(existing.audioLanguagesJson) : []
+    item.videoCodec ??= existing !== undefined ? stored(existing.videoCodecJson) : []
+    item.videoDynamicRange ??=
+      existing !== undefined ? stored(existing.videoDynamicRangeJson) : []
+    item.audioCodec ??= existing !== undefined ? stored(existing.audioCodecJson) : []
+    item.audioChannels ??= existing !== undefined ? stored(existing.audioChannelsJson) : []
     const audioLanguagesJson = JSON.stringify([...item.audioLanguages].sort())
+    const videoCodecJson = JSON.stringify([...item.videoCodec].sort())
+    const videoDynamicRangeJson = JSON.stringify([...item.videoDynamicRange].sort())
+    const audioCodecJson = JSON.stringify([...item.audioCodec].sort())
+    const audioChannelsJson = JSON.stringify([...item.audioChannels].sort())
 
     const statsFp = item.statsFingerprint ?? null
     let itemDbId: number
@@ -500,6 +506,16 @@ export class Poller {
           qualityProfileName: item.qualityProfileName,
           originalLanguage: item.originalLanguage,
           audioLanguagesJson,
+          studio: item.studio ?? null,
+          network: item.network ?? null,
+          seriesType: item.seriesType ?? null,
+          videoCodecJson,
+          videoDynamicRangeJson,
+          audioCodecJson,
+          audioChannelsJson,
+          rating: item.rating ?? null,
+          popularity: item.popularity ?? null,
+          runtimeMinutes: item.runtime ?? null,
           statsFingerprint: statsFp,
         })
         .run()
@@ -520,6 +536,16 @@ export class Poller {
         existing.qualityProfileName !== item.qualityProfileName ||
         existing.originalLanguage !== item.originalLanguage ||
         existing.audioLanguagesJson !== audioLanguagesJson ||
+        existing.studio !== (item.studio ?? null) ||
+        existing.network !== (item.network ?? null) ||
+        existing.seriesType !== (item.seriesType ?? null) ||
+        existing.videoCodecJson !== videoCodecJson ||
+        existing.videoDynamicRangeJson !== videoDynamicRangeJson ||
+        existing.audioCodecJson !== audioCodecJson ||
+        existing.audioChannelsJson !== audioChannelsJson ||
+        existing.rating !== (item.rating ?? null) ||
+        existing.popularity !== (item.popularity ?? null) ||
+        existing.runtimeMinutes !== (item.runtime ?? null) ||
         existing.statsFingerprint !== statsFp ||
         (existing.missingStrikes || 0) !== 0
       if (changed) {
@@ -540,6 +566,16 @@ export class Poller {
             qualityProfileName: item.qualityProfileName,
             originalLanguage: item.originalLanguage,
             audioLanguagesJson,
+            studio: item.studio ?? null,
+            network: item.network ?? null,
+            seriesType: item.seriesType ?? null,
+            videoCodecJson,
+            videoDynamicRangeJson,
+            audioCodecJson,
+            audioChannelsJson,
+            rating: item.rating ?? null,
+            popularity: item.popularity ?? null,
+            runtimeMinutes: item.runtime ?? null,
             statsFingerprint: statsFp,
           })
           .where(eq(appItems.id, itemDbId))
@@ -713,6 +749,16 @@ export class Poller {
       qualityProfileName: it.qualityProfileName,
       originalLanguage: it.originalLanguage,
       audioLanguages: it.audioLanguages,
+      studio: it.studio,
+      network: it.network,
+      seriesType: it.seriesType,
+      videoCodec: it.videoCodec,
+      videoDynamicRange: it.videoDynamicRange,
+      audioCodec: it.audioCodec,
+      audioChannels: it.audioChannels,
+      rating: it.rating,
+      popularity: it.popularity,
+      runtime: it.runtime,
       filesStale: it.filesStale,
       files: it.files.map((f) => ({
         id: f.id ?? null,

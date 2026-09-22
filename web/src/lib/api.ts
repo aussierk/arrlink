@@ -12,7 +12,7 @@ let redirecting = false
 /**
  * A 401 means the local session is gone. Send the browser to the dedicated
  * /login route (preserving the current path as `next` so it can return
- * here once signed in) instead of hardcoding one auth path here — /login
+ * here once signed in) instead of hardcoding one auth path here -- /login
  * itself decides between auto-redirecting to OIDC, showing the password
  * form, or both. Redirects at most once to avoid loops.
  */
@@ -58,7 +58,7 @@ export type Health = {
 
 export type Me = {
   authenticated: boolean
-  // Password and OIDC login are independent — either, both, or neither may
+  // Password and OIDC login are independent -- either, both, or neither may
   // be enabled at once; the login page offers whichever are active.
   password_enabled: boolean
   oidc_enabled: boolean
@@ -89,7 +89,7 @@ export type AuthConfigInput = {
   password_enabled: boolean
   oidc_enabled: boolean
   auto_login?: boolean
-  // blank = keep the current value (not a secret, but same convention —
+  // blank = keep the current value (not a secret, but same convention --
   // defaults to "admin" if never set at all)
   ui_username?: string
   // blank = keep the current value (the UI can't recover secrets)
@@ -143,39 +143,77 @@ export const DEFAULT_POLL_INTERVAL_S = 300
 
 export type ConditionCategory =
   | 'user'
+  | 'title'
   | 'genre'
   | 'language'
   | 'audio_language'
   | 'quality'
   | 'certification'
   | 'collection'
+  | 'studio'
+  | 'network'
+  | 'series_type'
+  | 'video_codec'
+  | 'video_dynamic_range'
+  | 'audio_codec'
+  | 'audio_channels'
+  | 'rating'
+  | 'popularity'
+  | 'runtime'
   | 'custom'
 
 // The rich categories: a real Radarr/Sonarr metadata equivalent and a
-// DB-backed vocabulary — the other two (user/custom) are purely tag-based,
+// DB-backed vocabulary -- the other two (user/custom) are purely tag-based,
 // unrestricted, and never offer "source: native" or "match_type: vocabulary".
 // "language" is the title's own production language (movie.originalLanguage /
 // series.originalLanguage); "audio_language" is the downloaded file's actual
-// audio track(s) (movieFile.languages / episodefile languages) — they can
+// audio track(s) (movieFile.languages / episodefile languages) -- they can
 // differ, e.g. a foreign film with an English dub.
+// "studio" (Radarr only) / "network" + "series_type" (Sonarr only, the
+// latter e.g. "anime" for zero-manual-tagging anime auto-sorting) come
+// straight off the item; "video_codec"/"video_dynamic_range"/"audio_codec"/
+// "audio_channels" are the downloaded file's own mediaInfo -- the file's
+// literal technical truth, distinct from "quality" (the configured profile
+// *label*, which can be inconsistently named or not cleanly signal HDR/Atmos).
+// "title" is the odd one out: it has a real native field (the item's own
+// title) but, unlike every other rich category, no bounded vocabulary can
+// ever exist for it (titles aren't a finite known set) -- so it never
+// surfaces suggestions, and "match_type: vocabulary" is hidden for it in
+// the rule editor even though it's otherwise a normal rich category.
 export const RICH_CATEGORIES: ConditionCategory[] = [
+  'title',
   'genre',
   'language',
   'audio_language',
   'quality',
   'certification',
   'collection',
+  'studio',
+  'network',
+  'series_type',
+  'video_codec',
+  'video_dynamic_range',
+  'audio_codec',
+  'audio_channels',
 ]
+
+// Numeric native fields, matchable only with match_type 'range' (a min/max
+// pair) -- kept separate from RICH_CATEGORIES: no vocabulary (no finite set
+// of values to suggest) and no tag-classification equivalent, unlike genre
+// etc. "popularity" is Radarr-only (TMDB's popularity score; no Sonarr
+// equivalent). "rating" is IMDB's (Radarr falls back to TMDB's when IMDB's
+// is absent; Sonarr only ever reports one rating value).
+export const NUMERIC_CATEGORIES: ConditionCategory[] = ['rating', 'popularity', 'runtime']
 
 export type ConditionSource = 'tag' | 'native'
 
 export type ConditionItem = {
   category: ConditionCategory
-  match_type: 'exact' | 'list' | 'regex' | 'vocabulary'
+  match_type: 'exact' | 'list' | 'regex' | 'vocabulary' | 'range'
   match_value: string
   join: 'AND' | 'OR' | null
   // undefined/null == 'tag' (today's only behavior). 'native' matches the
-  // item's real Radarr/Sonarr metadata instead of its arbitrary tags — only
+  // item's real Radarr/Sonarr metadata instead of its arbitrary tags -- only
   // meaningful for RICH_CATEGORIES.
   source?: ConditionSource | null
 }
@@ -191,7 +229,7 @@ export type RuleItem = {
   id: number
   name: string
   app_scope: number | null
-  // "All Radarr" / "All Sonarr" — applies to every app of this type instead
+  // "All Radarr" / "All Sonarr" -- applies to every app of this type instead
   // of one specific instance. Mutually exclusive with app_scope.
   app_type_scope: 'radarr' | 'sonarr' | null
   app_name: string | null
@@ -210,7 +248,7 @@ export type RuleItem = {
   // this rule currently owns, and when the most recent one was created.
   link_count: number
   last_link_at: number | null
-  // Present on create/update responses only (not on list/get) — soft,
+  // Present on create/update responses only (not on list/get) -- soft,
   // non-blocking "this value isn't a known vocabulary member" notices.
   vocabulary_warnings?: string[]
 }
@@ -259,7 +297,7 @@ export type PresetItem = {
   category: ConditionCategory
   match_type: 'exact' | 'list' | 'regex'
   match_value: string
-  // See ConditionItem.source — presets for a RICH_CATEGORIES category may
+  // See ConditionItem.source -- presets for a RICH_CATEGORIES category may
   // match native metadata instead of tags (e.g. Genre, Language).
   source?: ConditionSource | null
   subpath: string
@@ -282,7 +320,7 @@ export type EffectiveSettings = {
   app_url: string
   display_language: string
   display_timezone: string
-  // Informational only — set at process launch (entrypoint.sh reads $PORT
+  // Informational only -- set at process launch (entrypoint.sh reads $PORT
   // before Python even starts), not editable from here.
   bind_address: string
   port: number
@@ -316,7 +354,7 @@ export const api = {
     window.location.assign('/')
   },
   /** Password login: true on success (a session cookie is now set), false on
-   * a wrong username/password. Manual fetch (not `req`) — a 401 here is an
+   * a wrong username/password. Manual fetch (not `req`) -- a 401 here is an
    * expected, inline-displayable outcome, not the "session is gone" case
    * `req` handles. */
   loginWithPassword: async (username: string, password: string): Promise<boolean> => {
@@ -504,11 +542,11 @@ export type Summary = {
   orphaned_rules: string[]
 }
 
-// App-wide display timezone (Settings > General > Timezone) — every viewer
+// App-wide display timezone (Settings > General > Timezone) -- every viewer
 // sees the same rendered time regardless of their own browser's local zone.
 // Module-level, set once at boot from Me.display_timezone (see Shell.tsx)
 // and again immediately whenever GeneralSection saves a new value, mirroring
-// the `redirecting` module state above — no context/prop-drilling needed
+// the `redirecting` module state above -- no context/prop-drilling needed
 // since every call site just reads the current value at render time.
 let displayTimezone = 'UTC'
 
@@ -556,7 +594,7 @@ export function readAuthErrorCookie(): string | null {
 /**
  * Fire-and-forget: record a frontend exception in the backend event log so
  * it surfaces on the Logs page / live stream. Deliberately not routed
- * through `req()` — a failure here must never trigger the 401 redirect or
+ * through `req()` -- a failure here must never trigger the 401 redirect or
  * throw back into whatever error handler called it.
  */
 export function reportClientError(input: {

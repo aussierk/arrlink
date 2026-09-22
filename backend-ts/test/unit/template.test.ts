@@ -102,6 +102,43 @@ describe('template placeholders', () => {
     expect(d.slice(d.lastIndexOf(sep) + 1)).not.toMatch(/[\\/]/)
   })
 
+  it('resolves {$decade} and {$title_letter}, bucketing rather than filtering', () => {
+    const ctx = buildContext(
+      matched('custom', 'x'),
+      'Radarr',
+      'Aloha Scooby-Doo!',
+      2005,
+      '/media/movies/Aloha.mkv',
+    )
+    expect(resolve('/linked/{$decade}', null, ctx).d).toBe(P('', 'linked', '2000s'))
+    expect(resolve('/linked/{$title_letter}', null, ctx).d).toBe(P('', 'linked', 'A'))
+  })
+
+  it('{$title_letter} buckets a leading digit/symbol to "#", skipping past it to find one', () => {
+    const digit = buildContext(
+      matched('custom', 'x'),
+      'Radarr',
+      '(500) Days of Summer',
+      2009,
+      '/media/movies/500.mkv',
+    )
+    expect(resolve('/linked/{$title_letter}', null, digit).d).toBe(P('', 'linked', '#'))
+
+    const noAlnum = buildContext(
+      matched('custom', 'x'),
+      'Radarr',
+      '???',
+      2009,
+      '/media/movies/q.mkv',
+    )
+    expect(resolve('/linked/{$title_letter}', null, noAlnum).d).toBe(P('', 'linked', '#'))
+  })
+
+  it('{$decade} is empty when the item has no year', () => {
+    const ctx = buildContext(matched('custom', 'x'), 'Radarr', 'T', null, '/media/movies/T.mkv')
+    expect(resolveTemplate('[{$decade}]', ctx)).toBe('[]')
+  })
+
   it('throws for an unknown placeholder', () => {
     const ctx = buildContext(
       matched('custom', 'x'),

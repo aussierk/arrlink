@@ -57,6 +57,38 @@ describe('matchRule / matchRuleAll: regex', () => {
   })
 })
 
+describe('matchRule / matchRuleAll: range', () => {
+  it('matches an open-ended lower bound ("rating >= 7")', () => {
+    expect(matchRuleAll('range', '{"min":7}', ['6.9', '7', '9.5']).map((m) => m.tag)).toEqual(
+      ['7', '9.5'],
+    )
+  })
+
+  it('matches an open-ended upper bound ("runtime <= 90")', () => {
+    expect(
+      matchRuleAll('range', '{"min":null,"max":90}', ['45', '90', '91']).map((m) => m.tag),
+    ).toEqual(['45', '90'])
+  })
+
+  it('matches a closed min/max range, inclusive on both ends', () => {
+    expect(
+      matchRuleAll('range', '{"min":5,"max":8}', ['4.9', '5', '8', '8.1']).map((m) => m.tag),
+    ).toEqual(['5', '8'])
+  })
+
+  it('ignores non-numeric candidate values instead of throwing', () => {
+    expect(matchRuleAll('range', '{"min":1}', ['abc', '2'])).toEqual([
+      { tag: '2', regexMatch: null },
+    ])
+  })
+
+  it('never matches for malformed range JSON (no bound, bad JSON, non-numeric bound)', () => {
+    expect(matchRuleAll('range', '{}', ['5'])).toEqual([])
+    expect(matchRuleAll('range', 'not json', ['5'])).toEqual([])
+    expect(matchRuleAll('range', '{"min":"x"}', ['5'])).toEqual([])
+  })
+})
+
 describe('matchConditions', () => {
   it('returns false with no conditions', () => {
     expect(matchConditions([], ['kids'])).toEqual({

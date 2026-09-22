@@ -7,6 +7,8 @@ import {
   encodeServiceValue,
   nextMatchValueForSelection,
   optionsForCategory,
+  parseRangeMatchValue,
+  rangeMatchValue,
   reorderConditions,
   selectedFor,
   type Vocab,
@@ -49,6 +51,20 @@ describe('selectedFor', () => {
   it('wraps a single non-list value, or nothing when empty', () => {
     expect(selectedFor(cond('exact', 'x'))).toEqual(['x'])
     expect(selectedFor(cond('exact', ''))).toEqual([])
+  })
+})
+
+describe('rangeMatchValue / parseRangeMatchValue', () => {
+  it('round-trips a min-only, max-only, and both-bounds range', () => {
+    expect(parseRangeMatchValue(rangeMatchValue(7, null))).toEqual({ min: 7, max: null })
+    expect(parseRangeMatchValue(rangeMatchValue(null, 90))).toEqual({ min: null, max: 90 })
+    expect(parseRangeMatchValue(rangeMatchValue(5, 8))).toEqual({ min: 5, max: 8 })
+  })
+
+  it('falls back to both bounds unset for malformed/empty JSON (an in-progress edit)', () => {
+    expect(parseRangeMatchValue('')).toEqual({ min: null, max: null })
+    expect(parseRangeMatchValue('not json')).toEqual({ min: null, max: null })
+    expect(parseRangeMatchValue('[1,2]')).toEqual({ min: null, max: null })
   })
 })
 

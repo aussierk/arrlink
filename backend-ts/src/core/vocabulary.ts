@@ -13,13 +13,27 @@ const TRASH_QUALITY_URL =
   'https://raw.githubusercontent.com/TRaSH-Guides/Guides/master/docs/json/radarr/quality-size/movie.json'
 
 export const RICH_CATEGORIES = new Set([
+  'title',
   'genre',
   'certification',
   'collection',
   'quality',
   'language',
   'audio_language',
+  'studio',
+  'network',
+  'series_type',
+  'video_codec',
+  'video_dynamic_range',
+  'audio_codec',
+  'audio_channels',
 ])
+
+// Numeric native fields, matchable only with the 'range' condition type (see
+// core/matching.ts's parseRangeValue) -- kept separate from RICH_CATEGORIES
+// since they have no vocabulary (no finite/known set of values to sync or
+// validate against) and no tag-classification equivalent, unlike genre etc.
+export const NUMERIC_CATEGORIES = new Set(['rating', 'popularity', 'runtime'])
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null

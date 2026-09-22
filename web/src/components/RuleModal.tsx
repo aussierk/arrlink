@@ -38,7 +38,7 @@ import { inputCls } from '../lib/ui'
  * condition is tied to exactly one category (Users, Genres, Languages,
  * Quality Profile, Certification, Collections, Custom tags) with its own
  * match type (exact/list/regex). Evaluated left-to-right with standard
- * short-circuit semantics — only conditions that actually matched feed
+ * short-circuit semantics -- only conditions that actually matched feed
  * their category's placeholder (e.g. {$genre}) into the destination
  * template. A specific Service must be picked first since Genre/
  * Certification suggestions depend on its type (movie vs TV).
@@ -80,7 +80,7 @@ export default function RuleModal({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [presets, setPresets] = useState<PresetItem[]>([])
   // First configured allowed root, used as the base for new-rule/preset dir
-  // templates instead of a hardcoded /media — falls back to it until loaded.
+  // templates instead of a hardcoded /media -- falls back to it until loaded.
   const [baseRoot, setBaseRoot] = useState(DEFAULT_BASE_ROOT)
 
   useEffect(() => {

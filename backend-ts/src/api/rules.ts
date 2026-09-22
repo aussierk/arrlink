@@ -9,6 +9,7 @@ import { logEvent } from '../db/events.js'
 import { apps, rules as rulesTable } from '../db/schema.js'
 import type { SettingsStore } from '../db/settings-store.js'
 import type { Condition } from '../core/matching.js'
+import { parseRangeValue } from '../core/matching.js'
 import { forceUnlinkRuleLinks } from '../core/linker.js'
 import { planLinks, type PlannerRule } from '../core/planner.js'
 import type { Poller } from '../core/poller.js'
@@ -22,6 +23,7 @@ import {
   staticPrefix,
 } from '../core/template.js'
 import {
+  NUMERIC_CATEGORIES,
   RICH_CATEGORIES,
   expandVocabularyConditions,
   validateConditionValues,
@@ -47,31 +49,53 @@ const ConditionInSchema = z
   .object({
     category: z.enum([
       'user',
+      'title',
       'genre',
       'language',
       'audio_language',
       'quality',
       'certification',
       'collection',
+      'studio',
+      'network',
+      'series_type',
+      'video_codec',
+      'video_dynamic_range',
+      'audio_codec',
+      'audio_channels',
+      'rating',
+      'popularity',
+      'runtime',
       'custom',
     ]),
-    match_type: z.enum(['exact', 'list', 'regex', 'vocabulary']),
+    match_type: z.enum(['exact', 'list', 'regex', 'vocabulary', 'range']),
     // "vocabulary" intentionally carries an empty match_value
     match_value: z.string().max(2000),
     join: z.enum(['AND', 'OR']).nullable().default(null),
-    // null/absent = "tag"; "native" matches real Radarr/Sonarr metadata, rich categories only.
+    // null/absent = "tag"; "native" matches real Radarr/Sonarr metadata, rich/numeric categories only.
     source: z.enum(['tag', 'native']).nullable().default(null),
   })
   .superRefine((c, ctx) => {
-    if (c.source === 'native' && !RICH_CATEGORIES.has(c.category)) {
+    if (c.source === 'native' && !RICH_CATEGORIES.has(c.category) && !NUMERIC_CATEGORIES.has(c.category)) {
       ctx.addIssue({
         code: 'custom',
         message:
           `condition '${c.category}': native-metadata matching is only available ` +
-          'for genre/language/audio_language/quality/certification/collection',
+          'for title/genre/language/audio_language/quality/certification/collection/' +
+          'studio/network/series_type/video_codec/video_dynamic_range/audio_codec/audio_channels/' +
+          'rating/popularity/runtime',
       })
     }
-    if (c.match_type === 'regex') {
+    if (c.match_type === 'range') {
+      if (parseRangeValue(c.match_value) === null) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            `condition '${c.category}': range requires JSON like {"min":7} or ` +
+            '{"min":null,"max":90} -- at least one of min/max must be a number',
+        })
+      }
+    } else if (c.match_type === 'regex') {
       try {
         new RegExp(c.match_value)
       } catch (e) {
@@ -146,7 +170,7 @@ const RuleInSchema = z
       ctx.addIssue({
         code: 'custom',
         message:
-          'app_scope and app_type_scope are mutually exclusive — pick a specific ' +
+          'app_scope and app_type_scope are mutually exclusive -- pick a specific ' +
           'service or an entire service type, not both',
       })
     }
@@ -524,6 +548,16 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
         qualityProfileName: it.qualityProfileName,
         originalLanguage: it.originalLanguage,
         audioLanguages: it.audioLanguages,
+        studio: it.studio,
+        network: it.network,
+        seriesType: it.seriesType,
+        videoCodec: it.videoCodec,
+        videoDynamicRange: it.videoDynamicRange,
+        audioCodec: it.audioCodec,
+        audioChannels: it.audioChannels,
+        rating: it.rating,
+        popularity: it.popularity,
+        runtime: it.runtime,
         filesStale: it.filesStale,
         files: it.files.map((f) => ({
           id: f.id ?? null,

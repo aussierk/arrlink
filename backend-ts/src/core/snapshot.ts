@@ -44,6 +44,16 @@ export function snapshotItems(db: DbClient, appId: number): Item[] {
     qualityProfileName: r.qualityProfileName,
     originalLanguage: r.originalLanguage,
     audioLanguages: JSON.parse(r.audioLanguagesJson || '[]') as string[],
+    studio: r.studio,
+    network: r.network,
+    seriesType: r.seriesType,
+    videoCodec: JSON.parse(r.videoCodecJson || '[]') as string[],
+    videoDynamicRange: JSON.parse(r.videoDynamicRangeJson || '[]') as string[],
+    audioCodec: JSON.parse(r.audioCodecJson || '[]') as string[],
+    audioChannels: JSON.parse(r.audioChannelsJson || '[]') as string[],
+    rating: r.rating,
+    popularity: r.popularity,
+    runtime: r.runtimeMinutes,
     dbId: r.id,
   }))
 }

@@ -12,9 +12,12 @@ import TagSelect from '../ui/TagSelect'
 import {
   CATEGORY_ORDER,
   CUSTOM,
+  NUMERIC,
   RICH,
   categoryLabel,
   creatableFor,
+  parseRangeMatchValue,
+  rangeMatchValue,
   selectedFor,
 } from './helpers'
 
@@ -51,6 +54,42 @@ export default function ConditionRow({
   const selected = selectedFor(c)
 
   function renderValue() {
+    if (NUMERIC.has(c.category)) {
+      const { min, max } = parseRangeMatchValue(c.match_value)
+      const update = (patch: { min?: number | null; max?: number | null }) =>
+        onUpdate({
+          match_value: rangeMatchValue(
+            'min' in patch ? patch.min! : min,
+            'max' in patch ? patch.max! : max,
+          ),
+        })
+      return (
+        <div className="flex items-center gap-2">
+          <input
+            className={inputCls}
+            type="number"
+            step="any"
+            placeholder={t('ruleModal.rangeMinPlaceholder')}
+            value={min ?? ''}
+            onChange={(e) =>
+              update({ min: e.target.value === '' ? null : Number(e.target.value) })
+            }
+          />
+          <span className="text-xs text-fg-subtle">{t('ruleModal.rangeTo')}</span>
+          <input
+            className={inputCls}
+            type="number"
+            step="any"
+            placeholder={t('ruleModal.rangeMaxPlaceholder')}
+            value={max ?? ''}
+            onChange={(e) =>
+              update({ max: e.target.value === '' ? null : Number(e.target.value) })
+            }
+          />
+        </div>
+      )
+    }
+
     if (c.match_type === 'vocabulary') {
       const known = optionsFor(c.category, c.source)
       return (
@@ -184,18 +223,41 @@ export default function ConditionRow({
                   value={c.category}
                   onChange={(e) => {
                     const cat = e.target.value as ConditionCategory
+                    // Numeric categories (rating/popularity/runtime) only ever
+                    // make sense as a native range comparison -- no tag
+                    // equivalent, no exact/list/regex/vocabulary mode.
+                    if (NUMERIC.has(cat)) {
+                      onUpdate({
+                        category: cat,
+                        match_type: 'range',
+                        match_value: rangeMatchValue(null, null),
+                        source: 'native',
+                      })
+                      return
+                    }
                     onUpdate({
                       category: cat,
-                      // Users has no literal tag suggestions — regex (the
+                      // Users has no literal tag suggestions -- regex (the
                       // "## - username" style pick) is the only mode that
                       // actually extracts a username, so switching to it
                       // defaults there. Still overridable via Match Type.
-                      match_type: cat === 'user' ? 'regex' : c.match_type,
+                      // Title never offers "vocabulary" (see the Match Type
+                      // select below), so leaving one behind would strand
+                      // the dropdown on a hidden option. Coming *from* a
+                      // numeric category, match_type was 'range' -- also not
+                      // a valid option here, so it falls back to 'list' too.
+                      match_type:
+                        cat === 'user'
+                          ? 'regex'
+                          : (cat === 'title' && c.match_type === 'vocabulary') ||
+                              (c.match_type as string) === 'range'
+                            ? 'list'
+                            : c.match_type,
                       match_value: '',
                       // Genre defaults to Native: the arr instance's own
                       // genre field is what most rules actually want, and
                       // it's now backed by real per-item observed data (not
-                      // just the shared TMDB catalog) — still overridable
+                      // just the shared TMDB catalog) -- still overridable
                       // via the source toggle below. Non-rich categories
                       // (user/custom) never allow "native" server-side, so
                       // leaving one clears it rather than tripping that
@@ -216,27 +278,37 @@ export default function ConditionRow({
                   ))}
                 </select>
               </Field>
-              <Field label={t('ruleModal.matchType')}>
-                <select
-                  className={inputCls}
-                  value={c.match_type}
-                  onChange={(e) =>
-                    onUpdate({
-                      match_type: e.target.value as ConditionItem['match_type'],
-                      match_value: '',
-                    })
-                  }
-                >
-                  <option value="list">{t('ruleModal.matchTypeListOption')}</option>
-                  <option value="exact">{t('ruleModal.matchTypeExactOption')}</option>
-                  <option value="regex">{t('ruleModal.matchTypeRegex')}</option>
-                  {RICH.has(c.category) && (
-                    <option value="vocabulary">
-                      {t('ruleModal.matchTypeVocabulary')}
-                    </option>
-                  )}
-                </select>
-              </Field>
+              {/* Numeric categories (rating/popularity/runtime) only ever
+                  compare as a native range -- no exact/list/regex/vocabulary
+                  mode makes sense, so Match Type is hidden rather than
+                  offering dead-end options. */}
+              {!NUMERIC.has(c.category) && (
+                <Field label={t('ruleModal.matchType')}>
+                  <select
+                    className={inputCls}
+                    value={c.match_type}
+                    onChange={(e) =>
+                      onUpdate({
+                        match_type: e.target.value as ConditionItem['match_type'],
+                        match_value: '',
+                      })
+                    }
+                  >
+                    <option value="list">{t('ruleModal.matchTypeListOption')}</option>
+                    <option value="exact">{t('ruleModal.matchTypeExactOption')}</option>
+                    <option value="regex">{t('ruleModal.matchTypeRegex')}</option>
+                    {/* title has no bounded vocabulary (titles aren't a finite
+                        known set) -- vocabulary match would always be an
+                        empty, no-op condition, so it's hidden rather than
+                        offering a dead end. */}
+                    {RICH.has(c.category) && c.category !== 'title' && (
+                      <option value="vocabulary">
+                        {t('ruleModal.matchTypeVocabulary')}
+                      </option>
+                    )}
+                  </select>
+                </Field>
+              )}
             </div>
             {RICH.has(c.category) && (
               <Field label={t('ruleModal.matchSource')}>

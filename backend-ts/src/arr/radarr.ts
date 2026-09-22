@@ -4,10 +4,12 @@ import { BaseAdapter } from './base.js'
 import {
   AdapterError,
   asStr,
+  mediaInfoValues,
   translateTagLabels,
   type AppInfo,
   type Item,
   type MediaFile,
+  type MediaInfo,
   type Tag,
 } from './types.js'
 
@@ -15,6 +17,7 @@ interface RadarrMovieFile {
   path?: string
   size?: number
   languages?: Array<{ id?: number; name?: string }>
+  mediaInfo?: MediaInfo | null
 }
 
 interface RadarrMovieRow {
@@ -28,6 +31,13 @@ interface RadarrMovieRow {
   collection?: { name?: string } | null
   qualityProfileId?: number | null
   originalLanguage?: { name?: string } | null
+  studio?: string
+  ratings?: {
+    imdb?: { value?: number } | null
+    tmdb?: { value?: number } | null
+  } | null
+  popularity?: number
+  runtime?: number
 }
 
 function toNumberOrNull(v: unknown): number | null {
@@ -111,6 +121,11 @@ export class RadarrAdapter extends BaseAdapter {
       )
         .map((l) => l?.name?.trim())
         .filter((n): n is string => Boolean(n))
+      const studio = (row.studio ?? '').trim() || null
+      const media = mediaInfoValues(movieFile.mediaInfo)
+      const rating = toNumberOrNull(row.ratings?.imdb?.value ?? row.ratings?.tmdb?.value)
+      const popularity = toNumberOrNull(row.popularity)
+      const runtime = toNumberOrNull(row.runtime)
       const apiSize = toNumberOrNull(movieFile.size)
 
       const itemDir = dirname(path)
@@ -150,6 +165,11 @@ export class RadarrAdapter extends BaseAdapter {
         qualityProfileName: qpName,
         originalLanguage,
         audioLanguages,
+        studio,
+        ...media,
+        rating,
+        popularity,
+        runtime,
       })
     }
     return items

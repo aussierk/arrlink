@@ -277,6 +277,164 @@ describe('planLinks', () => {
     expect(defaulted.planned[0].dstPath).toBe(sourceMode.planned[0].dstPath)
   })
 
+  it('matches native studio/network/seriesType and unions mediaInfo (videoCodec etc.) across files', () => {
+    const rules: PlannerRule[] = [
+      rule({
+        id: 1,
+        dirTemplate: '/linked/anime',
+        conditions: [
+          {
+            category: 'series_type',
+            matchType: 'exact',
+            matchValue: 'anime',
+            join: null,
+            source: 'native',
+          },
+        ],
+      }),
+      rule({
+        id: 2,
+        dirTemplate: '/linked/hdr',
+        conditions: [
+          {
+            category: 'video_dynamic_range',
+            matchType: 'exact',
+            matchValue: 'HDR',
+            join: null,
+            source: 'native',
+          },
+        ],
+      }),
+    ]
+    const items: PlannerItem[] = [
+      {
+        id: 1,
+        title: 'Some Anime',
+        year: 2021,
+        tags: [],
+        path: '',
+        network: 'Netflix',
+        seriesType: 'anime',
+        videoCodec: ['h265'],
+        videoDynamicRange: ['HDR', 'DV HDR10'],
+        audioCodec: ['EAC3 Atmos'],
+        audioChannels: ['5.1'],
+        files: [{ id: null, absPath: '/m/e1.mkv', inode: null }],
+      },
+      {
+        id: 2,
+        title: 'A Movie',
+        year: 2020,
+        tags: [],
+        path: '',
+        studio: 'UCP',
+        videoDynamicRange: [],
+        files: [{ id: null, absPath: '/m/movie.mkv', inode: null }],
+      },
+    ]
+    const { planned } = planLinks(rules, items, 'Sonarr', 1, ['/linked'])
+    const dsts = planned.map((p) => p.dstPath).sort()
+    expect(dsts).toEqual(
+      [P('', 'linked', 'anime', 'e1.mkv'), P('', 'linked', 'hdr', 'e1.mkv')].sort(),
+    )
+  })
+
+  it('matches native rating/runtime with a range condition', () => {
+    const rules: PlannerRule[] = [
+      rule({
+        id: 1,
+        dirTemplate: '/linked/top-rated',
+        conditions: [
+          {
+            category: 'rating',
+            matchType: 'range',
+            matchValue: '{"min":7}',
+            join: null,
+            source: 'native',
+          },
+        ],
+      }),
+      rule({
+        id: 2,
+        dirTemplate: '/linked/quick',
+        conditions: [
+          {
+            category: 'runtime',
+            matchType: 'range',
+            matchValue: '{"min":null,"max":90}',
+            join: null,
+            source: 'native',
+          },
+        ],
+      }),
+    ]
+    const items: PlannerItem[] = [
+      {
+        id: 1,
+        title: 'Great Movie',
+        year: 2020,
+        tags: [],
+        path: '',
+        rating: 8.1,
+        runtime: 150,
+        files: [{ id: null, absPath: '/m/great.mkv', inode: null }],
+      },
+      {
+        id: 2,
+        title: 'Short Film',
+        year: 2019,
+        tags: [],
+        path: '',
+        rating: 5,
+        runtime: 45,
+        files: [{ id: null, absPath: '/m/short.mkv', inode: null }],
+      },
+    ]
+    const { planned } = planLinks(rules, items, 'Radarr', 1, ['/linked'])
+    const dsts = planned.map((p) => p.dstPath).sort()
+    expect(dsts).toEqual(
+      [P('', 'linked', 'top-rated', 'great.mkv'), P('', 'linked', 'quick', 'short.mkv')].sort(),
+    )
+  })
+
+  it('matches native title, exposing the real item title for regex/exact rules', () => {
+    const rules: PlannerRule[] = [
+      rule({
+        id: 1,
+        dirTemplate: '/linked/franchise',
+        conditions: [
+          {
+            category: 'title',
+            matchType: 'regex',
+            matchValue: '^The Matrix',
+            join: null,
+            source: 'native',
+          },
+        ],
+      }),
+    ]
+    const items: PlannerItem[] = [
+      {
+        id: 1,
+        title: 'The Matrix Reloaded',
+        year: 2003,
+        tags: [],
+        path: '',
+        files: [{ id: null, absPath: '/m/matrix.mkv', inode: null }],
+      },
+      {
+        id: 2,
+        title: 'Inception',
+        year: 2010,
+        tags: [],
+        path: '',
+        files: [{ id: null, absPath: '/m/inception.mkv', inode: null }],
+      },
+    ]
+    const { planned } = planLinks(rules, items, 'Radarr', 1, ['/linked'])
+    expect(planned.map((p) => p.itemTitle)).toEqual(['The Matrix Reloaded'])
+  })
+
   it('sorts active rules by priority then id', () => {
     const rules: PlannerRule[] = [
       rule({

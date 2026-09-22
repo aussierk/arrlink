@@ -17,6 +17,35 @@ export interface Tag {
   id: number | null
 }
 
+/** A movieFile/episodeFile's raw `mediaInfo` block, as both adapters see it. */
+export interface MediaInfo {
+  videoCodec?: string
+  videoDynamicRange?: string
+  audioCodec?: string
+  audioChannels?: number | string
+}
+
+/** One file's mediaInfo as the union-of-values arrays Item expects (one file
+ * for Radarr, but Sonarr unions this across a series' many episode files,
+ * same shape as audioLanguages). */
+export function mediaInfoValues(mediaInfo: MediaInfo | null | undefined): {
+  videoCodec: string[]
+  videoDynamicRange: string[]
+  audioCodec: string[]
+  audioChannels: string[]
+} {
+  const one = (v: unknown): string[] => {
+    const s = typeof v === 'number' ? String(v) : asStr(v).trim()
+    return s ? [s] : []
+  }
+  return {
+    videoCodec: one(mediaInfo?.videoCodec),
+    videoDynamicRange: one(mediaInfo?.videoDynamicRange),
+    audioCodec: one(mediaInfo?.audioCodec),
+    audioChannels: one(mediaInfo?.audioChannels),
+  }
+}
+
 export interface MediaFile {
   relPath: string
   absPath: string
@@ -61,6 +90,30 @@ export interface Item {
    * undefined (not []) means "not refetched this poll" (Sonarr's delta-fetch
    * skip) -- the poller keeps the last stored value instead of clearing it. */
   audioLanguages?: string[]
+  /** Radarr only: the studio/production company (e.g. "UCP"). Always null on Sonarr. */
+  studio?: string | null
+  /** Sonarr only: the broadcasting network (e.g. "Netflix"). Always null on Radarr. */
+  network?: string | null
+  /** Sonarr only: "standard" | "anime" | "daily", Sonarr's own classification --
+   * lets anime auto-sort via a native condition with zero manual tagging. Always
+   * null on Radarr. */
+  seriesType?: string | null
+  /** The downloaded file(s)' own technical mediaInfo -- distinct from
+   * qualityProfileName (Radarr/Sonarr's configured profile *label*, which can be
+   * inconsistently named or not cleanly signal HDR/Atmos): these report the
+   * file's literal technical truth. Union across files (multiple for Sonarr),
+   * same shape as audioLanguages. undefined means "not refetched this poll". */
+  videoCodec?: string[]
+  videoDynamicRange?: string[]
+  audioCodec?: string[]
+  audioChannels?: string[]
+  /** IMDB rating (falls back to TMDB's on Radarr when IMDB's is absent; Sonarr
+   * only ever reports one rating value, no per-source breakdown). */
+  rating?: number | null
+  /** Radarr only: TMDB's popularity score. Always null on Sonarr (no equivalent field). */
+  popularity?: number | null
+  /** Runtime in minutes. */
+  runtime?: number | null
   statsFingerprint?: string | null
   filesStale?: boolean
   /** app_items.id once stored -- distinct from `id` (the adapter's external

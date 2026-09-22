@@ -37,6 +37,7 @@ const MATCH_TYPES: ConditionItem['match_type'][] = [
   'list',
   'regex',
   'vocabulary',
+  'range',
 ]
 
 const MATCH_TYPE_LABEL_KEY: Record<string, string> = {
@@ -44,6 +45,7 @@ const MATCH_TYPE_LABEL_KEY: Record<string, string> = {
   list: 'rules.matchTypeLabel.list',
   regex: 'rules.matchTypeLabel.regex',
   vocabulary: 'rules.matchTypeLabel.vocabulary',
+  range: 'rules.matchTypeLabel.range',
 }
 
 const CATEGORIES: ConditionCategory[] = [
@@ -54,6 +56,16 @@ const CATEGORIES: ConditionCategory[] = [
   'quality',
   'certification',
   'collection',
+  'studio',
+  'network',
+  'series_type',
+  'video_codec',
+  'video_dynamic_range',
+  'audio_codec',
+  'audio_channels',
+  'rating',
+  'popularity',
+  'runtime',
   'custom',
 ]
 
@@ -65,6 +77,16 @@ const CATEGORY_LABEL_KEY: Record<string, string> = {
   quality: 'rules.categoryLabel.quality',
   certification: 'rules.categoryLabel.certification',
   collection: 'rules.categoryLabel.collection',
+  studio: 'rules.categoryLabel.studio',
+  network: 'rules.categoryLabel.network',
+  series_type: 'rules.categoryLabel.series_type',
+  video_codec: 'rules.categoryLabel.video_codec',
+  video_dynamic_range: 'rules.categoryLabel.video_dynamic_range',
+  audio_codec: 'rules.categoryLabel.audio_codec',
+  audio_channels: 'rules.categoryLabel.audio_channels',
+  rating: 'rules.categoryLabel.rating',
+  popularity: 'rules.categoryLabel.popularity',
+  runtime: 'rules.categoryLabel.runtime',
   custom: 'rules.categoryLabel.custom',
 }
 
@@ -75,6 +97,26 @@ const CATEGORY_LABEL_KEY: Record<string, string> = {
  * instead of the useTranslation hook. */
 function conditionValueNode(c: ConditionItem): ReactNode {
   const t = i18n.t
+  if (c.match_type === 'range') {
+    let min: number | null = null
+    let max: number | null = null
+    try {
+      const d = JSON.parse(c.match_value) as { min?: number | null; max?: number | null }
+      min = typeof d.min === 'number' ? d.min : null
+      max = typeof d.max === 'number' ? d.max : null
+    } catch {
+      // malformed -- render as empty
+    }
+    const text =
+      min !== null && max !== null
+        ? `${min}–${max}`
+        : min !== null
+          ? `≥ ${min}`
+          : max !== null
+            ? `≤ ${max}`
+            : ''
+    return <span className="text-fg-soft">{text}</span>
+  }
   if (c.match_type === 'list') {
     const tags = c.match_value
       .split(',')

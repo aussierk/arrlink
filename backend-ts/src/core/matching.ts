@@ -8,9 +8,43 @@ export interface RuleMatch {
 }
 
 // 'vocabulary' is a stored-but-not-directly-matched type: expandVocabularyConditions
-// rewrites it to 'list' before match_rule_all ever sees it.
-export type MatchType = 'exact' | 'list' | 'regex' | 'vocabulary'
+// rewrites it to 'list' before match_rule_all ever sees it. 'range' is for
+// numeric native fields (rating, popularity, runtime) -- matchValue is
+// {"min": number|null, "max": number|null} JSON, either bound omittable for
+// an open-ended threshold ("rating >= 7" is {min:7,max:null}).
+export type MatchType = 'exact' | 'list' | 'regex' | 'vocabulary' | 'range'
 export type ConditionJoin = 'AND' | 'OR' | null
+
+export interface RangeValue {
+  min: number | null
+  max: number | null
+}
+
+/** Parses a 'range' condition's matchValue; null if malformed (never matches,
+ * same as an invalid regex). */
+export function parseRangeValue(matchValue: string): RangeValue | null {
+  try {
+    const decoded: unknown = JSON.parse(matchValue)
+    if (
+      decoded !== null &&
+      typeof decoded === 'object' &&
+      !Array.isArray(decoded) &&
+      ('min' in decoded || 'max' in decoded)
+    ) {
+      const d = decoded as { min?: unknown; max?: unknown }
+      const min = d.min === null || d.min === undefined ? null : Number(d.min)
+      const max = d.max === null || d.max === undefined ? null : Number(d.max)
+      if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max))) {
+        return null
+      }
+      if (min === null && max === null) return null // no bound at all -- never matches
+      return { min, max }
+    }
+  } catch {
+    // malformed JSON
+  }
+  return null
+}
 
 export interface Condition {
   category: string
@@ -126,6 +160,19 @@ export function matchRuleAll(
       if (m) out.push({ tag: t, regexMatch: m })
     }
     return out
+  }
+
+  if (matchType === 'range') {
+    const range = parseRangeValue(matchValue)
+    if (range === null) return []
+    const inRange = (n: number): boolean =>
+      (range.min === null || n >= range.min) && (range.max === null || n <= range.max)
+    return itemTags
+      .filter((t) => {
+        const n = Number(t)
+        return Number.isFinite(n) && inRange(n)
+      })
+      .map((t) => ({ tag: t, regexMatch: null }))
   }
 
   return []

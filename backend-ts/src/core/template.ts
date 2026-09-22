@@ -26,10 +26,23 @@ export const FIXED_PLACEHOLDERS = new Set([
   'app',
   'title',
   'year',
+  'decade',
+  'title_letter',
   'basename',
   'stem',
   'ext',
 ])
+
+// First letter/digit of a title, uppercased, for A-Z/# shelf-style
+// bucketing (skips a leading symbol, e.g. "(500) Days of Summer" -> '5' ->
+// '#'). Falls back to '#' for a digit or when the title has no
+// alphanumeric character at all, so every item still lands somewhere.
+function titleLetter(title: string): string {
+  const m = (title || '').match(/[A-Za-z0-9]/)
+  if (!m) return '#'
+  const ch = m[0]
+  return /[A-Za-z]/.test(ch) ? ch.toUpperCase() : '#'
+}
 
 export class TemplateError extends Error {}
 
@@ -68,6 +81,9 @@ function resolveToken(name: string, ctx: TemplateContext): string {
   if (name === 'app') return clean(ctx.appName)
   if (name === 'title') return clean(ctx.itemTitle)
   if (name === 'year') return ctx.itemYear !== null ? String(ctx.itemYear) : ''
+  if (name === 'decade')
+    return ctx.itemYear !== null ? `${Math.floor(ctx.itemYear / 10) * 10}s` : ''
+  if (name === 'title_letter') return titleLetter(ctx.itemTitle)
   if (name === 'basename') return clean(ctx.srcBasename)
   if (name === 'stem') return clean(ctx.srcStem)
   if (name === 'ext') return ctx.srcExt || '' // keep verbatim -- carries the real file type

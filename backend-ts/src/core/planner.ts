@@ -66,6 +66,16 @@ export interface PlannerItem {
   originalLanguage?: string | null
   /** The downloaded file's own audio track(s) -- see arr/types.ts's Item.audioLanguages. */
   audioLanguages?: string[]
+  studio?: string | null
+  network?: string | null
+  seriesType?: string | null
+  videoCodec?: string[]
+  videoDynamicRange?: string[]
+  audioCodec?: string[]
+  audioChannels?: string[]
+  rating?: number | null
+  popularity?: number | null
+  runtime?: number | null
   filesStale?: boolean
   files: PlannerFile[]
 }
@@ -91,12 +101,27 @@ function fanoutVariants(cr: ConditionsResult): Array<[string, ConditionMatch[]]>
  * lists so matchRuleAll works unchanged regardless of source. */
 function nativeValues(it: PlannerItem): Record<string, string[]> {
   return {
+    title: it.title ? [it.title] : [],
     genre: it.genres ?? [],
     certification: it.certification ? [it.certification] : [],
     collection: it.collection ? [it.collection] : [],
     quality: it.qualityProfileName ? [it.qualityProfileName] : [],
     language: it.originalLanguage ? [it.originalLanguage] : [],
     audio_language: it.audioLanguages ?? [],
+    studio: it.studio ? [it.studio] : [],
+    network: it.network ? [it.network] : [],
+    series_type: it.seriesType ? [it.seriesType] : [],
+    video_codec: it.videoCodec ?? [],
+    video_dynamic_range: it.videoDynamicRange ?? [],
+    audio_codec: it.audioCodec ?? [],
+    audio_channels: it.audioChannels ?? [],
+    // Numeric range conditions compare against these as strings (parsed back
+    // to numbers in matchRuleAll) -- same 0-or-1-element-list shape as every
+    // other single-valued native field.
+    rating: it.rating !== null && it.rating !== undefined ? [String(it.rating)] : [],
+    popularity:
+      it.popularity !== null && it.popularity !== undefined ? [String(it.popularity)] : [],
+    runtime: it.runtime !== null && it.runtime !== undefined ? [String(it.runtime)] : [],
   }
 }
 

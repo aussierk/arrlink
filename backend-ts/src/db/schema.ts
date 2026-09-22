@@ -111,6 +111,23 @@ export const appItems = sqliteTable(
     // The downloaded file's own audio track(s), distinct from originalLanguage
     // (the title's production language) -- see arr/types.ts's Item.audioLanguages.
     audioLanguagesJson: text('audio_languages_json').notNull().default('[]'),
+    // Radarr only (studio) / Sonarr only (network, seriesType) -- always null
+    // on the other app type. See arr/types.ts's Item fields of the same name.
+    studio: text('studio'),
+    network: text('network'),
+    seriesType: text('series_type'),
+    // The file(s)' own technical mediaInfo, distinct from qualityProfileName
+    // (the configured profile *label*) -- see arr/types.ts's Item.videoCodec etc.
+    videoCodecJson: text('video_codec_json').notNull().default('[]'),
+    videoDynamicRangeJson: text('video_dynamic_range_json').notNull().default('[]'),
+    audioCodecJson: text('audio_codec_json').notNull().default('[]'),
+    audioChannelsJson: text('audio_channels_json').notNull().default('[]'),
+    // Numeric fields, matchable with the 'range' condition type -- see
+    // arr/types.ts's Item.rating/popularity/runtime. popularity is Radarr-only
+    // (always null on Sonarr).
+    rating: real('rating'),
+    popularity: real('popularity'),
+    runtimeMinutes: int('runtime_minutes'),
     statsFingerprint: text('stats_fingerprint'),
   },
   (t) => ({

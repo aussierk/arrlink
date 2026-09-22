@@ -1,5 +1,6 @@
 import i18n from '../../i18n'
 import {
+  NUMERIC_CATEGORIES,
   RICH_CATEGORIES,
   type ConditionCategory,
   type ConditionItem,
@@ -12,27 +13,55 @@ import { CUSTOM_TAG_SUGGESTIONS, joinList, parseList } from '../../lib/tagOption
 
 export const RICH = new Set<string>(RICH_CATEGORIES)
 
+// Numeric categories (rating/popularity/runtime): match_type is always
+// 'range', source is always 'native' (no tag equivalent) -- the rule editor
+// hides the Match Type/Source controls and TagSelect for these, showing a
+// min/max pair instead. See NUMERIC_CATEGORIES in lib/api.ts.
+export const NUMERIC = new Set<string>(NUMERIC_CATEGORIES)
+
 export const CUSTOM = '__custom__'
 
 export const CATEGORY_ORDER: ConditionCategory[] = [
   'user',
+  'title',
   'genre',
   'language',
   'audio_language',
   'quality',
   'certification',
   'collection',
+  'studio',
+  'network',
+  'series_type',
+  'video_codec',
+  'video_dynamic_range',
+  'audio_codec',
+  'audio_channels',
+  'rating',
+  'popularity',
+  'runtime',
   'custom',
 ]
 
 const CATEGORY_LABEL_KEY: Record<string, string> = {
   user: 'ruleModal.categoryLabel.user',
+  title: 'ruleModal.categoryLabel.title',
   genre: 'ruleModal.categoryLabel.genre',
   language: 'ruleModal.categoryLabel.language',
   audio_language: 'ruleModal.categoryLabel.audio_language',
   quality: 'ruleModal.categoryLabel.quality',
   certification: 'ruleModal.categoryLabel.certification',
   collection: 'ruleModal.categoryLabel.collection',
+  studio: 'ruleModal.categoryLabel.studio',
+  network: 'ruleModal.categoryLabel.network',
+  series_type: 'ruleModal.categoryLabel.series_type',
+  video_codec: 'ruleModal.categoryLabel.video_codec',
+  video_dynamic_range: 'ruleModal.categoryLabel.video_dynamic_range',
+  audio_codec: 'ruleModal.categoryLabel.audio_codec',
+  audio_channels: 'ruleModal.categoryLabel.audio_channels',
+  rating: 'ruleModal.categoryLabel.rating',
+  popularity: 'ruleModal.categoryLabel.popularity',
+  runtime: 'ruleModal.categoryLabel.runtime',
   custom: 'ruleModal.categoryLabel.custom',
 }
 
@@ -44,7 +73,7 @@ export function categoryLabel(cat: string): string {
 export type FormState = Omit<RuleInput, 'conditions'>
 
 // Fallback root when the deployment's allowed_roots haven't loaded yet (or
-// are empty) — matches the backend's own DEFAULT_BASE in core/presets.py.
+// are empty) -- matches the backend's own DEFAULT_BASE in core/presets.py.
 export const DEFAULT_BASE_ROOT = '/media'
 
 export function dirTemplateFor(base: string, serviceType: string | null): string {
@@ -98,6 +127,30 @@ export function selectedFor(c: ConditionItem): string[] {
   return c.match_value ? [c.match_value] : []
 }
 
+/** A 'range' condition's match_value as {min, max}, tolerating malformed/empty
+ * JSON (an in-progress edit) by falling back to both bounds unset. */
+export function parseRangeMatchValue(matchValue: string): {
+  min: number | null
+  max: number | null
+} {
+  try {
+    const d: unknown = JSON.parse(matchValue)
+    if (d && typeof d === 'object' && !Array.isArray(d)) {
+      const r = d as { min?: unknown; max?: unknown }
+      const min = typeof r.min === 'number' ? r.min : null
+      const max = typeof r.max === 'number' ? r.max : null
+      return { min, max }
+    }
+  } catch {
+    // malformed/empty -- still being edited
+  }
+  return { min: null, max: null }
+}
+
+export function rangeMatchValue(min: number | null, max: number | null): string {
+  return JSON.stringify({ min, max })
+}
+
 /** Reorders the condition chain and re-normalizes AND/OR joins: index 0 is
  * always null, any interior null backfills to 'AND'. No-op if `to` is out
  * of range. */
@@ -135,7 +188,7 @@ export function nextMatchValueForSelection(
   return joinList(cur)
 }
 
-// "vocabulary" means "match anything currently known" — no free text to
+// "vocabulary" means "match anything currently known" -- no free text to
 // enter. Every other match type stays creatable: vocabulary suggestions may
 // simply not be synced yet, and shouldn't block typing a value.
 export function creatableFor(matchType: ConditionItem['match_type']): boolean {
