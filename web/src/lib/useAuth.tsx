@@ -22,7 +22,7 @@ const AuthContext = createContext<AuthState | null>(null)
 
 /**
  * One `/api/auth/me` fetch for the whole app. `/api/auth/me` never 401s, so
- * this is safe to mount above the auth gate — it covers both /login and the
+ * this is safe to mount above the auth gate -- it covers both /login and the
  * authed shell. Also the single place the app-wide display timezone is
  * seeded (GeneralSection re-sets it on save). Mount once (see RootLayout).
  */

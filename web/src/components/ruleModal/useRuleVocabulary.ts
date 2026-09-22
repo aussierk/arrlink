@@ -26,7 +26,7 @@ type Args = {
 /**
  * Known values per rich category (genre/language/quality/certification/
  * collection), backed by the DB vocabulary table (TMDB/TRaSH/instance,
- * synced in the background — see Settings > Metadata providers), plus the
+ * synced in the background -- see Settings > Metadata providers), plus the
  * debounced, non-blocking "this value isn't a known X" advisory check.
  */
 export function useRuleVocabulary({ form, conditions, serviceType, tags }: Args) {
@@ -36,8 +36,8 @@ export function useRuleVocabulary({ form, conditions, serviceType, tags }: Args)
   useEffect(() => {
     let cancelled = false
     // A specific instance (app_scope) asks for just that app's own known
-    // values; a type-scope (app_type_scope, no one specific instance) — or
-    // no scope at all yet — omits app_id so the backend unions every
+    // values; a type-scope (app_type_scope, no one specific instance) -- or
+    // no scope at all yet -- omits app_id so the backend unions every
     // instance of that type instead of guessing at one representative that
     // might not have synced the value another instance already knows about
     // (e.g. language, which has no shared/global source at all -- only
@@ -59,7 +59,7 @@ export function useRuleVocabulary({ form, conditions, serviceType, tags }: Args)
     }
   }, [serviceType, form.app_scope, form.app_type_scope])
 
-  // Debounced, non-blocking vocabulary-membership check — mirrors how Live
+  // Debounced, non-blocking vocabulary-membership check -- mirrors how Live
   // Preview already dry-runs without saving. Purely advisory: never blocks
   // submit, just surfaces "this value isn't a known X" hints as you edit.
   useEffect(() => {

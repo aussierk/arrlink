@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import Card from '../ui/Card'
 import type { Summary } from '../../lib/api'
 
-/** active / stale / missing link counts — the dashboard's headline. Each is a
+/** active / stale / missing link counts -- the dashboard's headline. Each is a
  * link into the embedded links table with that filter pre-applied. */
 export default function LinkHealthCard({ summary }: { summary: Summary | null }) {
   const { t } = useTranslation()

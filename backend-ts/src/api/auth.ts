@@ -83,7 +83,7 @@ function redirectUri(
   logEvent(
     db,
     'warn',
-    'OIDC redirect_uri not configured — derived from the request Host ' +
+    'OIDC redirect_uri not configured -- derived from the request Host ' +
       'header (spoofable unless a trusted reverse proxy is in front of ' +
       'this app). Set APP_URL or TRUSTED_HOSTS to pin it.',
   )
@@ -388,7 +388,7 @@ export function registerAuthRoutes(app: FastifyInstance, opts: AuthRouteOptions)
       })()
       if (payload !== null) {
         if (payload.nonce !== row.nonce) {
-          logEvent(db, 'warn', 'OIDC nonce mismatch — possible replay')
+          logEvent(db, 'warn', 'OIDC nonce mismatch -- possible replay')
           throw new HttpError(400, 'OIDC nonce mismatch')
         }
         if ((payload.exp ?? 0) < Date.now() / 1000) {

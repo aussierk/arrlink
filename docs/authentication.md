@@ -1,6 +1,6 @@
 # Authentication
 
-Password and OIDC login are independent — enable either or both, via `.env`
+Password and OIDC login are independent -- enable either or both, via `.env`
 (seed defaults) and/or Settings → Authentication (runtime overrides, which
 take effect immediately, no restart).
 
@@ -14,7 +14,7 @@ session cookie holds an opaque token, not the password itself.
 ### Lockout
 
 5 failed attempts within 15 minutes locks the account for 15 minutes
-(persisted — survives a restart). If you're locked out and still have a
+(persisted -- survives a restart). If you're locked out and still have a
 valid OIDC session, `POST /api/auth/password/unlock` clears it immediately.
 With password-only auth and no other session, either wait it out or run:
 
@@ -36,11 +36,11 @@ sqlite3 /config/arrlink.db "DELETE FROM login_attempts;"
    and/or emails, in the OIDC section (empty = any authenticated user).
 5. `OIDC_AUTO_LOGIN` (default `true`): `/login` redirects straight to the
    provider when OIDC is enabled. Visit `/login?form=true` to bypass that
-   and reach the manual chooser (SSO button and/or the password form) —
+   and reach the manual chooser (SSO button and/or the password form) --
    this isn't linked anywhere in the UI; it's a URL you navigate to
    directly when you want to skip auto-login for one visit.
 
-> The **id_token is decoded but not signature-verified** — claims are read
+> The **id_token is decoded but not signature-verified** -- claims are read
 > from the userinfo endpoint over TLS; the id_token is used for `nonce`/`exp`
 > only. This keeps the client dependency-free and works with any standard
 > provider.

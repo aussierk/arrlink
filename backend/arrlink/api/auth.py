@@ -40,7 +40,7 @@ OIDC_LOGIN_TTL_S = 600
 # Error codes the callback itself ever sets on the arrlink_auth_error cookie
 # (see oidc_callback below) plus the handful an IdP's own `error` query param
 # can legitimately be (per OAuth2/OIDC core: RFC 6749 §4.1.2.1, OIDC Core
-# §3.1.2.6). Anything else — including arbitrary provider-supplied text —
+# §3.1.2.6). Anything else -- including arbitrary provider-supplied text --
 # is not trusted to reach the UI verbatim; see _sanitize_error_code().
 _KNOWN_AUTH_ERROR_CODES = frozenset(
     {
@@ -96,7 +96,7 @@ def _redirect_uri(request: Request, db: State) -> str:
 
     db.log_event(
         "warn",
-        "OIDC redirect_uri not configured — derived from the request Host "
+        "OIDC redirect_uri not configured -- derived from the request Host "
         "header (spoofable unless a trusted reverse proxy is in front of "
         "this app). Set APP_URL or TRUSTED_HOSTS to pin it.",
     )
@@ -158,7 +158,7 @@ def _clear_auth_cookies(response: RedirectResponse, request: Request) -> None:
 
 def _lookup_session(request: Request, db: State, auth: dict) -> dict[str, Any] | None:
     """Check whichever credential cookie is present against its matching
-    session `kind` — password and OIDC sessions share the `sessions` table
+    session `kind` -- password and OIDC sessions share the `sessions` table
     (dual-mode auth means both can be alive at once), so this also confirms
     a token actually came from the flow its cookie claims, not just that
     *some* valid token was found. Returns the session row, or None."""
@@ -229,7 +229,7 @@ CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
 
 @router.get("/me")
 def me(request: Request, db: Annotated[State, Depends(get_db)]) -> dict[str, Any]:
-    """Never 401s — the SPA uses this to decide whether to redirect to login."""
+    """Never 401s -- the SPA uses this to decide whether to redirect to login."""
     settings: Settings = request.app.state.settings
     auth = effective_auth(db, settings)
     result: dict[str, Any] = {
@@ -347,7 +347,7 @@ def login(
     challenge = b64url_encode(hashlib.sha256(verifier.encode()).digest())
 
     # Opportunistically sweep abandoned login attempts (never completed, so
-    # never deleted by the callback) each time a new one is started — cheap,
+    # never deleted by the callback) each time a new one is started -- cheap,
     # and keeps the table from growing unbounded without a separate task.
     db.execute(
         "DELETE FROM oidc_logins WHERE created_at < ?",
@@ -420,7 +420,7 @@ def oidc_callback(
         db.log_event("warn", f"OIDC code exchange failed: {e.detail}")
         raise HTTPException(502, f"OIDC exchange failed: {e.detail}") from e
 
-    # Validate nonce/exp from the id_token payload (no signature check — see oidc.py).
+    # Validate nonce/exp from the id_token payload (no signature check -- see oidc.py).
     id_token = tok.get("id_token")
     if id_token:
         try:
@@ -429,7 +429,7 @@ def oidc_callback(
             payload = None
         if payload is not None:
             if payload.get("nonce") != row["nonce"]:
-                db.log_event("warn", "OIDC nonce mismatch — possible replay")
+                db.log_event("warn", "OIDC nonce mismatch -- possible replay")
                 raise HTTPException(400, "OIDC nonce mismatch")
             if payload.get("exp", 0) < time.time():
                 db.log_event("warn", "OIDC id_token expired")

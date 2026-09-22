@@ -120,7 +120,7 @@ def put_auth(
     env = request.app.state.settings
     # Validate against the EFFECTIVE (post-save) values so we never allow saving
     # a flag combination that would immediately lock everyone out. Password and
-    # OIDC are independent — both, one, or neither may be enabled.
+    # OIDC are independent -- both, one, or neither may be enabled.
     eff_pw = body.ui_password or db.get_setting("auth_password") or env.ui_password or ""
     eff_issuer = body.oidc_issuer or db.get_setting("oidc_issuer") or env.oidc_issuer or ""
     eff_cid = body.oidc_client_id or db.get_setting("oidc_client_id") or env.oidc_client_id or ""
@@ -149,7 +149,7 @@ def put_auth(
 
 
 class TmdbSettingsIn(BaseModel):
-    # Blank = keep the current value (mirrors oidc_client_secret above) —
+    # Blank = keep the current value (mirrors oidc_client_secret above) --
     # never required, ArrLink falls back to the operator-configured default
     # (TMDB_API_KEY env var) when neither is set. See core/vocabulary.py.
     api_key: str = ""

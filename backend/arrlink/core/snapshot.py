@@ -11,7 +11,7 @@ from ..state import State
 def snapshot_items(db: State, app_id: int) -> list[Item]:
     """Every stored item for the app, with its stored files attached.
 
-    Returns [] if the app has never been polled (no rows) — callers should
+    Returns [] if the app has never been polled (no rows) -- callers should
     fall back to a live fetch in that case.
     """
     files_by_item: dict[int, list[MediaFile]] = {}

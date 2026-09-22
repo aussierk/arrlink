@@ -9,12 +9,12 @@ import { useDocumentTitle } from '../lib/useDocumentTitle'
 import Button from '../components/ui/Button'
 
 /**
- * Dedicated /login route — the only route RequireAuth never gates.
+ * Dedicated /login route -- the only route RequireAuth never gates.
  *
  * When OIDC is enabled with auto-login on, this redirects straight to the
  * provider (same instant behavior the old AuthGate had). The escape hatch
  * to skip that and reach the manual password/SSO chooser is the URL itself:
- * /login?form=true — not surfaced anywhere in the UI, by design (see
+ * /login?form=true -- not surfaced anywhere in the UI, by design (see
  * README's Auth setup section).
  */
 export default function LoginPage() {

@@ -90,7 +90,7 @@ class Poller:
 
     async def _vocabulary_loop(self) -> None:
         """Independent, long-cadence background refresh of TMDB genre/
-        certification + the TRaSH Guides quality dictionary — shared per
+        certification + the TRaSH Guides quality dictionary -- shared per
         app_type, not per app instance, so it doesn't belong in _app_loop.
         Best-effort: a TMDB/TRaSH hiccup is logged and never affects
         linking. See VOCAB_LOOP_S/VOCAB_STALE_S."""
@@ -157,7 +157,7 @@ class Poller:
 
     def _sync_observed_vocabulary(self, app_id: int, app_type: str, category: str, values) -> None:
         """One category's vocabulary, derived purely from what this poll's
-        items already carry (collection names, genres, certifications — all
+        items already carry (collection names, genres, certifications -- all
         real Radarr/Sonarr fields, see arr/base.py's MediaFile). Only writes
         when the observed set actually changed, so a static library's poll
         stays write-free."""
@@ -179,7 +179,7 @@ class Poller:
         """Per-instance vocabulary: collection/genre/certification values
         observed in this poll's items (pure derivation, every poll) plus
         this app's configured quality profiles/languages (2 adapter HTTP
-        calls, throttled to INSTANCE_VOCAB_STALE_S — they change rarely).
+        calls, throttled to INSTANCE_VOCAB_STALE_S -- they change rarely).
         Best-effort: never fails the poll."""
         try:
             self._sync_observed_vocabulary(

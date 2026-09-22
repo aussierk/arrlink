@@ -11,7 +11,7 @@ type Accessor<T> = (row: T) => string | number | null | undefined
  * strings compare with locale + numeric awareness ("q2" before "q10").
  *
  * `tiebreaker`, if given, breaks ties on the primary column (ascending,
- * independent of `dir`) — e.g. always falling back to priority order so a
+ * independent of `dir`) -- e.g. always falling back to priority order so a
  * sort-by-name never scrambles same-named rows arbitrarily. `reset()`
  * restores `initialKey`/`initialDir`, for a "back to default order" control
  * when the tiebreaker column itself has no visible header to click.

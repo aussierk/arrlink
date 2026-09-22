@@ -18,7 +18,7 @@ const items = [
   { to: '/settings/backup', labelKey: 'settingsNav.backup', icon: HardDriveDownload },
 ] as const
 
-/** Secondary nav for the Settings area — a horizontal tab bar below the
+/** Secondary nav for the Settings area -- a horizontal tab bar below the
  * page header, underline indicating the active section. */
 export default function SettingsNav() {
   const { t } = useTranslation()

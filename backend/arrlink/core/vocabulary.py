@@ -47,7 +47,7 @@ async def _tmdb_get(path: str, api_key: str) -> Any:
 async def sync_tmdb_vocabulary(db: State) -> dict[str, int]:
     """Fetch genre + certification lists from TMDB and persist them as
     shared (app_id NULL) vocabulary for both app types. No-ops (returns an
-    empty dict) when no TMDB key is configured — never raises, this is
+    empty dict) when no TMDB key is configured -- never raises, this is
     best-effort background refresh data, not core linking behavior."""
     key = tmdb_api_key(db)
     if not key:
@@ -87,7 +87,7 @@ async def sync_tmdb_vocabulary(db: State) -> dict[str, int]:
 async def sync_trash_vocabulary(db: State, app_type: str) -> int:
     """Fetch TRaSH Guides' quality-profile naming dictionary (public, no
     key) and persist as shared (app_id NULL) 'quality' vocabulary. Best
-    effort — logged and swallowed by the caller on failure."""
+    effort -- logged and swallowed by the caller on failure."""
     import httpx
 
     async with httpx.AsyncClient(timeout=15.0) as client:
@@ -105,8 +105,8 @@ async def sync_trash_vocabulary(db: State, app_type: str) -> int:
 
 def _vocabulary_values(db: State, category: str, app_type: str, app_ids: list[int]) -> set[str]:
     """Every known value for a scope: the shared (app_id IS NULL) vocabulary,
-    plus every one of ``app_ids``' own instance-scoped vocabulary, and — the
-    tag classification bridge — any tag on those apps manually classified
+    plus every one of ``app_ids``' own instance-scoped vocabulary, and -- the
+    tag classification bridge -- any tag on those apps manually classified
     into this category (treated as an equally-valid member of the category).
     ``app_ids`` is a single instance for an app-scoped rule, every enabled
     instance of that type for a type-scoped rule (see api/rules.py's
@@ -139,7 +139,7 @@ def expand_vocabulary_conditions(
 ) -> list[dict]:
     """Replace every match_type=='vocabulary' condition with an equivalent 'list' condition."""
     if app_type is None:
-        # Unscoped rule (no specific app/app_type) — nothing to resolve
+        # Unscoped rule (no specific app/app_type) -- nothing to resolve
         # against; leave any "vocabulary" condition as a no-op empty list
         # rather than guessing, or raising, mid-poll.
         expand_to = lambda cat: set()  # noqa: E731
@@ -177,7 +177,7 @@ def validate_condition_values(
     not covered by a tag manually classified into the category. Regex has
     no finite value to check, so it's never flagged. No-ops (returns [])
     when app_type is unresolved or the vocabulary scope is completely empty
-    — avoids a false "unknown" flood before anyone's synced anything.
+    -- avoids a false "unknown" flood before anyone's synced anything.
     ``app_ids`` should be every instance in the rule's scope (see
     api/rules.py's _scope_app_ids), not just one representative instance --
     otherwise a value only a *different* instance of the same type happens
@@ -198,7 +198,7 @@ def validate_condition_values(
         candidates = [s.strip() for s in cond.get("match_value", "").split(",") if s.strip()]
 
     return [
-        f"'{v}' is not a known {category} value for this app — check spelling, "
+        f"'{v}' is not a known {category} value for this app -- check spelling, "
         "or classify the matching tag into this category on the Tags page"
         for v in candidates
         if v and v not in known

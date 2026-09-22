@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 # Default allowed root for destination paths. The container is expected to
 # see the *arr apps' media at /media (mounted read-only, mirroring the apps)
-# and to write its links under /media/linked — on the same pool, so hardlinks
+# and to write its links under /media/linked -- on the same pool, so hardlinks
 # work. Override with the `allowed_roots` Setting if you mount elsewhere.
 DEFAULT_ROOTS = ["/media"]
 

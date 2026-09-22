@@ -575,7 +575,7 @@ def test_single_episode_file_deleted_grace_unlinks_not_orphans(client, sonarr_me
 
 
 # ---------------------------------------------------------------------------
-# P1.3: Sonarr delta fetch — skip /episodefile for unchanged series
+# P1.3: Sonarr delta fetch -- skip /episodefile for unchanged series
 # ---------------------------------------------------------------------------
 
 

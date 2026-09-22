@@ -64,7 +64,7 @@ async def _auth_sweep(db: State, settings) -> None:
     """Background loop: silently refresh OIDC sessions nearing expiry.
 
     The auth mode can be switched at runtime (Settings -> Authentication), so
-    the loop is always running and re-resolves the effective mode each tick —
+    the loop is always running and re-resolves the effective mode each tick --
     it stays dormant until oidc is active.
     """
     while True:

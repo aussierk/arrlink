@@ -617,7 +617,7 @@ def test_auth_username_settable_via_put(client):
     )
     assert r.status_code == 200, r.text
     assert r.json()["ui_username"] == "carol"
-    # Settings just switched password mode on — need to authenticate before
+    # Settings just switched password mode on -- need to authenticate before
     # further /api/settings/auth calls (they're behind CurrentUser too).
     assert (
         client.post(
@@ -630,7 +630,7 @@ def test_auth_username_settable_via_put(client):
 
 
 def test_auth_flags_switch_live_and_password_gates(client):
-    # enable password login (env had it off) — takes effect immediately
+    # enable password login (env had it off) -- takes effect immediately
     r = client.put(
         "/api/settings/auth",
         json={"password_enabled": True, "oidc_enabled": False, "ui_password": "s3cret"},
@@ -716,7 +716,7 @@ def test_auth_auto_login_flag(client, monkeypatch):
 
 
 def test_auth_both_enabled_at_once(client):
-    # Password and OIDC are independent — enabling both together is valid
+    # Password and OIDC are independent -- enabling both together is valid
     # (no mutual-exclusion check), unlike the old exclusive-mode design.
     r = client.put(
         "/api/settings/auth",

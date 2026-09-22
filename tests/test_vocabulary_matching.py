@@ -532,7 +532,7 @@ def test_instance_vocabulary_synced_after_poll(client, radarr):
 
 def test_instance_vocabulary_quality_sync_is_throttled(client, radarr):
     """P2.1: the 2 adapter calls for quality/language vocab run at most every
-    INSTANCE_VOCAB_STALE_S, not every poll — a second immediate rescan must
+    INSTANCE_VOCAB_STALE_S, not every poll -- a second immediate rescan must
     leave the stored rows' imported_at untouched."""
     app_id = _add_app(client, radarr)
     db = client.app.state.db

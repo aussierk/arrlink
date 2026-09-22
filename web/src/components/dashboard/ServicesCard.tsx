@@ -17,7 +17,7 @@ function StatusBadge({ app }: { app: AppItem }) {
   )
 }
 
-/** Per-service health — connection state, indexed item count, poll timing,
+/** Per-service health -- connection state, indexed item count, poll timing,
  * and the last error if any. Replaces the bare <ul> the dashboard used to
  * render. */
 export default function ServicesCard({ apps }: { apps: AppItem[] | null }) {

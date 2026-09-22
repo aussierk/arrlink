@@ -18,11 +18,11 @@ function parseList(text: string): string[] {
 }
 
 /**
- * Password and OIDC login are independent — either, both, or neither can be
+ * Password and OIDC login are independent -- either, both, or neither can be
  * enabled at once (see /login, which offers whichever are on). Both field
  * blocks below are always visible regardless of their "Enable" toggle, so an
  * OIDC issuer/client ID (or a password) can be filled in and saved *before*
- * flipping that method on — the toggle only controls whether it's active for
+ * flipping that method on -- the toggle only controls whether it's active for
  * login, not whether its fields are reachable. Secret fields are blank =
  * keep the current value; only a new value replaces it (secrets are never
  * returned to the UI).

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type LogEntry } from './api'
 
-/** Tailwind text class for an event level — shared by the Logs table and the
+/** Tailwind text class for an event level -- shared by the Logs table and the
  * dashboard activity feed so they never drift. */
 export function logLevelClass(level: string): string {
   return level === 'error'
@@ -28,7 +28,7 @@ type Options = {
  * "Recent activity" card.
  *
  * `error` is the initial-fetch failure (raw string, as pages/Logs.tsx has
- * always shown it) for the caller to render inline — never a toast. A dropped
+ * always shown it) for the caller to render inline -- never a toast. A dropped
  * live stream is left to EventSource's own auto-reconnect, silently.
  */
 export function useLogStream(opts: Options = {}) {

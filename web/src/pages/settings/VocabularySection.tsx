@@ -15,7 +15,7 @@ import PageHeader from '../../components/ui/PageHeader'
  * (TMDB genre/certification + TRaSH Guides quality naming on a daily
  * cadence, per-service quality profiles/languages/collections on every
  * poll). This section is status + an optional TMDB key override + "refresh
- * now" buttons for immediate feedback — nothing here is a required setup
+ * now" buttons for immediate feedback -- nothing here is a required setup
  * step.
  */
 export default function VocabularySection() {

@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 # whole poll. Also bounds how much a mid-loop failure can roll back.
 COMMIT_BATCH = 500
 
-# Migration version numbers must only ever increase — never reuse or reorder
+# Migration version numbers must only ever increase -- never reuse or reorder
 # one that has already shipped, since an already-running instance's
 # `schema_version` row would just skip a lower/equal-numbered migration as
 # "already applied". Collapsed to a single v1 baseline (this project has no
@@ -210,7 +210,7 @@ _MIGRATIONS: list[tuple[int, str | Callable[[sqlite3.Connection], None]]] = [
 
 
 # Catches SCHEMA_VERSION drifting from the actual last-registered migration
-# (e.g. a new migration added without bumping the constant, or vice versa) —
+# (e.g. a new migration added without bumping the constant, or vice versa) --
 # at import time, not silently at some later runtime moment.
 assert _MIGRATIONS[-1][0] == SCHEMA_VERSION, (
     f"SCHEMA_VERSION ({SCHEMA_VERSION}) doesn't match the last migration "
@@ -350,7 +350,7 @@ class State:
         entries: list[tuple[str, str | None]],
         source: str,
     ) -> int:
-        """Full replace for one (category, app_type, app_id) scope — same
+        """Full replace for one (category, app_type, app_id) scope -- same
         idiom as :meth:`sync_app_tags`: ``entries`` is treated as the
         complete current set for that scope, so removed/renamed values are
         cleared, not left stale. ``entries`` is a list of (value,

@@ -64,7 +64,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** One notification. Owns its own auto-dismiss timer so it can be paused
- * while the pointer (or keyboard focus) is over it — otherwise a toast can
+ * while the pointer (or keyboard focus) is over it -- otherwise a toast can
  * vanish mid-read. */
 function ToastItem({
   toast,

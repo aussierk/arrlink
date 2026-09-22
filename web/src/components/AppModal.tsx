@@ -11,7 +11,7 @@ import { inputCls } from '../lib/ui'
 
 /**
  * Create or edit an app. On create, `initial` is empty; on edit it is the
- * existing app (API key masked — leave blank to keep the current key).
+ * existing app (API key masked -- leave blank to keep the current key).
  */
 export default function AppModal({
   initial,

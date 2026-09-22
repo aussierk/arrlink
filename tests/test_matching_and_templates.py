@@ -29,7 +29,7 @@ from arrlink.main import create_app
 
 
 def _matched(category: str, tag: str, regex_match=None) -> list[ConditionMatch]:
-    """A single matched_conditions list for one category — the shape
+    """A single matched_conditions list for one category -- the shape
     build_context/resolve_destination expect."""
     return [ConditionMatch(category=category, tag=tag, regex_match=regex_match)]
 

@@ -10,21 +10,21 @@ imports and tags change.
 [![Container](https://img.shields.io/badge/ghcr.io-aussierk%2Farrlink-blue?logo=docker)](https://github.com/aussierk/arrlink/pkgs/container/arrlink)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> **Status:** early public release. Single-maintainer homelab tool — it
+> **Status:** early public release. Single-maintainer homelab tool -- it
 > works and is in day-to-day use, but expect rough edges. Issues and PRs
 > welcome (see [Contributing](#contributing)).
 
 ## Features
 
 - Works with **Radarr** and **Sonarr**
-- **Automatic scanning** — polls each app and reacts to new imports, tag
+- **Automatic scanning** -- polls each app and reacts to new imports, tag
   changes, renames, and quality upgrades
-- **Rules engine** — match on **tags or metadata**, combine conditions with
+- **Rules engine** -- match on **tags or metadata**, combine conditions with
   **AND/OR**, render dir + filename templates, and see a **live preview
   before anything is written**
 - **Presets** for common conventions (user tags, certification, kids,
   4K/HDR) as a one-click starting point
-- **Safe hardlinks** — inode-verified and idempotent across restarts;
+- **Safe hardlinks** -- inode-verified and idempotent across restarts;
   source files are never touched, foreign files are never clobbered
 - Ships as a single **Docker** container (`PUID`/`PGID`, healthcheck);
   optional **password** and/or **OIDC** login
@@ -58,11 +58,11 @@ cd web && npm install && npm run dev   # http://localhost:5173
 
 ## Documentation
 
-- [docs/features.md](docs/features.md) — full feature detail and project layout
-- [docs/deployment.md](docs/deployment.md) — Docker, volumes, path mirroring, env vars, compatibility
-- [docs/authentication.md](docs/authentication.md) — password / OIDC setup, lockout
-- [docs/security.md](docs/security.md) — exposure, reverse proxies, trusted hosts
-- [docs/backups.md](docs/backups.md) — the automatic database backup
+- [docs/features.md](docs/features.md) -- full feature detail and project layout
+- [docs/deployment.md](docs/deployment.md) -- Docker, volumes, path mirroring, env vars, compatibility
+- [docs/authentication.md](docs/authentication.md) -- password / OIDC setup, lockout
+- [docs/security.md](docs/security.md) -- exposure, reverse proxies, trusted hosts
+- [docs/backups.md](docs/backups.md) -- the automatic database backup
 
 ## Contributing
 
@@ -75,7 +75,7 @@ AI-assisted work must be disclosed in the PR (details in CONTRIBUTING).
 
 - **Questions, ideas, show-and-tell:** [GitHub Discussions](https://github.com/aussierk/arrlink/discussions)
 - **Bugs:** [open an issue](https://github.com/aussierk/arrlink/issues)
-- **Security vulnerabilities:** see [SECURITY.md](SECURITY.md) — please don't
+- **Security vulnerabilities:** see [SECURITY.md](SECURITY.md) -- please don't
   file them as public issues
 
 ## License

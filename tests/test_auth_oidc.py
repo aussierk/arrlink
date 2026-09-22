@@ -618,7 +618,7 @@ def test_password_mode(pw_client):
     assert pw_client.get("/api/apps").status_code == 401
     assert pw_client.get("/api/auth/me").json()["authenticated"] is False
 
-    # wrong password (JSON body — never a query param)
+    # wrong password (JSON body -- never a query param)
     assert (
         pw_client.post(
             "/api/auth/password",
@@ -656,7 +656,7 @@ def test_password_mode_rejects_missing_username(pw_client):
 
 
 def test_password_username_defaults_to_admin(pw_client):
-    # UI_USERNAME was never set — "admin" is the documented default.
+    # UI_USERNAME was never set -- "admin" is the documented default.
     assert (
         pw_client.post(
             "/api/auth/password",
@@ -748,7 +748,7 @@ def test_password_login_issues_opaque_token_not_the_password(pw_client):
 
 def test_password_login_works_via_env_seeded_password_never_written_to_db(pw_client):
     # UI_PASSWORD is env-seeded (never written through the Settings page), so
-    # nothing is ever written to the `auth_password` Setting — it's hashed
+    # nothing is ever written to the `auth_password` Setting -- it's hashed
     # once in-process (Settings.ui_password_hash) and compared from there.
     assert pw_client.app.state.db.get_setting("auth_password") is None
     assert (
@@ -793,7 +793,7 @@ def test_none_mode_open(tmp_path, monkeypatch):
 
 
 def test_open_mode_with_no_auth_env_at_all(tmp_path, monkeypatch):
-    # No auth env vars set whatsoever (the actual out-of-the-box default) —
+    # No auth env vars set whatsoever (the actual out-of-the-box default) --
     # both flags default false, same open behavior as AUTH_MODE=none.
     monkeypatch.delenv("AUTH_MODE", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD_ENABLED", raising=False)
@@ -874,7 +874,7 @@ def test_both_enabled_bad_password_cookie_with_no_oidc_session_stays_401(both_cl
 
 def test_both_enabled_session_kind_is_not_cross_acceptable(both_client, issuer):
     # A valid *password*-kind token placed in the OIDC cookie slot (or vice
-    # versa) must not authenticate — sessions.kind ties a token to the flow
+    # versa) must not authenticate -- sessions.kind ties a token to the flow
     # that actually issued it, not just to whichever cookie carries it.
     r = both_client.post(
         "/api/auth/password",
@@ -919,7 +919,7 @@ def test_env_seeded_password_is_hashed_once_and_cached(tmp_path, monkeypatch):
     h1 = settings.ui_password_hash
     h2 = settings.ui_password_hash
     assert h1.startswith("$argon2id$")
-    assert h1 == h2  # cached_property — same hash object every access, not recomputed
+    assert h1 == h2  # cached_property -- same hash object every access, not recomputed
 
 
 def test_fresh_install_has_no_auth_settings(tmp_path):

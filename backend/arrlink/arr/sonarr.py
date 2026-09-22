@@ -133,7 +133,7 @@ class SonarrAdapter(BaseAdapter):
                 "tags": translate_tag_labels(tags, s.get("tags")),
                 "genres": genres,
                 "certification": certification,
-                # Sonarr series have no collection concept — always None.
+                # Sonarr series have no collection concept -- always None.
                 "collection": None,
                 "quality_profile_id": qp_id,
                 "quality_profile_name": qp_name,

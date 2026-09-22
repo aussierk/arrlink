@@ -60,7 +60,7 @@ def get_vocabulary(
 @router.post("/vocabulary/import/tmdb")
 def import_tmdb(_user: CurrentUser, db: State = Depends(get_db)) -> dict:
     """Force-trigger the same TMDB genre/certification sync that
-    Poller._vocabulary_loop already runs automatically on a daily cadence —
+    Poller._vocabulary_loop already runs automatically on a daily cadence --
     useful right after setting a TMDB key override, not required otherwise."""
     import asyncio
 
@@ -92,7 +92,7 @@ def import_trash(
 @router.post("/apps/{app_id}/vocabulary/sync")
 def sync_app_vocabulary(app_id: int, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     """Force-trigger this app's per-instance vocabulary sync (quality
-    profiles, languages, observed collection names) — Poller already runs
+    profiles, languages, observed collection names) -- Poller already runs
     this automatically every poll; this is just for immediate feedback."""
     import asyncio
 
@@ -110,7 +110,7 @@ def sync_app_vocabulary(app_id: int, _user: CurrentUser, db: State = Depends(get
         detail = getattr(e, "detail", None) or str(e)
         raise HTTPException(502, detail) from e
     # Reuse Poller's instance-sync logic without needing an active Poller
-    # instance/event loop — it only touches `self.db`.
+    # instance/event loop -- it only touches `self.db`.
     poller = Poller.__new__(Poller)
     poller.db = db
     poller._sync_instance_vocabulary(app_id, row["type"], items)

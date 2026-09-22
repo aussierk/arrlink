@@ -29,7 +29,7 @@ function fmtSize(bytes: number): string {
 /**
  * Manual backup list/trigger for the nightly DB backup job (core/backup.py),
  * plus its enabled/retention settings and the unrelated-but-small "events
- * retention" housekeeping knob — folded in here rather than earning its own
+ * retention" housekeeping knob -- folded in here rather than earning its own
  * nav item, since it's a single field nobody needs to touch often.
  */
 export default function BackupSection() {

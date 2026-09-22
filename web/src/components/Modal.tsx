@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
  * role="dialog" / aria-modal / aria-labelledby. Closes on Escape or a
  * click outside the panel (both via `onClose`).
  *
- * Public API is unchanged — callers still mount/unmount this themselves and
+ * Public API is unchanged -- callers still mount/unmount this themselves and
  * pass `title` / `onClose` / `size`.
  */
 export default function Modal({

@@ -62,7 +62,7 @@ export default function Tags() {
     ? sortedTags.filter((tg) => tg.label.toLowerCase().includes(q))
     : sortedTags
 
-  // Category edits are staged here, not saved on select — the row's
+  // Category edits are staged here, not saved on select -- the row's
   // dropdown shows the pending value if there is one, else the saved
   // tag.category. Cleared on save, discard, or a full tag-list reload.
   const [pendingEdits, setPendingEdits] = useState<
@@ -105,7 +105,7 @@ export default function Tags() {
   }, [pendingEdits, appId, toast])
 
   // Blocks any in-app navigation away from this page (sidebar, SettingsNav,
-  // browser back/forward) while there's something unsaved — react-router's
+  // browser back/forward) while there's something unsaved -- react-router's
   // own mechanism, works for every nav surface with no per-surface wiring.
   // beforeunload (tab close/refresh/URL bar) isn't a router navigation, so
   // it needs the separate hook below.

@@ -6,7 +6,7 @@ import { useEffect } from 'react'
  * generic "leave site?" text), but it still stops an accidental close.
  *
  * In-app navigation (sidebar nav, SettingsNav, the browser back/forward
- * buttons) is guarded separately via react-router's own `useBlocker` — this
+ * buttons) is guarded separately via react-router's own `useBlocker` -- this
  * hook only covers what useBlocker structurally can't (anything that isn't
  * a client-side route change).
  */

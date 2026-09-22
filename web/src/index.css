@@ -140,7 +140,7 @@
 
 /* Type scale. The UI leans heavily on `text-sm` for body copy and `text-xs`
    for secondary text; the stock 14px / 12px read small and cramped, so nudge
-   both (and their line-heights) up one step. Font size only — spacing is
+   both (and their line-heights) up one step. Font size only -- spacing is
    untouched. Everything above `text-base` keeps the Tailwind defaults. */
 @theme {
   --text-xs: 0.8125rem;

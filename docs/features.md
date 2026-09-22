@@ -12,14 +12,14 @@ Full detail behind the summary in the [README](../README.md).
 
 ## Auth
 
-- **Password** and **OIDC** login are independent — either, both, or neither
+- **Password** and **OIDC** login are independent -- either, both, or neither
   can be enabled, and the login page offers whichever are active
 - Generic **OIDC** (Auth Code + PKCE, **confidential client**): provider
   discovery, code exchange, `state`/`nonce` validation, group/email
   allow-lists (union; empty = anyone signed in)
 - **Auto-login**: when OIDC is enabled, `/login` redirects straight to the
   provider on load (instant when the browser already has a provider
-  session) — visit `/login?form=true` to skip that and reach the manual
+  session) -- visit `/login?form=true` to skip that and reach the manual
   sign-in form/SSO-button chooser instead (e.g. to use password login even
   with auto-login on)
 - **Silent refresh**: 12 h local sessions; a background sweeper refreshes
@@ -28,7 +28,7 @@ Full detail behind the summary in the [README](../README.md).
   re-triggering the instant round-trip
 - Password login: **Argon2id**-hashed at rest (via `argon2-cffi`), opaque
   session token (not the password) is what the cookie actually holds
-- Open mode (both disabled, default): no login at all — LAN-only assumption
+- Open mode (both disabled, default): no login at all -- LAN-only assumption
 - All data endpoints 401 without a session; `/api/health` stays open for
   the container healthcheck
 
@@ -50,12 +50,12 @@ Full detail behind the summary in the [README](../README.md).
   conditions combined with AND/OR
 - Templates: dir + optional filename with placeholders `{$tag}` `{$app}`
   `{$title}` `{$year}` `{$1..9}` `{$<group>}` `{$basename}` `{$stem}` `{$ext}`
-  — sanitized (illegal chars, `..`, 100-char cap), jailed to an allowed
+  -- sanitized (illegal chars, `..`, 100-char cap), jailed to an allowed
   root (default `/media`, overridable via Settings `allowed_roots`), and
   the source file extension is never dropped
 - **Live preview** (`POST /api/rules/preview?app_id=`): dry-runs the rule
   over the app's current items and shows exactly which files would land
-  where — nothing is created until the poller runs
+  where -- nothing is created until the poller runs
 
 ## Poller + hardlinker
 
@@ -78,7 +78,7 @@ Full detail behind the summary in the [README](../README.md).
 
 ## Presets + runtime settings
 
-- **Presets**: one-click, editable rules for common conventions — user tags
+- **Presets**: one-click, editable rules for common conventions -- user tags
   (`## - $user` → `{$user}` directly under the base folder), certification
   (`{$tag}` directly under the base folder), kids, 4K/HDR, requested.
   Matchers differ per app type (movie vs TV ratings/kids tags); the base
@@ -98,9 +98,9 @@ Vite + React + TypeScript + Tailwind SPA (dark theme).
 - Dedicated `/login` page (password form and/or SSO button, whichever are
   enabled; OIDC auto-login redirect with the `?form=true` manual-chooser
   escape hatch; error surfaces), header user + sign out
-- Dashboard (health, auth, connected apps, and the **Links** panel —
+- Dashboard (health, auth, connected apps, and the **Links** panel --
   browse/filter/remove/**repair**)
-- Apps (create **and edit** Radarr/Sonarr connections — name, URL, API key,
+- Apps (create **and edit** Radarr/Sonarr connections -- name, URL, API key,
   poll interval, enabled; Test + Import tags + rescan)
 - Tags (per-app tag vocabulary import, usage counts, and per-tag category
   classification)

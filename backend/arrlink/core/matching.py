@@ -16,7 +16,7 @@ import re
 @functools.lru_cache(maxsize=512)
 def _compiled(pattern: str) -> re.Pattern | None:
     """Compile (and cache) a rule's regex. Returns None for an invalid
-    pattern — a bad regex simply never matches, same as before. Cached
+    pattern -- a bad regex simply never matches, same as before. Cached
     because plan_links evaluates the same handful of rule patterns across
     every item in the library on every poll."""
     try:
@@ -63,7 +63,7 @@ def match_rule_all(
     case_insensitive: bool = False,
 ) -> list[RuleMatch]:
     """Like :func:`match_rule`, but returns every item tag that satisfies the
-    matcher instead of stopping at the first — used to fan a single condition
+    matcher instead of stopping at the first -- used to fan a single condition
     out into multiple destination links (one per matching tag).
 
     ``case_insensitive`` is for native-metadata conditions: Radarr/Sonarr's

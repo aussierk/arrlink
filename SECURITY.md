@@ -12,7 +12,7 @@ available.
 
 ## Scope
 
-ArrLink is a self-hosted, single-admin homelab tool — its threat model
+ArrLink is a self-hosted, single-admin homelab tool -- its threat model
 assumes a trusted operator and, by default, a LAN-only deployment. See the
 README's Security section for deployment guidance (reverse proxy + TLS for
 anything internet-reachable, `TRUSTED_HOSTS`/`FORWARDED_ALLOW_IPS`).

@@ -1,7 +1,7 @@
 /**
  * A bordered, always-visible sub-block within a settings section (as
  * opposed to `Collapsible`, which hides its content behind a disclosure
- * toggle) — for grouping related fields (e.g. "OIDC settings") or reference
+ * toggle) -- for grouping related fields (e.g. "OIDC settings") or reference
  * panels that should stay visible while the surrounding page is open.
  * `header` renders next to `title` (e.g. an "Enable" toggle or a button).
  */

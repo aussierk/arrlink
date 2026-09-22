@@ -5,7 +5,7 @@ import { useAuth } from '../lib/useAuth'
 /**
  * Route guard for everything except /login. Only decides whether there's an
  * authenticated session and redirects to /login (preserving the current
- * path as `next`) when there isn't — all auto-login / password / OIDC
+ * path as `next`) when there isn't -- all auto-login / password / OIDC
  * sign-in logic lives in LoginPage, not here. The session lookup itself is
  * shared via <AuthProvider> (see lib/useAuth).
  */

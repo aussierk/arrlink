@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     log_level: str = "info"
     fs_fallback: str = "skip"
 
-    # Auth: password and OIDC login are independent — either, both, or
+    # Auth: password and OIDC login are independent -- either, both, or
     # neither may be enabled at once (see effective_auth() in this module).
     auth_password_enabled: bool = False
     auth_oidc_enabled: bool = False
@@ -114,7 +114,7 @@ class Settings(BaseSettings):
 
     @cached_property
     def ui_password_hash(self) -> str:
-        """`ui_password`, hashed once (cached — this is a real Argon2id cost,
+        """`ui_password`, hashed once (cached -- this is a real Argon2id cost,
         not something to redo per request). "" when unset."""
         return hash_password(self.ui_password) if self.ui_password else ""
 

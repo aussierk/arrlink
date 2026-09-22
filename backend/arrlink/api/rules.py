@@ -79,7 +79,7 @@ class ConditionIn(BaseModel):
 class RuleIn(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     app_scope: int | None = None  # null = any app (unless app_type_scope below is set)
-    # "All Radarr" / "All Sonarr" — applies to every app of this type instead
+    # "All Radarr" / "All Sonarr" -- applies to every app of this type instead
     # of one specific instance. Mutually exclusive with app_scope.
     app_type_scope: Literal["radarr", "sonarr"] | None = None
     conditions: list[ConditionIn] = Field(min_length=1, max_length=8)
@@ -100,7 +100,7 @@ class RuleIn(BaseModel):
     def _validate(self) -> RuleIn:
         if self.app_scope is not None and self.app_type_scope is not None:
             raise ValueError(
-                "app_scope and app_type_scope are mutually exclusive — pick a "
+                "app_scope and app_type_scope are mutually exclusive -- pick a "
                 "specific service or an entire service type, not both"
             )
         seen: set[str] = set()
@@ -142,7 +142,7 @@ class RuleIn(BaseModel):
 
 def _resolve_app_type(app_scope: int | None, app_type_scope: str | None, db: State) -> str | None:
     """The app_type a rule's conditions should be checked/expanded against,
-    or None if the rule is unscoped (applies to any app) — vocabulary
+    or None if the rule is unscoped (applies to any app) -- vocabulary
     validation/expansion simply no-ops in that case, same as it can't know
     which app's instance-scoped vocabulary to use either."""
     if app_type_scope is not None:
@@ -374,7 +374,7 @@ def delete_rule(
 @router.post("/vocabulary-check")
 def vocabulary_check(body: RuleIn, _user: CurrentUser, db: State = Depends(get_db)) -> dict:
     """Dry-run vocabulary-membership validation with no persistence, so the
-    rule editor can show warnings live while the user is still typing —
+    rule editor can show warnings live while the user is still typing --
     mirrors how /preview already dry-runs plan_links without saving."""
     return {"warnings": _vocabulary_warnings(body, db)}
 

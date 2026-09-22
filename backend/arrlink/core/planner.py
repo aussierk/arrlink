@@ -41,7 +41,7 @@ class PlannedLink:
 def _fanout_variants(cr: ConditionsResult) -> list[tuple[str, list[ConditionMatch]]]:
     """Every (match_key, matched_conditions) variant to resolve for one
     (rule, item): the primary combination, plus one variant per extra tag
-    beyond the first in any category that matched more than one — a union
+    beyond the first in any category that matched more than one -- a union
     across conditions, not a cross-product (two multi-matching conditions
     add their extra variants independently rather than combining)."""
     variants: list[tuple[str, list[ConditionMatch]]] = [("", cr.matched_conditions)]
@@ -136,7 +136,7 @@ def plan_links(
         files = [_as_dict(f) for f in (it.get("files") or [])]
 
         # Rule matching depends only on the item's tags/native metadata, not
-        # on individual files — evaluate it once per (item, rule) and reuse
+        # on individual files -- evaluate it once per (item, rule) and reuse
         # for every file, rather than re-running it
         for rule in active:
             cr = match_conditions(_rule_conditions(rule), tags, native=native)
@@ -183,7 +183,7 @@ def plan_links(
                     if dst_path in seen_dst_paths:
                         # two matching tags resolved to the same destination
                         # (e.g. the varying category isn't referenced by the
-                        # template) — one link, not a duplicate.
+                        # template) -- one link, not a duplicate.
                         continue
                     seen_dst_paths.add(dst_path)
                     planned.append(

@@ -1,5 +1,5 @@
 /**
- * Inline status banner — error or success. Renders nothing when `children`
+ * Inline status banner -- error or success. Renders nothing when `children`
  * is falsy, so call sites can do `<Alert variant="error">{err}</Alert>`
  * unchanged in shape from the copy-pasted div it replaces.
  */

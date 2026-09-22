@@ -11,7 +11,7 @@ services:
       PGID: "1000"
       TZ: America/Toronto
       # Must stay /config (matches the volume mount below) regardless of
-      # .env — .env.example's CONFIG_DIR=./config is for local, non-Docker
+      # .env -- .env.example's CONFIG_DIR=./config is for local, non-Docker
       # dev, so it's deliberately kept out of .env's reach here (an explicit
       # `environment:` entry always wins over env_file for the same key).
       CONFIG_DIR: /config

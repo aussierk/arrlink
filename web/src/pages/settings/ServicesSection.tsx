@@ -11,7 +11,7 @@ import { useConfirm } from '../../lib/useConfirm'
 import { useToast } from '../../lib/useToast'
 
 /**
- * Connect Radarr and Sonarr — test the connection, import tags, and rescan
+ * Connect Radarr and Sonarr -- test the connection, import tags, and rescan
  * to reconcile links. Each row can be edited, tested, have its tags
  * imported, rescanned, or deleted.
  */

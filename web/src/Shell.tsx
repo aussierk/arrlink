@@ -28,7 +28,7 @@ const nav = [
 
 /** Layout for everything behind RequireAuth. On lg+ the sidebar is a static
  * rail; below lg it collapses into a slide-in drawer opened from a top bar.
- * Nav clicks are plain <NavLink>s — a page with unsaved edits (e.g. Tags)
+ * Nav clicks are plain <NavLink>s -- a page with unsaved edits (e.g. Tags)
  * blocks navigation away from itself via react-router's useBlocker, which
  * applies regardless of which nav surface (rail, drawer, SettingsNav, the
  * browser back button) triggered it. See pages/Tags.tsx. */
@@ -51,7 +51,7 @@ const navLinkCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'bg-accent-bg text-accent' : 'text-fg-muted hover:bg-fill hover:text-fg'
   }`
 
-/** Sidebar body — rendered once in the static rail and once in the mobile
+/** Sidebar body -- rendered once in the static rail and once in the mobile
  * drawer. `onNavigate` closes the drawer after a link is followed. */
 function SidebarNav({ me, onNavigate }: { me: Me | null; onNavigate?: () => void }) {
   const { t } = useTranslation()
@@ -121,12 +121,12 @@ function ShellLayout({ me }: { me: Me | null }) {
         {t('a11y.skipToContent')}
       </a>
 
-      {/* Static rail — lg and up */}
+      {/* Static rail -- lg and up */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-surface/60 p-4 lg:flex">
         <SidebarNav me={me} />
       </aside>
 
-      {/* Slide-in drawer — below lg. Headless UI gives focus trap + scroll
+      {/* Slide-in drawer -- below lg. Headless UI gives focus trap + scroll
           lock + Escape; only ever opened by the lg:hidden top-bar button. */}
       <Dialog open={navOpen} onClose={setNavOpen} className="relative z-50 lg:hidden">
         <DialogBackdrop
@@ -143,7 +143,7 @@ function ShellLayout({ me }: { me: Me | null }) {
       </Dialog>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar — below lg only */}
+        {/* Top bar -- below lg only */}
         <header className="flex items-center gap-3 border-b border-line bg-surface/60 px-4 py-3 lg:hidden">
           <button
             type="button"

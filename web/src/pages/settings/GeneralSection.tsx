@@ -33,9 +33,9 @@ function timezoneOptions(current: string): string[] {
 }
 
 /**
- * Linking behavior applied by the poller and the repair action — the
+ * Linking behavior applied by the poller and the repair action -- the
  * resolved runtime values, editable here (env values are the seed
- * defaults) — plus application identity, localization, network, and
+ * defaults) -- plus application identity, localization, network, and
  * logging settings. One Save button for the whole page, matching every
  * other Settings section's convention.
  */

@@ -45,7 +45,7 @@ export default function PreviewPanel({
     }
   }
 
-  // The parent's "Run Preview" button reveals this panel — run once
+  // The parent's "Run Preview" button reveals this panel -- run once
   // immediately on mount so opening it is a single click, not two.
   useEffect(() => {
     void run()

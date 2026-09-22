@@ -720,7 +720,7 @@ def test_hot_path_indexes_present(client, radarr_media):
 
 def test_reconcile_commits_in_chunks(client, radarr_media, monkeypatch):
     """Audit finding 1/2: reconcile must not hold the write lock for the
-    whole pass — with COMMIT_BATCH shrunk it commits mid-loop, releasing the
+    whole pass -- with COMMIT_BATCH shrunk it commits mid-loop, releasing the
     lock and bounding a mid-pass failure's rollback to one batch."""
     import asyncio
 

@@ -60,7 +60,7 @@ def _rule_matches_label(rule, label: str) -> bool:
     """Does any of this rule's conditions match this exact tag label?
 
     Best-effort UI hint (checks each matcher in isolation, not full AND/OR
-    chain evaluation against a real item's tags) — matches this helper's
+    chain evaluation against a real item's tags) -- matches this helper's
     existing (already approximate) semantics, generalized over conditions.
     """
     raw = rule["conditions_json"]
@@ -116,7 +116,7 @@ def set_tag_category(
     """Manually classify an existing tag into a condition category, so
     tag-based rule matching in that category can be trusted (or vocabulary-
     validated) even when the tag's literal text isn't itself a recognized
-    vocabulary value — see core/vocabulary.py."""
+    vocabulary value -- see core/vocabulary.py."""
     app = db.query_one("SELECT type FROM apps WHERE id=?", (app_id,))
     if not app:
         raise HTTPException(404, "app not found")
@@ -190,7 +190,7 @@ def import_tags_manual(
 
 # ---------------------------------------------------------------------------
 # Tag repository: a shared tag list that can be pushed to one or more apps.
-# The repository is ArrLink's own (independent of the apps) — it is the
+# The repository is ArrLink's own (independent of the apps) -- it is the
 # canonical tag vocabulary the user curates, then pushes down to the *arr
 # apps (which create the tag there). Per-app tags are still viewable/imported.
 # ---------------------------------------------------------------------------

@@ -4,10 +4,10 @@
  * The underlying exact / list / regex match types are unchanged; these are just
  * the building blocks the RuleModal offers as per-category dropdowns so users
  * don't have to write raw regex or comma lists. A condition's match_value is
- * still the single source of truth — the UI parses/renders it against these.
+ * still the single source of truth -- the UI parses/renders it against these.
  */
 
-/** Service types ArrLink knows about — extend here (e.g. 'lidarr') as new
+/** Service types ArrLink knows about -- extend here (e.g. 'lidarr') as new
  * app integrations are added; no other redesign needed. */
 export type ServiceType = 'radarr' | 'sonarr'
 
@@ -41,7 +41,7 @@ export const REGEX_PICKS: RegexPick[] = [
 // the DB-persisted `vocabulary` table (genre/certification from TMDB,
 // quality from TRaSH Guides + each app's own configured profiles, language
 // from each app's own configuration, collection from items already
-// imported) — fetched via api.getVocabulary() and refreshed automatically
+// imported) -- fetched via api.getVocabulary() and refreshed automatically
 // in the background (see Settings > Vocabulary). See RuleModal.tsx's
 // optionsFor().
 

@@ -99,7 +99,7 @@ class MediaFile:
 @dataclasses.dataclass
 class QualityProfile:
     """One quality profile configured on the app instance
-    (`GET /v3/qualityprofile`) — instance-specific, not a universal list."""
+    (`GET /v3/qualityprofile`) -- instance-specific, not a universal list."""
 
     id: int
     name: str
@@ -198,7 +198,7 @@ class BaseAdapter(abc.ABC):
     async def fetch_quality_profiles(self) -> list[QualityProfile]:
         """This instance's configured quality profiles. Radarr and Sonarr
         both expose the identical `[{id, name}]` shape at this path, so one
-        shared implementation covers both — no per-app-type override
+        shared implementation covers both -- no per-app-type override
         needed unless a future app type differs."""
         data = await self._get_json("/api/v3/qualityprofile")
         if not isinstance(data, list):

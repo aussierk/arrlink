@@ -36,7 +36,7 @@ export default function LinksPanel() {
 
   // The dashboard's link-health card deep-links here via ?links=<status>.
   // The panel is already mounted (it lives on the Dashboard), so a plain
-  // param change won't re-run the initializer above — sync it here. Manual
+  // param change won't re-run the initializer above -- sync it here. Manual
   // <select> edits don't navigate, so this doesn't fight them.
   useEffect(() => {
     const s = readStatusParam(params)

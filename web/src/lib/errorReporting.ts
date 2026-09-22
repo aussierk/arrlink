@@ -1,6 +1,6 @@
 import { reportClientError } from './api'
 
-/** Global JS-error hooks, wired once from main.tsx — catches what a React
+/** Global JS-error hooks, wired once from main.tsx -- catches what a React
  * error boundary can't (event handlers, timers, async callbacks, unhandled
  * rejections). Deduped and rate-capped so a render loop can't flood the
  * event log. */

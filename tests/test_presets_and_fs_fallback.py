@@ -161,7 +161,7 @@ def test_list_presets_radarr(client):
     assert by_key["1080p"]["dir_template"] == "/media/movies/1080p"
     assert by_key["1080p"]["category"] == "quality"
     # genre/language match native metadata via a catch-all regex, not a
-    # hardcoded tag list — see the Genre/Language presets' docstring
+    # hardcoded tag list -- see the Genre/Language presets' docstring
     assert by_key["genre"]["match_type"] == "regex"
     assert by_key["genre"]["match_value"] == ".+"
     assert by_key["genre"]["source"] == "native"

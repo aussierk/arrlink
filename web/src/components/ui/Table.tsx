@@ -1,7 +1,7 @@
 import type { ReactNode, TableHTMLAttributes, ThHTMLAttributes } from 'react'
 
 /**
- * Shared table structure — replaces the copy-pasted wrapper/thead/th/empty-row
+ * Shared table structure -- replaces the copy-pasted wrapper/thead/th/empty-row
  * markup that used to be hand-rolled per page. Sortable header cells still
  * use `SortHeader` directly (it's already its own `<th>`).
  */

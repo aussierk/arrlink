@@ -80,7 +80,7 @@ async def logs_stream(
     """Live SSE feed: initial 50 events, then new ones as they happen.
 
     `limit` makes it a bounded snapshot stream (yields up to `limit` events
-    then closes) — useful for tests. Omitted = infinite live stream.
+    then closes) -- useful for tests. Omitted = infinite live stream.
     """
 
     async def generate():

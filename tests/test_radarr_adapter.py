@@ -34,7 +34,7 @@ def build_radarr(origin: str) -> tuple[FastAPI, dict]:
             {"id": 3, "label": "4k", "count": 1},
         ],
         # NOTE: like the real API, movie `tags` are *tag ids* (ints), not
-        # labels — the adapter must translate them via /v3/tag.
+        # labels -- the adapter must translate them via /v3/tag.
         "movies": [
             {
                 "id": 1,
