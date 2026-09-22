@@ -18,6 +18,7 @@ import type { SettingsStore } from '../db/settings-store.js'
 import { ruleAppliesToApp } from '../core/planner.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
+import { requireApp } from './require-app.js'
 
 /** Tags per app + a shared tag repository. Ported from api/tags.py. */
 
@@ -157,12 +158,7 @@ export function registerTagsRoutes(app: FastifyInstance, opts: TagsRouteOptions)
   app.get('/api/apps/:appId/tags', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    const appRow = db
-      .select({ type: apps.type })
-      .from(apps)
-      .where(eq(apps.id, appId))
-      .get()
-    if (!appRow) throw new HttpError(404, 'app not found')
+    const appRow = requireApp(db, appId)
     const rows = db
       .select()
       .from(tagsTable)
@@ -177,12 +173,7 @@ export function registerTagsRoutes(app: FastifyInstance, opts: TagsRouteOptions)
     const params = request.params as { appId: string; tagId: string }
     const appId = Number(params.appId)
     const tagId = Number(params.tagId)
-    const appRow = db
-      .select({ type: apps.type })
-      .from(apps)
-      .where(eq(apps.id, appId))
-      .get()
-    if (!appRow) throw new HttpError(404, 'app not found')
+    const appRow = requireApp(db, appId)
     const parsed = TagCategorySchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const { category } = parsed.data
@@ -203,8 +194,7 @@ export function registerTagsRoutes(app: FastifyInstance, opts: TagsRouteOptions)
   app.post('/api/apps/:appId/tags/import', async (request, reply) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    const row = db.select().from(apps).where(eq(apps.id, appId)).get()
-    if (!row) throw new HttpError(404, 'app not found')
+    const row = requireApp(db, appId)
     let count: number
     try {
       const adapter = getAdapter(row.type, row.url, row.apiKey)
@@ -225,9 +215,7 @@ export function registerTagsRoutes(app: FastifyInstance, opts: TagsRouteOptions)
   app.post('/api/apps/:appId/tags/import-manual', (request, reply) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    if (!db.select({ id: apps.id }).from(apps).where(eq(apps.id, appId)).get()) {
-      throw new HttpError(404, 'app not found')
-    }
+    requireApp(db, appId)
     const parsed = TagImportSchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const body = parsed.data
@@ -309,10 +297,10 @@ export function registerTagsRoutes(app: FastifyInstance, opts: TagsRouteOptions)
       } catch (e) {
         results.push({
           app_id: appId,
-          ok: true,
+          ok: false,
           detail: `created, but re-import failed: ${String(e)}`,
         })
-        ok += 1
+        failed += 1
       }
     }
     logEvent(db, 'info', `pushed tag '${label}' to ${ok} app(s) (${failed} failed)`)

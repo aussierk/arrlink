@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, getDisplayTimezone, type RuleInput } from '../lib/api'
+import { api, errorMessage, getDisplayTimezone, type RuleInput } from '../lib/api'
 
 type PreviewData = {
   app_id: number
@@ -38,7 +38,7 @@ export default function PreviewPanel({
       setData(r)
       setStamp(Date.now())
     } catch (e) {
-      setErr(String(e))
+      setErr(errorMessage(e))
       setData(null)
     } finally {
       setBusy(false)

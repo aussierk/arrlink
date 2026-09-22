@@ -1,5 +1,7 @@
 import {
   AdapterError,
+  asStr,
+  toNumberOrNull,
   type AppInfo,
   type Item,
   type Language,
@@ -27,7 +29,6 @@ export abstract class BaseAdapter {
   }
 
   abstract ping(): Promise<AppInfo>
-  abstract fetchTags(): Promise<Tag[]>
   abstract fetchItems(
     knownFingerprints?: Map<number, string>,
     tags?: Tag[],
@@ -43,11 +44,34 @@ export abstract class BaseAdapter {
     return { items, tags }
   }
 
-  /** Create a tag in the app (idempotent). Default: unsupported; Radarr/Sonarr override. */
-  createTag(_label: string): Promise<void> {
-    return Promise.reject(
-      new AdapterError(`create_tag not supported for ${this.appType}`),
-    )
+  /** Radarr and Sonarr expose the identical `[{id, count, label}]` tag shape. */
+  async fetchTags(): Promise<Tag[]> {
+    const data = await this.getJson('/api/v3/tag')
+    if (!Array.isArray(data)) throw new AdapterError('unexpected tag payload')
+    const tags: Tag[] = []
+    for (const row of data) {
+      if (!row || typeof row !== 'object') continue
+      const r = row as { label?: unknown; count?: unknown; id?: unknown }
+      const label = asStr(r.label).trim()
+      if (!label) continue
+      const count = Number.isFinite(Number(r.count)) ? Number(r.count) : 0
+      const id = toNumberOrNull(r.id)
+      tags.push({ label, count, id })
+    }
+    return tags
+  }
+
+  /** Create a tag in the app (idempotent). Radarr and Sonarr share the same
+   * `/api/v3/tag` POST contract. */
+  async createTag(label: string): Promise<void> {
+    const trimmed = (label || '').trim()
+    if (!trimmed) throw new AdapterError('tag label is empty')
+    const r = await this.postJson('/api/v3/tag', { label: trimmed })
+    if (r.status === 401 || r.status === 403)
+      throw new AdapterError('bad API key (401)', 401)
+    if (r.status !== 200 && r.status !== 201) {
+      throw new AdapterError(`HTTP ${r.status} creating tag '${trimmed}'`, r.status)
+    }
   }
 
   /** This instance's configured quality profiles -- Radarr and Sonarr expose the

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../../lib/api'
+import { api, errorMessage } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Field from '../../components/ui/Field'
 import { useAsyncLoad } from '../../lib/useAsyncLoad'
@@ -78,7 +78,7 @@ export default function AuthenticationSection() {
       toast.success(t('settingsAuth.saved'))
       await load()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     }
   }
 

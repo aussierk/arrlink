@@ -24,6 +24,7 @@ import {
 } from './ruleModal/helpers'
 import {
   api,
+  errorMessage,
   type AppItem,
   type ConditionItem,
   type PresetItem,
@@ -258,7 +259,7 @@ export default function RuleModal({
       onSaved(saved)
       onClose()
     } catch (e) {
-      setErr(String(e))
+      setErr(errorMessage(e))
     } finally {
       setBusy(false)
     }

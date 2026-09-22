@@ -3,8 +3,8 @@ import { dirname, relative } from 'node:path'
 import { BaseAdapter } from './base.js'
 import {
   AdapterError,
-  asStr,
   mediaInfoValues,
+  toNumberOrNull,
   translateTagLabels,
   type AppInfo,
   type Item,
@@ -40,12 +40,6 @@ interface RadarrMovieRow {
   runtime?: number
 }
 
-function toNumberOrNull(v: unknown): number | null {
-  if (v === null || v === undefined) return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
-}
-
 export class RadarrAdapter extends BaseAdapter {
   readonly appType = 'radarr' as const
 
@@ -55,33 +49,6 @@ export class RadarrAdapter extends BaseAdapter {
       throw new AdapterError('unexpected system/status payload')
     }
     return { name: 'radarr', version: String(data.version) }
-  }
-
-  async fetchTags(): Promise<Tag[]> {
-    const data = await this.getJson('/api/v3/tag')
-    if (!Array.isArray(data)) throw new AdapterError('unexpected tag payload')
-    const tags: Tag[] = []
-    for (const row of data) {
-      if (!row || typeof row !== 'object') continue
-      const r = row as { label?: unknown; count?: unknown; id?: unknown }
-      const label = asStr(r.label).trim()
-      if (!label) continue
-      const count = Number.isFinite(Number(r.count)) ? Number(r.count) : 0
-      const id = toNumberOrNull(r.id)
-      tags.push({ label, count, id })
-    }
-    return tags
-  }
-
-  async createTag(label: string): Promise<void> {
-    const trimmed = (label || '').trim()
-    if (!trimmed) throw new AdapterError('tag label is empty')
-    const r = await this.postJson('/api/v3/tag', { label: trimmed })
-    if (r.status === 401 || r.status === 403)
-      throw new AdapterError('bad API key (401)', 401)
-    if (r.status !== 200 && r.status !== 201) {
-      throw new AdapterError(`HTTP ${r.status} creating tag '${trimmed}'`, r.status)
-    }
   }
 
   async fetchItems(

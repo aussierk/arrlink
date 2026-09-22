@@ -7,6 +7,12 @@ export class ApiError extends Error {
   }
 }
 
+/** Formats a caught value for display -- ApiError/Error give their message,
+ * anything else falls back to String(). */
+export function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
 let redirecting = false
 
 /**
@@ -547,11 +553,15 @@ export type Summary = {
 // Module-level, set once at boot from Me.display_timezone (see Shell.tsx)
 // and again immediately whenever GeneralSection saves a new value, mirroring
 // the `redirecting` module state above -- no context/prop-drilling needed
-// since every call site just reads the current value at render time.
+// since fmtTime/fmtRelative just read the current value when called. Components
+// that need to re-render live on a change should use useDisplayTimezone instead
+// (see lib/useDisplayTimezone.ts), which subscribes via tzListeners below.
 let displayTimezone = 'UTC'
+export const tzListeners = new Set<() => void>()
 
 export function setDisplayTimezone(tz: string) {
   displayTimezone = tz
+  tzListeners.forEach((l) => l())
 }
 
 export function getDisplayTimezone(): string {

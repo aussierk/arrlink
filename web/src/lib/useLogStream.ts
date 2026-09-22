@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type LogEntry } from './api'
+import { api, errorMessage, type LogEntry } from './api'
 
 /** Tailwind text class for an event level -- shared by the Logs table and the
  * dashboard activity feed so they never drift. */
@@ -49,7 +49,7 @@ export function useLogStream(opts: Options = {}) {
       const rows = await api.listLogs(level || undefined, ruleId)
       setLogs(rows.slice(0, cap))
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e))
     }
   }, [level, ruleId, cap])
 

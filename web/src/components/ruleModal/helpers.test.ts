@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ConditionItem, TagItem, VocabularyEntry } from '../../lib/api'
 import {
+  categoryChangePatch,
   computeCustomOptions,
   creatableFor,
   decodeServiceValue,
@@ -114,6 +115,51 @@ describe('nextMatchValueForSelection', () => {
   it('replaces the value outright for a non-list match type', () => {
     expect(nextMatchValueForSelection('exact', 'old', [], ['new'])).toBe('new')
     expect(nextMatchValueForSelection('exact', 'old', ['old'], [])).toBe('')
+  })
+})
+
+describe('categoryChangePatch', () => {
+  const cond = (
+    category: ConditionItem['category'],
+    match_type: ConditionItem['match_type'],
+    source: ConditionItem['source'] = null,
+  ): ConditionItem => ({ category, match_type, match_value: 'x', join: null, source })
+
+  it('forces a native range comparison for a numeric category', () => {
+    const patch = categoryChangePatch('rating', cond('genre', 'list'))
+    expect(patch).toEqual({
+      category: 'rating',
+      match_type: 'range',
+      match_value: rangeMatchValue(null, null),
+      source: 'native',
+    })
+  })
+
+  it('defaults to regex + native source for a native-only category (title)', () => {
+    const patch = categoryChangePatch('title', cond('genre', 'list', 'tag'))
+    expect(patch.match_type).toBe('regex')
+    expect(patch.source).toBe('native')
+  })
+
+  it('defaults to regex for the user category, but leaves source cleared (not rich)', () => {
+    const patch = categoryChangePatch('user', cond('genre', 'list', 'tag'))
+    expect(patch.match_type).toBe('regex')
+    expect(patch.source).toBeNull()
+  })
+
+  it('defaults genre to native source, keeping match_type unless it was range', () => {
+    const patch = categoryChangePatch('genre', cond('rating', 'range'))
+    expect(patch.source).toBe('native')
+    expect(patch.match_type).toBe('list') // range isn't valid outside numeric
+
+    const patch2 = categoryChangePatch('genre', cond('language', 'exact', 'tag'))
+    expect(patch2.match_type).toBe('exact') // preserved -- wasn't 'range'
+  })
+
+  it('keeps the current source for another rich category, coming from a non-range type', () => {
+    const patch = categoryChangePatch('language', cond('genre', 'list', 'native'))
+    expect(patch.source).toBe('native')
+    expect(patch.match_type).toBe('list')
   })
 })
 

@@ -16,6 +16,7 @@ import {
   CUSTOM,
   NUMERIC,
   RICH,
+  categoryChangePatch,
   categoryLabel,
   creatableFor,
   parseRangeMatchValue,
@@ -254,53 +255,7 @@ export default function ConditionRow({
                   value={c.category}
                   options={categorySelectOptions}
                   usedCategories={usedCategories}
-                  onChange={(cat) => {
-                    // Numeric categories (rating/popularity/runtime) only ever
-                    // make sense as a native range comparison -- no tag
-                    // equivalent, no exact/list/regex/vocabulary mode.
-                    if (NUMERIC.has(cat)) {
-                      onUpdate({
-                        category: cat,
-                        match_type: 'range',
-                        match_value: rangeMatchValue(null, null),
-                        source: 'native',
-                      })
-                      return
-                    }
-                    onUpdate({
-                      category: cat,
-                      // Users has no literal tag suggestions -- regex (the
-                      // "## - username" style pick) is the only mode that
-                      // actually extracts a username, so switching to it
-                      // defaults there (still overridable via Match Type).
-                      // Title behaves the same way, always against real
-                      // metadata (see the forced source below) -- its own
-                      // curated regex picks bucket a library alphabetically.
-                      // Coming *from* a numeric category, match_type was
-                      // 'range' -- not a valid option here, so it falls back
-                      // to 'list'.
-                      match_type:
-                        cat === 'user' || NATIVE_ONLY_CATEGORIES.has(cat)
-                          ? 'regex'
-                          : (c.match_type as string) === 'range'
-                            ? 'list'
-                            : c.match_type,
-                      match_value: '',
-                      // Genre/Title default to Native: the arr instance's own
-                      // fields are what most rules actually want (Title has
-                      // no tag equivalent at all -- see NATIVE_ONLY_CATEGORIES)
-                      // -- still overridable via the source toggle below for
-                      // genre. Non-rich categories (user/custom) never allow
-                      // "native" server-side, so leaving one clears it rather
-                      // than tripping that validation on save.
-                      source:
-                        cat === 'genre' || NATIVE_ONLY_CATEGORIES.has(cat)
-                          ? 'native'
-                          : RICH.has(cat)
-                            ? c.source
-                            : null,
-                    })
-                  }}
+                  onChange={(cat) => onUpdate(categoryChangePatch(cat, c))}
                 />
               </Field>
               {/* Numeric categories (rating/popularity/runtime) only ever

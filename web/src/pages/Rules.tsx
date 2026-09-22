@@ -14,6 +14,7 @@ import { useSort } from '../lib/useSort'
 import { useToast } from '../lib/useToast'
 import {
   api,
+  errorMessage,
   type ConditionCategory,
   type ConditionItem,
   type RuleInput,
@@ -323,7 +324,7 @@ export default function Rules() {
       clearSelection()
       await load()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     } finally {
       setBulkBusy(false)
     }
@@ -344,7 +345,7 @@ export default function Rules() {
       clearSelection()
       await load()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     } finally {
       setBulkBusy(false)
     }

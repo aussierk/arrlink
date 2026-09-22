@@ -4,6 +4,14 @@ export function asStr(v: unknown): string {
   return typeof v === 'string' ? v : ''
 }
 
+/** Coerces an untyped JSON field to a finite number, or null for anything else
+ * (missing, non-numeric, NaN/Infinity). */
+export function toNumberOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
 export interface AppInfo {
   name: string
   version: string

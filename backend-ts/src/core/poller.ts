@@ -17,7 +17,7 @@ import { syncAppTags } from '../db/tags.js'
 import { removeLink, resolveFsFallback } from './fsutil.js'
 import { reconcile } from './linker.js'
 import type { Condition } from './matching.js'
-import { planLinks, type PlannerItem, type PlannerRule } from './planner.js'
+import { planLinks, toPlannerItem, type PlannerItem, type PlannerRule } from './planner.js'
 import { DEFAULT_ROOTS } from './template.js'
 import {
   expandVocabularyConditions,
@@ -764,39 +764,12 @@ export class Poller {
       .map(rowToPlannerRule)
     plannerRules = expandVocabularyConditions(plannerRules, this.db, appId, appType)
 
-    const plannerItems: PlannerItem[] = items.map((it) => ({
-      // links.item_id is an FK to app_items.id, not the adapter's external item
-      // id -- storeItems() (called earlier in pollOnce) backfills dbId onto
-      // every item, so this is always set by the time reconcileApp runs.
-      id: it.dbId as number,
-      title: it.title,
-      year: it.year,
-      tags: it.tags,
-      path: it.path,
-      genres: it.genres,
-      certification: it.certification,
-      collection: it.collection,
-      qualityProfileName: it.qualityProfileName,
-      originalLanguage: it.originalLanguage,
-      audioLanguages: it.audioLanguages,
-      studio: it.studio,
-      network: it.network,
-      seriesType: it.seriesType,
-      videoCodec: it.videoCodec,
-      videoDynamicRange: it.videoDynamicRange,
-      audioCodec: it.audioCodec,
-      audioChannels: it.audioChannels,
-      rating: it.rating,
-      popularity: it.popularity,
-      runtime: it.runtime,
-      filesStale: it.filesStale,
-      files: it.files.map((f) => ({
-        id: f.id ?? null,
-        absPath: f.absPath,
-        inode: f.inode,
-        size: f.size,
-      })),
-    }))
+    // links.item_id is an FK to app_items.id, not the adapter's external item
+    // id -- storeItems() (called earlier in pollOnce) backfills dbId onto
+    // every item, so this is always set by the time reconcileApp runs.
+    const plannerItems: PlannerItem[] = items.map((it) =>
+      toPlannerItem(it, it.dbId as number),
+    )
 
     const { planned, errors } = planLinks(
       plannerRules,

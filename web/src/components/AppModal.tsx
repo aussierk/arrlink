@@ -6,7 +6,13 @@ import Button from './ui/Button'
 import Toggle from './ui/Toggle'
 import Field from './ui/Field'
 import Alert from './ui/Alert'
-import { api, DEFAULT_POLL_INTERVAL_S, type AppInput, type AppItem } from '../lib/api'
+import {
+  api,
+  DEFAULT_POLL_INTERVAL_S,
+  errorMessage,
+  type AppInput,
+  type AppItem,
+} from '../lib/api'
 import { inputCls } from '../lib/ui'
 
 /**
@@ -60,7 +66,7 @@ export default function AppModal({
         message: t('appModal.connected', { name: r.name, version: r.version }),
       })
     } catch (e) {
-      setTestResult({ ok: false, message: t('appModal.failed', { error: String(e) }) })
+      setTestResult({ ok: false, message: t('appModal.failed', { error: errorMessage(e) }) })
     } finally {
       setTesting(false)
     }
@@ -80,7 +86,7 @@ export default function AppModal({
       onSaved()
       onClose()
     } catch (e) {
-      setErr(String(e))
+      setErr(errorMessage(e))
     } finally {
       setBusy(false)
     }

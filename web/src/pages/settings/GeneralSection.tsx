@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-import { api, setDisplayTimezone } from '../../lib/api'
+import { api, errorMessage, setDisplayTimezone } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import { TMDB_CERTIFICATION_COUNTRIES } from '../../lib/countries'
 import i18n from '../../i18n'
@@ -115,7 +115,7 @@ export default function GeneralSection() {
       toast.success(t('settingsGeneral.saved'))
       await load()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     }
   }
 

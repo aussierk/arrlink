@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type DependencyList } from 'react'
+import { errorMessage } from './api'
 import { useToast } from './useToast'
 
 /** Runs `fn` on mount and whenever `deps` changes, toasting any thrown
@@ -16,7 +17,7 @@ export function useAsyncLoad(fn: () => Promise<void>, deps: DependencyList): () 
     try {
       await fnRef.current()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
   }, deps)

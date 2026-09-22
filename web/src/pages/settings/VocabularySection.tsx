@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type AppItem } from '../../lib/api'
+import { api, errorMessage, type AppItem } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Field from '../../components/ui/Field'
 import { useAsyncLoad } from '../../lib/useAsyncLoad'
@@ -41,7 +41,7 @@ export default function VocabularySection() {
       toast.success(t('settingsVocab.keySaved'))
       await load()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     }
   }
 
@@ -55,7 +55,7 @@ export default function VocabularySection() {
         }),
       )
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     } finally {
       setBusy(null)
     }
@@ -67,7 +67,7 @@ export default function VocabularySection() {
       const r = await api.importTrashVocabulary(appType)
       toast.success(t('settingsVocab.trashRefreshed', { count: r.imported, appType }))
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     } finally {
       setBusy(null)
     }
@@ -79,7 +79,7 @@ export default function VocabularySection() {
       await api.syncAppVocabulary(appId)
       toast.success(t('settingsVocab.appSynced'))
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     } finally {
       setBusy(null)
     }

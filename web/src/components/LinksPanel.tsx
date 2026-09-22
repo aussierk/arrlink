@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
-import { api, type AppItem, type LinkItem } from '../lib/api'
+import { api, errorMessage, type AppItem, type LinkItem } from '../lib/api'
 import Button from './ui/Button'
 import { TableEmpty, Th, Thead } from './ui/Table'
 import { useAsyncLoad } from '../lib/useAsyncLoad'
@@ -72,7 +72,7 @@ export default function LinksPanel() {
       toast.success(t('linksTable.repaired', { fixed: r.fixed, failed: r.failed }))
       await load()
     } catch (e) {
-      toast.error(t('linksTable.repairFailed', { error: String(e) }))
+      toast.error(t('linksTable.repairFailed', { error: errorMessage(e) }))
     } finally {
       setBusy(false)
     }
@@ -83,7 +83,7 @@ export default function LinksPanel() {
       await api.deleteLink(id)
       await load()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     }
   }
 

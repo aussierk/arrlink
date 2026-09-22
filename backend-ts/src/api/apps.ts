@@ -13,6 +13,7 @@ import type { Poller } from '../core/poller.js'
 import { DEFAULT_ROOTS, auditRuleRoots } from '../core/template.js'
 import { HttpError } from '../http-error.js'
 import { getCurrentUser } from './auth.js'
+import { requireApp } from './require-app.js'
 
 /** Apps CRUD: storage, connection tests, and tag import. Ported from api/apps.py.
  * Wire format is snake_case throughout, matching web/ and the Python backend. */
@@ -103,8 +104,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
   app.get('/api/apps/:appId', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    const row = db.select().from(apps).where(eq(apps.id, appId)).get()
-    if (!row) throw new HttpError(404, 'app not found')
+    const row = requireApp(db, appId)
     return appOut(row)
   })
 
@@ -136,8 +136,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
   app.patch('/api/apps/:appId', (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    const row = db.select().from(apps).where(eq(apps.id, appId)).get()
-    if (!row) throw new HttpError(404, 'app not found')
+    const row = requireApp(db, appId)
     const parsed = AppInSchema.safeParse(request.body)
     if (!parsed.success) throw new HttpError(422, 'invalid request body')
     const body = parsed.data
@@ -179,8 +178,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
   app.delete('/api/apps/:appId', (request, reply) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    const existing = db.select({ id: apps.id }).from(apps).where(eq(apps.id, appId)).get()
-    if (!existing) throw new HttpError(404, 'app not found')
+    requireApp(db, appId)
     const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [
       ...DEFAULT_ROOTS,
     ]
@@ -208,8 +206,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
   app.post('/api/apps/:appId/test', async (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    const row = db.select().from(apps).where(eq(apps.id, appId)).get()
-    if (!row) throw new HttpError(404, 'app not found')
+    const row = requireApp(db, appId)
     const adapter = getAdapter(row.type, row.url, row.apiKey)
     try {
       const info = await adapter.ping()
@@ -229,8 +226,7 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
   app.post('/api/apps/:appId/rescan', async (request) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    const row = db.select({ name: apps.name }).from(apps).where(eq(apps.id, appId)).get()
-    if (!row) throw new HttpError(404, 'app not found')
+    requireApp(db, appId)
     const poller = getPoller()
     if (poller === null) throw new HttpError(503, 'poller not running')
     const result = await poller.rescan(appId)

@@ -9,7 +9,7 @@ import {
   type TagItem,
   type VocabularyEntry,
 } from '../../lib/api'
-import { CATEGORY_ORDER } from '../../lib/categoryMeta'
+import { CATEGORY_ORDER, NATIVE_ONLY_CATEGORIES } from '../../lib/categoryMeta'
 import { CUSTOM_TAG_SUGGESTIONS, joinList, parseList } from '../../lib/tagOptions'
 
 export { CATEGORY_ORDER, categoriesForServiceType } from '../../lib/categoryMeta'
@@ -134,6 +134,55 @@ export function reorderConditions(
     ...c,
     join: idx === 0 ? null : (c.join ?? 'AND'),
   }))
+}
+
+/** The condition patch for a category change in the rule editor: numeric
+ * categories force a native range comparison, user/native-only categories
+ * default to regex, and genre/native-only categories default to native
+ * source -- see the inline comments on each branch for the reasoning. */
+export function categoryChangePatch(
+  cat: ConditionCategory,
+  current: ConditionItem,
+): Partial<ConditionItem> {
+  // Numeric categories (rating/popularity/runtime) only ever make sense as a
+  // native range comparison -- no tag equivalent, no exact/list/regex/vocabulary mode.
+  if (NUMERIC.has(cat)) {
+    return {
+      category: cat,
+      match_type: 'range',
+      match_value: rangeMatchValue(null, null),
+      source: 'native',
+    }
+  }
+  return {
+    category: cat,
+    // Users has no literal tag suggestions -- regex (the "## - username" style
+    // pick) is the only mode that actually extracts a username, so switching to
+    // it defaults there (still overridable via Match Type). Title behaves the
+    // same way, always against real metadata (see the forced source below) --
+    // its own curated regex picks bucket a library alphabetically. Coming
+    // *from* a numeric category, match_type was 'range' -- not a valid option
+    // here, so it falls back to 'list'.
+    match_type:
+      cat === 'user' || NATIVE_ONLY_CATEGORIES.has(cat)
+        ? 'regex'
+        : (current.match_type as string) === 'range'
+          ? 'list'
+          : current.match_type,
+    match_value: '',
+    // Genre/Title default to Native: the arr instance's own fields are what
+    // most rules actually want (Title has no tag equivalent at all -- see
+    // NATIVE_ONLY_CATEGORIES) -- still overridable via the source toggle below
+    // for genre. Non-rich categories (user/custom) never allow "native"
+    // server-side, so leaving one clears it rather than tripping that
+    // validation on save.
+    source:
+      cat === 'genre' || NATIVE_ONLY_CATEGORIES.has(cat)
+        ? 'native'
+        : RICH.has(cat)
+          ? current.source
+          : null,
+  }
 }
 
 /** The next match_value after a multi-select changes from `prevSelected` to

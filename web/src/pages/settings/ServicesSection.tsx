@@ -5,7 +5,7 @@ import AppModal from '../../components/AppModal'
 import Button from '../../components/ui/Button'
 import PageHeader from '../../components/ui/PageHeader'
 import { Table, TableEmpty, Th, Thead } from '../../components/ui/Table'
-import { api, fmtTime, type AppItem } from '../../lib/api'
+import { api, errorMessage, fmtTime, type AppItem } from '../../lib/api'
 import { useAsyncLoad } from '../../lib/useAsyncLoad'
 import { useConfirm } from '../../lib/useConfirm'
 import { useToast } from '../../lib/useToast'
@@ -50,61 +50,58 @@ export default function ServicesSection() {
       toast.success(t('settingsServices.deletedMsg', { name: a.name }))
       await load()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     }
+  }
+
+  /** Runs one row's test/import/rescan action: sets a "…ing" message, awaits the
+   * call, then sets the success or (via `failMsg`) failure message. Always
+   * reloads the table afterward, whether or not the call threw. */
+  async function runRowAction<T>(
+    id: number,
+    startMsg: string,
+    call: () => Promise<T>,
+    successMsg: (r: T) => string,
+    failMsg: (error: string) => string = (error) =>
+      t('settingsServices.failMsg', { error }),
+  ) {
+    setRowMsg((m) => ({ ...m, [id]: startMsg }))
+    try {
+      const r = await call()
+      setRowMsg((m) => ({ ...m, [id]: successMsg(r) }))
+    } catch (ex) {
+      setRowMsg((m) => ({ ...m, [id]: failMsg(errorMessage(ex)) }))
+    }
+    await load()
   }
 
   async function testRow(id: number) {
-    setRowMsg((m) => ({ ...m, [id]: t('settingsServices.testingMsg') }))
-    try {
-      const r = await api.testAppId(id)
-      setRowMsg((m) => ({
-        ...m,
-        [id]: t('settingsServices.testOkMsg', { version: r.version }),
-      }))
-    } catch (ex) {
-      setRowMsg((m) => ({
-        ...m,
-        [id]: t('settingsServices.failMsg', { error: String(ex) }),
-      }))
-    }
-    await load()
+    await runRowAction(
+      id,
+      t('settingsServices.testingMsg'),
+      () => api.testAppId(id),
+      (r) => t('settingsServices.testOkMsg', { version: r.version }),
+    )
   }
 
   async function importRow(id: number) {
-    setRowMsg((m) => ({ ...m, [id]: t('settingsServices.importingMsg') }))
-    try {
-      const r = await api.importTags(id)
-      setRowMsg((m) => ({
-        ...m,
-        [id]: t('settingsServices.importedMsg', { count: r.imported }),
-      }))
-    } catch (ex) {
-      setRowMsg((m) => ({
-        ...m,
-        [id]: t('settingsServices.failMsg', { error: String(ex) }),
-      }))
-    }
-    await load()
+    await runRowAction(
+      id,
+      t('settingsServices.importingMsg'),
+      () => api.importTags(id),
+      (r) => t('settingsServices.importedMsg', { count: r.imported }),
+    )
   }
 
   async function rescanRow(id: number) {
-    setRowMsg((m) => ({ ...m, [id]: t('settingsServices.scanningMsg') }))
-    try {
-      const r = await api.rescanApp(id)
-      setRowMsg((m) => ({
-        ...m,
-        [id]: r.ok
-          ? t('settingsServices.scannedMsg')
-          : t('settingsServices.scanFailedMsg'),
-      }))
-    } catch (ex) {
-      setRowMsg((m) => ({
-        ...m,
-        [id]: t('settingsServices.scanFailedErrMsg', { error: String(ex) }),
-      }))
-    }
-    await load()
+    await runRowAction(
+      id,
+      t('settingsServices.scanningMsg'),
+      () => api.rescanApp(id),
+      (r) =>
+        r.ok ? t('settingsServices.scannedMsg') : t('settingsServices.scanFailedMsg'),
+      (error) => t('settingsServices.scanFailedErrMsg', { error }),
+    )
   }
 
   return (

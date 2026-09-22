@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useBlocker } from 'react-router-dom'
 import {
   api,
+  errorMessage,
   fmtTime,
   type AppItem,
   type ConditionCategory,
@@ -115,7 +116,7 @@ export default function Tags() {
       setPendingEdits({})
       return true
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
       return false
     } finally {
       setSaving(false)
@@ -192,7 +193,7 @@ export default function Tags() {
       toast.success(t('tags.appTags.imported', { count: r.imported }))
       await loadTags()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     } finally {
       setBusy(false)
     }

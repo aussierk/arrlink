@@ -11,7 +11,7 @@ import type { SettingsStore } from '../db/settings-store.js'
 import type { Condition } from '../core/matching.js'
 import { parseRangeValue } from '../core/matching.js'
 import { forceUnlinkRuleLinks } from '../core/linker.js'
-import { planLinks, type PlannerRule } from '../core/planner.js'
+import { planLinks, toPlannerItem, type PlannerRule } from '../core/planner.js'
 import type { Poller } from '../core/poller.js'
 import { snapshotItems } from '../core/snapshot.js'
 import {
@@ -536,36 +536,7 @@ export function registerRulesRoutes(app: FastifyInstance, opts: RulesRouteOption
     const rules = expandVocabularyConditions([rule], db, appId, row.type)
     const { planned, errors } = planLinks(
       rules,
-      items.map((it) => ({
-        id: it.id,
-        title: it.title,
-        year: it.year,
-        tags: it.tags,
-        path: it.path,
-        genres: it.genres,
-        certification: it.certification,
-        collection: it.collection,
-        qualityProfileName: it.qualityProfileName,
-        originalLanguage: it.originalLanguage,
-        audioLanguages: it.audioLanguages,
-        studio: it.studio,
-        network: it.network,
-        seriesType: it.seriesType,
-        videoCodec: it.videoCodec,
-        videoDynamicRange: it.videoDynamicRange,
-        audioCodec: it.audioCodec,
-        audioChannels: it.audioChannels,
-        rating: it.rating,
-        popularity: it.popularity,
-        runtime: it.runtime,
-        filesStale: it.filesStale,
-        files: it.files.map((f) => ({
-          id: f.id ?? null,
-          absPath: f.absPath,
-          inode: f.inode,
-          size: f.size,
-        })),
-      })),
+      items.map((it) => toPlannerItem(it, it.id)),
       row.name,
       appId,
       roots,

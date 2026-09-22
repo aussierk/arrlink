@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RotateCw } from 'lucide-react'
-import { api, fmtTime, type BackupInfo } from '../../lib/api'
+import { api, errorMessage, fmtTime, type BackupInfo } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import Toggle from '../../components/ui/Toggle'
 import Field from '../../components/ui/Field'
@@ -71,7 +71,7 @@ export default function BackupSection() {
         toast.error(t('settingsBackup.runFailed', { error: r.error }))
       }
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     } finally {
       setRunning(false)
     }
@@ -89,7 +89,7 @@ export default function BackupSection() {
       toast.success(t('settingsBackup.settingsSaved'))
       await load()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(errorMessage(e))
     } finally {
       setSaving(false)
     }

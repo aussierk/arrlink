@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import type { Item } from '../arr/types.js'
 import type { Condition, ConditionMatch, ConditionsResult } from './matching.js'
 import { matchConditions } from './matching.js'
 import { TemplateError, resolveDestination } from './template.js'
@@ -78,6 +79,43 @@ export interface PlannerItem {
   runtime?: number | null
   filesStale?: boolean
   files: PlannerFile[]
+}
+
+/** Maps an adapter/stored `Item` to the `PlannerItem` shape the planner matches
+ * against. `id` is passed explicitly since callers disagree on its source: the
+ * poller uses the item's backfilled db id, while rule preview uses either the
+ * stored item's own id or (for a live preview) the adapter's external id. */
+export function toPlannerItem(it: Item, id: number): PlannerItem {
+  return {
+    id,
+    title: it.title,
+    year: it.year,
+    tags: it.tags,
+    path: it.path,
+    genres: it.genres,
+    certification: it.certification,
+    collection: it.collection,
+    qualityProfileName: it.qualityProfileName,
+    originalLanguage: it.originalLanguage,
+    audioLanguages: it.audioLanguages,
+    studio: it.studio,
+    network: it.network,
+    seriesType: it.seriesType,
+    videoCodec: it.videoCodec,
+    videoDynamicRange: it.videoDynamicRange,
+    audioCodec: it.audioCodec,
+    audioChannels: it.audioChannels,
+    rating: it.rating,
+    popularity: it.popularity,
+    runtime: it.runtime,
+    filesStale: it.filesStale,
+    files: it.files.map((f) => ({
+      id: f.id ?? null,
+      absPath: f.absPath,
+      inode: f.inode,
+      size: f.size,
+    })),
+  }
 }
 
 /** Every (matchKey, matchedConditions) variant for one (rule, item): the primary
