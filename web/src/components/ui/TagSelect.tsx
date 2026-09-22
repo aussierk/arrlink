@@ -89,7 +89,11 @@ export default function TagSelect({
         <ChevronDown className="size-4 shrink-0 text-fg-subtle transition-transform group-data-open:rotate-180" />
       </ComboboxButton>
 
-      <ComboboxOptions className="absolute z-10 mt-1 w-full rounded-md border border-line-strong bg-surface shadow-xl empty:hidden">
+      <ComboboxOptions
+        anchor="bottom start"
+        transition
+        className="z-20 w-(--button-width) rounded-md border border-line-strong bg-surface shadow-xl [--anchor-gap:4px] empty:hidden data-leave:transition data-leave:duration-100 data-closed:opacity-0"
+      >
         {showSearch && (
           <div className="border-b border-line p-1.5">
             <ComboboxInput
