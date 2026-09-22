@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Combobox,
@@ -27,6 +27,19 @@ export default function PresetSelect({
 }) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
+  // Combobox needs a real controlled round-trip (value actually reflecting
+  // what onChange fired) or its internal selection state machine gets
+  // confused -- a value permanently stuck at null broke mouse selection
+  // entirely. So: let the click commit into state for one render, then reset
+  // it back to null right after applying it.
+  const [selected, setSelected] = useState<PresetItem | null>(null)
+
+  useEffect(() => {
+    if (selected) {
+      onSelect(selected)
+      setSelected(null)
+    }
+  }, [selected, onSelect])
 
   const q = query.trim().toLowerCase()
   const groups = CATEGORY_GROUP_ORDER.map((group) => ({
@@ -43,10 +56,8 @@ export default function PresetSelect({
   return (
     <Combobox
       immediate
-      value={null}
-      onChange={(p: PresetItem | null) => {
-        if (p) onSelect(p)
-      }}
+      value={selected}
+      onChange={setSelected}
       onClose={() => setQuery('')}
     >
       <div className="relative">
