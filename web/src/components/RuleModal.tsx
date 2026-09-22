@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-import { Sparkles } from 'lucide-react'
 import Modal from './Modal'
 import PreviewPanel from './PreviewPanel'
 import Alert from './ui/Alert'
@@ -8,7 +7,9 @@ import Button from './ui/Button'
 import Toggle from './ui/Toggle'
 import Field from './ui/Field'
 import ConditionRow from './ruleModal/ConditionRow'
+import PresetSelect from './ruleModal/PresetSelect'
 import { useRuleVocabulary } from './ruleModal/useRuleVocabulary'
+import { NATIVE_ONLY_CATEGORIES } from '../lib/categoryMeta'
 import {
   categoriesForServiceType,
   decodeServiceValue,
@@ -175,12 +176,12 @@ export default function RuleModal({
     if (!next) return
     const block: ConditionItem = {
       category: next,
-      match_type: next === 'user' ? 'regex' : 'list',
+      match_type: next === 'user' || NATIVE_ONLY_CATEGORIES.has(next) ? 'regex' : 'list',
       match_value: '',
       join: conditions.length === 0 ? null : join,
-      // See ConditionRow's category <select> handler for why genre defaults
-      // to native.
-      source: next === 'genre' ? 'native' : null,
+      // See ConditionRow's category <select> handler for why genre/title
+      // default to native.
+      source: next === 'genre' || NATIVE_ONLY_CATEGORIES.has(next) ? 'native' : null,
     }
     setConditions([...conditions, block])
   }
@@ -326,26 +327,7 @@ export default function RuleModal({
 
         {!noServiceScoped && (
           <div className="rounded-md border border-ring/30 bg-accent-bg p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-accent">
-              <Sparkles className="size-3.5" />
-              {t('ruleModal.startFromPreset')}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {presets.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => applyPreset(p)}
-                  title={p.dir_template}
-                  className="rounded-md border border-line-strong bg-surface px-2.5 py-1 text-xs text-fg hover:border-ring hover:text-accent"
-                >
-                  {p.name}
-                </button>
-              ))}
-              {presets.length === 0 && (
-                <span className="text-xs text-fg-subtle">{t('ruleModal.noPresets')}</span>
-              )}
-            </div>
+            <PresetSelect presets={presets} onSelect={applyPreset} />
             <p className="mt-2 text-xs text-fg-subtle">{t('ruleModal.presetHint')}</p>
           </div>
         )}

@@ -8,10 +8,12 @@ import {
 } from '../../src/core/presets.js'
 
 describe('presets', () => {
-  it('has a Radarr and Sonarr matcher for every preset', () => {
+  it('has a matcher for every app type it declares support for', () => {
     for (const p of PRESETS) {
-      expect(p.matchers.radarr).toBeDefined()
-      expect(p.matchers.sonarr).toBeDefined()
+      const appTypes = p.appTypes ?? (['radarr', 'sonarr'] as const)
+      for (const appType of appTypes) {
+        expect(p.matchers[appType]).toBeDefined()
+      }
     }
   })
 
@@ -21,12 +23,17 @@ describe('presets', () => {
     expect(defaultBaseFolder('unknown')).toBe('/media')
   })
 
-  it('renders every preset for a type with a dir_template built from the base folder', () => {
+  it('renders every applicable preset for a type with a dir_template built from the base folder', () => {
     const rendered = listPresetsForType('radarr')
-    expect(rendered).toHaveLength(PRESETS.length)
+    const expectedCount = PRESETS.filter(
+      (p) => !p.appTypes || p.appTypes.includes('radarr'),
+    ).length
+    expect(rendered).toHaveLength(expectedCount)
+    // Sonarr-only presets (network/anime) must not leak into Radarr's list.
+    expect(rendered.some((p) => p.key === 'network' || p.key === 'anime')).toBe(false)
     const kids = rendered.find((p) => p.key === 'kids')!
     expect(kids.dirTemplate).toBe('/media/movies/kids')
-    expect(kids.matchType).toBe('list')
+    expect(kids.matchType).toBe('regex')
   })
 
   it('respects a custom base folder override, trimming a trailing slash', () => {
@@ -44,6 +51,12 @@ describe('presets', () => {
   it('returns undefined for an unknown preset key', () => {
     expect(renderPreset('does-not-exist', 'radarr')).toBeUndefined()
     expect(getPreset('does-not-exist')).toBeUndefined()
+  })
+
+  it('returns undefined for a preset applied to the wrong app type', () => {
+    expect(renderPreset('studio', 'sonarr')).toBeUndefined()
+    expect(renderPreset('network', 'radarr')).toBeUndefined()
+    expect(renderPreset('studio', 'radarr')?.dirTemplate).toBe('/media/movies/{$studio}')
   })
 
   it('placeholder-based presets carry the {$...} token through unresolved', () => {

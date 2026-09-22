@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
-import { REGEX_PICKS } from '../../lib/tagOptions'
+import { REGEX_PICKS_BY_CATEGORY } from '../../lib/tagOptions'
+import { NATIVE_ONLY_CATEGORIES } from '../../lib/categoryMeta'
 import {
   type ConditionCategory,
   type ConditionItem,
@@ -8,6 +9,7 @@ import {
 } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
 import CategorySelect from './CategorySelect'
+import LanguageFieldToggle from '../LanguageFieldToggle'
 import Field from '../ui/Field'
 import TagSelect from '../ui/TagSelect'
 import {
@@ -20,6 +22,8 @@ import {
   rangeMatchValue,
   selectedFor,
 } from './helpers'
+
+const LANGUAGE_VARIANTS = ['language', 'audio_language'] as const
 
 type Props = {
   condition: ConditionItem
@@ -110,8 +114,9 @@ export default function ConditionRow({
       )
     }
 
-    if (c.category === 'user' && c.match_type === 'regex') {
-      const regexPick = REGEX_PICKS.find((p) => p.pattern === c.match_value)
+    const regexPicks = REGEX_PICKS_BY_CATEGORY[c.category]
+    if (regexPicks && c.match_type === 'regex') {
+      const regexPick = regexPicks.find((p) => p.pattern === c.match_value)
       const regexIsCustom = !!c.match_value && !regexPick
       return (
         <div className="space-y-2">
@@ -124,7 +129,7 @@ export default function ConditionRow({
             }}
           >
             <option value="">{t('ruleModal.selectPattern')}</option>
-            {REGEX_PICKS.map((p) => (
+            {regexPicks.map((p) => (
               <option key={p.pattern} value={p.pattern}>
                 {p.label}
               </option>
@@ -145,26 +150,42 @@ export default function ConditionRow({
       )
     }
 
+    const options = optionsFor(c.category, c.source)
+    // Rich categories are expected to have a real known-value set (native
+    // sync or Tags-page classification) -- an empty list there usually means
+    // the sync hasn't run yet or nothing's been classified, not that no
+    // values will ever exist, so it's worth a hint. Regex/custom/user don't
+    // carry that expectation.
+    const showEmptyHint = RICH.has(c.category) && c.match_type !== 'regex' && options.length === 0
     return (
-      <TagSelect
-        placeholder={
-          c.match_type === 'regex'
-            ? t('ruleModal.pickOrTypePattern')
-            : t('ruleModal.selectCategoryPlaceholder', {
-                category: categoryLabel(c.category).toLowerCase(),
-              })
-        }
-        options={optionsFor(c.category, c.source)}
-        selected={selected}
-        onChange={(next) => onApplySelection(selected, next)}
-        multiple={c.match_type === 'list'}
-        creatable={creatableFor(c.match_type)}
-        searchPlaceholder={
-          c.match_type === 'regex'
-            ? t('ruleModal.searchOrTypePattern')
-            : t('ruleModal.searchOrAdd')
-        }
-      />
+      <div className="space-y-1.5">
+        <TagSelect
+          placeholder={
+            c.match_type === 'regex'
+              ? t('ruleModal.pickOrTypePattern')
+              : t('ruleModal.selectCategoryPlaceholder', {
+                  category: categoryLabel(c.category).toLowerCase(),
+                })
+          }
+          options={options}
+          selected={selected}
+          onChange={(next) => onApplySelection(selected, next)}
+          multiple={c.match_type === 'list'}
+          creatable={creatableFor(c.match_type)}
+          searchPlaceholder={
+            c.match_type === 'regex'
+              ? t('ruleModal.searchOrTypePattern')
+              : t('ruleModal.searchOrAdd')
+          }
+        />
+        {showEmptyHint && (
+          <p className="text-xs text-fg-subtle">
+            {(c.source ?? 'tag') === 'native'
+              ? t('ruleModal.noNativeValuesYet')
+              : t('ruleModal.noTagValuesYet')}
+          </p>
+        )}
+      </div>
     )
   }
 
@@ -251,30 +272,33 @@ export default function ConditionRow({
                       // Users has no literal tag suggestions -- regex (the
                       // "## - username" style pick) is the only mode that
                       // actually extracts a username, so switching to it
-                      // defaults there. Still overridable via Match Type.
-                      // Title never offers "vocabulary" (see the Match Type
-                      // select below), so leaving one behind would strand
-                      // the dropdown on a hidden option. Coming *from* a
-                      // numeric category, match_type was 'range' -- also not
-                      // a valid option here, so it falls back to 'list' too.
+                      // defaults there (still overridable via Match Type).
+                      // Title behaves the same way, always against real
+                      // metadata (see the forced source below) -- its own
+                      // curated regex picks bucket a library alphabetically.
+                      // Coming *from* a numeric category, match_type was
+                      // 'range' -- not a valid option here, so it falls back
+                      // to 'list'.
                       match_type:
-                        cat === 'user'
+                        cat === 'user' || NATIVE_ONLY_CATEGORIES.has(cat)
                           ? 'regex'
-                          : (cat === 'title' && c.match_type === 'vocabulary') ||
-                              (c.match_type as string) === 'range'
+                          : (c.match_type as string) === 'range'
                             ? 'list'
                             : c.match_type,
                       match_value: '',
-                      // Genre defaults to Native: the arr instance's own
-                      // genre field is what most rules actually want, and
-                      // it's now backed by real per-item observed data (not
-                      // just the shared TMDB catalog) -- still overridable
-                      // via the source toggle below. Non-rich categories
-                      // (user/custom) never allow "native" server-side, so
-                      // leaving one clears it rather than tripping that
-                      // validation on save.
+                      // Genre/Title default to Native: the arr instance's own
+                      // fields are what most rules actually want (Title has
+                      // no tag equivalent at all -- see NATIVE_ONLY_CATEGORIES)
+                      // -- still overridable via the source toggle below for
+                      // genre. Non-rich categories (user/custom) never allow
+                      // "native" server-side, so leaving one clears it rather
+                      // than tripping that validation on save.
                       source:
-                        cat === 'genre' ? 'native' : RICH.has(cat) ? c.source : null,
+                        cat === 'genre' || NATIVE_ONLY_CATEGORIES.has(cat)
+                          ? 'native'
+                          : RICH.has(cat)
+                            ? c.source
+                            : null,
                     })
                   }}
                 />
@@ -311,7 +335,18 @@ export default function ConditionRow({
                 </Field>
               )}
             </div>
-            {RICH.has(c.category) && (
+            {LANGUAGE_VARIANTS.includes(c.category as (typeof LANGUAGE_VARIANTS)[number]) && (
+              <Field label={t('ruleModal.compareField')}>
+                <LanguageFieldToggle
+                  value={c.category as 'language' | 'audio_language'}
+                  disabledVariant={LANGUAGE_VARIANTS.find(
+                    (v) => usedCategories.has(v) && v !== c.category,
+                  )}
+                  onChange={(cat) => onUpdate({ category: cat })}
+                />
+              </Field>
+            )}
+            {RICH.has(c.category) && !NATIVE_ONLY_CATEGORIES.has(c.category) && (
               <Field label={t('ruleModal.matchSource')}>
                 <div className="flex gap-1.5">
                   {(['tag', 'native'] as ConditionSource[]).map((src) => (
@@ -338,6 +373,9 @@ export default function ConditionRow({
                     : t('ruleModal.sourceTagHint')}
                 </p>
               </Field>
+            )}
+            {NATIVE_ONLY_CATEGORIES.has(c.category) && (
+              <p className="text-xs text-fg-subtle">{t('ruleModal.nativeOnlyHint')}</p>
             )}
             <Field label={t('ruleModal.value')}>{renderValue()}</Field>
           </div>

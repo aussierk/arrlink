@@ -68,4 +68,13 @@ describe('POST /api/presets/apply', () => {
     })
     expect(res.statusCode).toBe(422)
   })
+
+  it("422s for a preset applied to an app_type it doesn't support", async () => {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/presets/apply',
+      payload: { preset_key: 'network', app_type: 'radarr' },
+    })
+    expect(res.statusCode).toBe(422)
+  })
 })

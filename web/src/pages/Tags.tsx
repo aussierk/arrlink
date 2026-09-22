@@ -14,6 +14,7 @@ import PageHeader from '../components/ui/PageHeader'
 import SortHeader from '../components/ui/SortHeader'
 import { Table, TableEmpty, Thead } from '../components/ui/Table'
 import { categoryLabel } from '../components/ruleModal/helpers'
+import LanguageFieldToggle from '../components/LanguageFieldToggle'
 import { useAsyncLoad } from '../lib/useAsyncLoad'
 import { useConfirm } from '../lib/useConfirm'
 import { useSort } from '../lib/useSort'
@@ -27,9 +28,25 @@ const CLASSIFIABLE_CATEGORIES: ConditionCategory[] = [
   'quality',
   'language',
   'audio_language',
+  'studio',
+  'network',
+  'series_type',
+  'video_codec',
+  'video_dynamic_range',
+  'audio_codec',
+  'audio_channels',
   'user',
   'custom',
-]
+] // 'language'/'audio_language' collapse to one "Language" select option
+  // below (see LanguageFieldToggle) -- kept as two real entries here since
+  // classifying a tag still needs to pick one concrete field.
+
+// The select shows one "Language" option, not two -- LanguageFieldToggle
+// (rendered alongside it) picks which real category a "Language"
+// classification maps to.
+const CLASSIFY_SELECT_CATEGORIES = CLASSIFIABLE_CATEGORIES.filter(
+  (c) => c !== 'audio_language',
+)
 
 const TAG_SORT: Record<string, (t: TagItem) => string | number> = {
   label: (t) => t.label.toLowerCase(),
@@ -306,7 +323,7 @@ export default function Tags() {
                     className={`rounded-md border bg-sunken px-2 py-1 text-xs text-fg ${
                       isPending ? 'border-warning-fg' : 'border-line-strong'
                     }`}
-                    value={shown ?? ''}
+                    value={shown === 'audio_language' ? 'language' : (shown ?? '')}
                     onChange={(e) =>
                       stageTagCategory(
                         tag.id,
@@ -315,12 +332,20 @@ export default function Tags() {
                     }
                   >
                     <option value="">{t('tags.appTags.unclassified')}</option>
-                    {CLASSIFIABLE_CATEGORIES.map((cat) => (
+                    {CLASSIFY_SELECT_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
-                        {categoryLabel(cat)}
+                        {cat === 'language' ? t('category.mergedLabel.language') : categoryLabel(cat)}
                       </option>
                     ))}
                   </select>
+                  {(shown === 'language' || shown === 'audio_language') && (
+                    <div className="mt-1.5">
+                      <LanguageFieldToggle
+                        value={shown}
+                        onChange={(variant) => stageTagCategory(tag.id, variant)}
+                      />
+                    </div>
+                  )}
                   {isPending && (
                     <span className="ml-1.5 text-xs text-warning-fg">
                       {t('tags.appTags.unsaved')}

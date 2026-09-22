@@ -12,6 +12,9 @@
       "technical": "Technical",
       "numeric": "Numeric"
     },
+    "mergedLabel": {
+      "language": "Language"
+    },
     "label": {
       "user": "Users",
       "title": "Title",
@@ -455,7 +458,15 @@
     "sourceNative": "Native metadata",
     "sourceTagHint": "Matches against this service's arbitrary tags, as today.",
     "sourceNativeHint": "Matches directly against Radarr/Sonarr's own real metadata for this item. No matching tag required.",
+    "nativeOnlyHint": "Always matches against the item's real metadata. No matching tag required.",
     "vocabularyMatchHint": "Matches any of the {{count}} currently known value(s) for this category. No need to pick specific ones.",
+    "noNativeValuesYet": "No values seen yet for this service, try Rescan on the Services page.",
+    "noTagValuesYet": "No tags classified for this category yet, you can classify some on the Tags page.",
+    "compareField": "Compares",
+    "compareOriginalLanguage": "Original language",
+    "compareAudioTrack": "Audio track",
+    "compareOriginalLanguageHint": "The title's own production language.",
+    "compareAudioTrackHint": "The downloaded file's actual audio track language.",
     "rangeMinPlaceholder": "Min",
     "rangeMaxPlaceholder": "Max",
     "rangeTo": "to",

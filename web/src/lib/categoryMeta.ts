@@ -9,30 +9,31 @@ import { NUMERIC_CATEGORIES, RICH_CATEGORIES, type ConditionCategory } from './a
  * dropdown, the Rules list filter/column, the Tags page classifier) should
  * read from this table instead. */
 
-export type CategoryGroup = 'freeform' | 'metadata' | 'provenance' | 'technical' | 'numeric'
+export type CategoryGroup = 'metadata' | 'provenance' | 'technical' | 'numeric' | 'freeform'
 
 export const CATEGORY_GROUP_ORDER: CategoryGroup[] = [
-  'freeform',
   'metadata',
   'provenance',
   'technical',
   'numeric',
+  'freeform',
 ]
 
 type CategoryMeta = {
   group: CategoryGroup
   // null = valid for every app type.
   appTypes: Array<'radarr' | 'sonarr'> | null
+  // Categories sharing a mergeGroup collapse into one entry in the category
+  // picker (see CategorySelect.tsx) -- currently just language/audio_language,
+  // presented as a single "Language" option with an in-row toggle for which
+  // real field it targets.
+  mergeGroup?: string
 }
 
 export const CATEGORY_META: Record<ConditionCategory, CategoryMeta> = {
-  user: { group: 'freeform', appTypes: null },
-  title: { group: 'freeform', appTypes: null },
-  custom: { group: 'freeform', appTypes: null },
-
   genre: { group: 'metadata', appTypes: null },
-  language: { group: 'metadata', appTypes: null },
-  audio_language: { group: 'metadata', appTypes: null },
+  language: { group: 'metadata', appTypes: null, mergeGroup: 'language' },
+  audio_language: { group: 'metadata', appTypes: null, mergeGroup: 'language' },
   certification: { group: 'metadata', appTypes: null },
   collection: { group: 'metadata', appTypes: null },
 
@@ -50,12 +51,13 @@ export const CATEGORY_META: Record<ConditionCategory, CategoryMeta> = {
   // Radarr-only: TMDB's popularity score, no Sonarr equivalent.
   popularity: { group: 'numeric', appTypes: ['radarr'] },
   runtime: { group: 'numeric', appTypes: null },
+
+  user: { group: 'freeform', appTypes: null },
+  title: { group: 'freeform', appTypes: null },
+  custom: { group: 'freeform', appTypes: null },
 }
 
 export const CATEGORY_ORDER: ConditionCategory[] = [
-  'user',
-  'title',
-  'custom',
   'genre',
   'language',
   'audio_language',
@@ -72,7 +74,16 @@ export const CATEGORY_ORDER: ConditionCategory[] = [
   'rating',
   'popularity',
   'runtime',
+  'user',
+  'title',
+  'custom',
 ]
+
+// The one RICH category with no bounded/classifiable vocabulary (titles
+// aren't a finite set, see api.ts's RICH_CATEGORIES comment) -- always
+// matched against the item's real metadata, never tags. ConditionRow.tsx
+// hides the Match Source toggle and forces source: 'native' for these.
+export const NATIVE_ONLY_CATEGORIES = new Set<ConditionCategory>(['title'])
 
 /** The subset of CATEGORY_ORDER that's actually valid for a given service
  * type -- e.g. hides `studio` for Sonarr rules and `network`/`series_type`/

@@ -213,5 +213,11 @@ export function optionsForCategory(
     return Array.from(new Set([...fromVocab, ...fromClassifiedTags]))
   }
   if (category === 'custom') return customOptions
+  // 'user' has no native field or shared vocab source, but tags classified
+  // as 'user' on the Tags page (e.g. "2 - alice") are still a real, curated
+  // suggestion source -- an alternative to the regex-extraction flow.
+  if (category === 'user') {
+    return tags.filter((t) => t.category === 'user').map((t) => t.label)
+  }
   return []
 }

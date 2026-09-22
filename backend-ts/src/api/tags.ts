@@ -30,12 +30,21 @@ export interface TagsRouteOptions {
 type TagRow = typeof tagsTable.$inferSelect
 type RuleRow = typeof rulesTable.$inferSelect
 
+// Kept in sync with web/src/pages/Tags.tsx's CLASSIFIABLE_CATEGORIES.
 const CLASSIFIABLE_CATEGORIES = new Set([
   'genre',
   'certification',
   'collection',
   'quality',
   'language',
+  'audio_language',
+  'studio',
+  'network',
+  'series_type',
+  'video_codec',
+  'video_dynamic_range',
+  'audio_codec',
+  'audio_channels',
   'user',
   'custom',
 ])

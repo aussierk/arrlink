@@ -118,6 +118,10 @@ export function registerPresetsRoutes(
     if (!APP_TYPES.has(body.app_type)) {
       throw new HttpError(422, `app_type must be one of ${[...APP_TYPES].join(', ')}`)
     }
+    const matcher = preset.matchers[body.app_type as 'radarr' | 'sonarr']
+    if (!matcher || (preset.appTypes && !preset.appTypes.includes(body.app_type as 'radarr' | 'sonarr'))) {
+      throw new HttpError(422, `preset '${preset.key}' does not apply to app_type '${body.app_type}'`)
+    }
     if (
       body.app_scope !== null &&
       !db.select({ id: apps.id }).from(apps).where(eq(apps.id, body.app_scope)).get()
@@ -143,7 +147,7 @@ export function registerPresetsRoutes(
       throw e
     }
 
-    const [matchType, matchValue, source] = preset.matchers[body.app_type]
+    const [matchType, matchValue, source] = matcher
     const name = body.name || `preset:${preset.key}`
     const conditionsJson = JSON.stringify([
       { category: preset.category, matchType, matchValue, join: null, source },
