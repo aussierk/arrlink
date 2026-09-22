@@ -108,7 +108,17 @@ export default function CategorySelect({
           <ChevronDown className="size-4 shrink-0 text-fg-subtle transition-transform group-data-open:rotate-180" />
         </ComboboxButton>
 
-        <ComboboxOptions className="absolute z-10 mt-1 w-full rounded-md border border-line-strong bg-surface shadow-xl empty:hidden">
+        {/* modal={false}: this already lives inside a Dialog, which traps
+            focus against the rest of the page -- the Combobox's own default
+            "modal" inert-trapping (useInertOthers) walks up from the search
+            input nested in here and, since the input sits in a sibling div
+            next to the options list (both children of this panel), it
+            marks the options list itself inert, breaking all mouse
+            interaction while leaving keyboard nav (JS-state-driven) working. */}
+        <ComboboxOptions
+          modal={false}
+          className="absolute z-10 mt-1 w-full rounded-md border border-line-strong bg-surface shadow-xl empty:hidden"
+        >
           <div className="border-b border-line p-1.5">
             <ComboboxInput
               autoFocus

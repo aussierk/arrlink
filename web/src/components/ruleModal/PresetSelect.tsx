@@ -71,7 +71,14 @@ export default function PresetSelect({
           <ChevronDown className="size-4 shrink-0 text-fg-subtle transition-transform group-data-open:rotate-180" />
         </ComboboxButton>
 
-        <ComboboxOptions className="absolute z-10 mt-1 w-full rounded-md border border-line-strong bg-surface shadow-xl empty:hidden">
+        {/* modal={false}: see CategorySelect.tsx's comment -- the default
+            modal inert-trapping breaks mouse interaction on the options
+            list when the search input is nested alongside it, and this
+            already lives inside a Dialog that traps focus on its own. */}
+        <ComboboxOptions
+          modal={false}
+          className="absolute z-10 mt-1 w-full rounded-md border border-line-strong bg-surface shadow-xl empty:hidden"
+        >
           <div className="border-b border-line p-1.5">
             <ComboboxInput
               autoFocus
