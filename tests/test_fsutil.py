@@ -69,6 +69,55 @@ def test_create_link_copy_fallback_duplicates_content(tmp_path, monkeypatch):
     assert inode_of(str(src)) != inode_of(str(dst))
 
 
+def test_create_link_copy_fallback_engages_for_a_fresh_dst_via_real_same_device(tmp_path, monkeypatch):
+    """Regression test: same_device(src, dst) always os.stat'd dst itself, but
+    a fresh dst never exists yet -- so it always returned None (never True/
+    False) and no fallback branch in create_link ever engaged; every real
+    cross-device link fell through to a raw, unhandled cross-device OSError.
+    Fixed by stat-ing dst's *parent* directory instead, which does exist by
+    the time create_link runs. A genuine cross-device mount isn't available
+    in CI, so this fakes differing st_dev via a real os.stat wrapper (not by
+    monkeypatching same_device itself, which would just re-assert the fix and
+    miss the bug it's guarding against)."""
+    import arrlink.core.fsutil as fsutil
+
+    src_dir = tmp_path / "src_fs"
+    dst_dir = tmp_path / "dst_fs"
+    src_dir.mkdir()
+    dst_dir.mkdir()
+    src = src_dir / "movie.mkv"
+    src.write_text("hello")
+    dst = dst_dir / "movie.mkv"
+
+    real_stat = os.stat
+
+    def fake_stat(path, *args, **kwargs):
+        st = real_stat(path, *args, **kwargs)
+        path_str = os.fspath(path)
+        fake_dev = 1 if path_str.startswith(str(src_dir)) else 2
+        return os.stat_result(
+            (
+                st.st_mode,
+                st.st_ino,
+                fake_dev,
+                st.st_nlink,
+                st.st_uid,
+                st.st_gid,
+                st.st_size,
+                st.st_atime,
+                st.st_mtime,
+                st.st_ctime,
+            )
+        )
+
+    monkeypatch.setattr(fsutil.os, "stat", fake_stat)
+
+    r = create_link(str(src), str(dst), fallback="copy")
+    assert r.ok is True
+    assert dst.read_text() == "hello"
+    assert inode_of(str(src)) != inode_of(str(dst))
+
+
 def test_create_link_refuses_symlink_even_if_early_check_is_bypassed(tmp_path, monkeypatch):
     """Regression test: TOCTOU hardening."""
     import arrlink.core.fsutil as fsutil

@@ -153,7 +153,7 @@ export function createLink(
     }
   }
 
-  const dev = sameDeviceFn(src, dst)
+  const dev = sameDeviceFn(src, dirname(dst) || '.')
   if (dev === false && fallback === 'skip') {
     return fail(dst, 'cross-filesystem (hardlink impossible)')
   }

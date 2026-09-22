@@ -65,7 +65,7 @@ def create_link(src: str, dst: str, fallback: str = "skip") -> LinkResult:
                 return LinkResult(True, dst)  # already linked
             return LinkResult(False, dst, "name collision (different inode)")
 
-    dev = same_device(src, dst)
+    dev = same_device(src, os.path.dirname(dst) or ".")
     if dev is False and fallback == "skip":
         return LinkResult(False, dst, "cross-filesystem (hardlink impossible)")
 
