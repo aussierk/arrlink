@@ -19,7 +19,12 @@ import {
   links as linksTable,
   rules as rulesTable,
 } from '../../src/db/schema.js'
-import { RECONCILE_TUNABLES, forceUnlinkRuleLinks, reconcile } from '../../src/core/linker.js'
+import {
+  RECONCILE_TUNABLES,
+  forceUnlinkAppLinks,
+  forceUnlinkRuleLinks,
+  reconcile,
+} from '../../src/core/linker.js'
 import type { PlannedLink } from '../../src/core/planner.js'
 import { inodeOf } from '../../src/core/fsutil.js'
 
@@ -278,6 +283,70 @@ describe('forceUnlinkRuleLinks', () => {
     expect(existsSync(dstB)).toBe(true)
 
     forceUnlinkRuleLinks(db, ruleId, [linkedDir])
+
+    expect(existsSync(dstA)).toBe(false)
+    expect(existsSync(dstB)).toBe(true)
+  })
+})
+
+describe('forceUnlinkAppLinks', () => {
+  it('removes the link even though the rule itself opted in and the caller passes the opposite default', () => {
+    db.update(rulesTable).set({ unlinkOnMismatch: 1 }).where(eq(rulesTable.id, ruleId)).run()
+    const src = join(mediaDir, 'a.mkv')
+    writeFileSync(src, 'hello')
+    const dst = join(linkedDir, 'kids', 'a.mkv')
+    reconcile(db, appId, 'Radarr', [plan({ srcPath: src })], new Set([src]), true, [linkedDir])
+    expect(existsSync(dst)).toBe(true)
+
+    const removed = forceUnlinkAppLinks(db, appId, [linkedDir])
+
+    expect(removed).toBe(1)
+    expect(existsSync(dst)).toBe(false)
+    const row = db.select().from(linksTable).all()[0]
+    expect(row.status).toBe('missing')
+  })
+
+  it('only touches links belonging to the given app', () => {
+    const otherAppId = db
+      .insert(apps)
+      .values({ name: 'Sonarr', type: 'sonarr', url: 'http://y', apiKey: 'k2' })
+      .run().lastInsertRowid as number
+    const otherItemId = db
+      .insert(appItems)
+      .values({ appId: otherAppId, itemId: 2, title: 'T2', firstSeen: 0, lastSeen: 0 })
+      .run().lastInsertRowid as number
+    const otherFileId = db
+      .insert(appFiles)
+      .values({ itemId: otherItemId, relPath: 'b.mkv', absPath: join(mediaDir, 'b.mkv') })
+      .run().lastInsertRowid as number
+    const srcA = join(mediaDir, 'a.mkv')
+    const srcB = join(mediaDir, 'b.mkv')
+    writeFileSync(srcA, 'hello')
+    writeFileSync(srcB, 'world')
+    const dstA = join(linkedDir, 'kids', 'a.mkv')
+    const dstB = join(linkedDir, 'other', 'b.mkv')
+    reconcile(db, appId, 'Radarr', [plan({ srcPath: srcA })], new Set([srcA]), true, [linkedDir])
+    reconcile(
+      db,
+      otherAppId,
+      'Sonarr',
+      [
+        plan({
+          itemId: otherItemId,
+          itemTitle: 'T2',
+          fileId: otherFileId,
+          srcPath: srcB,
+          dstPath: dstB,
+        }),
+      ],
+      new Set([srcB]),
+      true,
+      [linkedDir],
+    )
+    expect(existsSync(dstA)).toBe(true)
+    expect(existsSync(dstB)).toBe(true)
+
+    forceUnlinkAppLinks(db, appId, [linkedDir])
 
     expect(existsSync(dstA)).toBe(false)
     expect(existsSync(dstB)).toBe(true)

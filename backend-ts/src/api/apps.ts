@@ -8,6 +8,7 @@ import type { DbClient } from '../db/client.js'
 import { logEvent } from '../db/events.js'
 import { apps, links, rules as rulesTable } from '../db/schema.js'
 import type { SettingsStore } from '../db/settings-store.js'
+import { forceUnlinkAppLinks } from '../core/linker.js'
 import type { Poller } from '../core/poller.js'
 import { DEFAULT_ROOTS, auditRuleRoots } from '../core/template.js'
 import { HttpError } from '../http-error.js'
@@ -178,8 +179,13 @@ export function registerAppsRoutes(app: FastifyInstance, opts: AppsRouteOptions)
   app.delete('/api/apps/:appId', (request, reply) => {
     getCurrentUser(request, db, settingsStore, env)
     const appId = Number((request.params as { appId: string }).appId)
-    const res = db.delete(apps).where(eq(apps.id, appId)).run()
-    if (res.changes === 0) throw new HttpError(404, 'app not found')
+    const existing = db.select({ id: apps.id }).from(apps).where(eq(apps.id, appId)).get()
+    if (!existing) throw new HttpError(404, 'app not found')
+    const roots = settingsStore.getSetting<string[]>('allowed_roots') ?? [
+      ...DEFAULT_ROOTS,
+    ]
+    forceUnlinkAppLinks(db, appId, roots)
+    db.delete(apps).where(eq(apps.id, appId)).run()
     logEvent(db, 'info', `app deleted: ${appId}`)
     reply.code(204).send()
   })

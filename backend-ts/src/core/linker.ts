@@ -296,6 +296,25 @@ export function forceUnlinkRuleLinks(db: DbClient, ruleId: number, roots: string
   return removed
 }
 
+/** Unconditionally removes every link belonging to an app being deleted,
+ * ignoring unlinkOnMismatch -- must run before the app row is deleted, since
+ * links.appId is ON DELETE CASCADE and would otherwise wipe these rows before
+ * any unlink logic could run. */
+export function forceUnlinkAppLinks(db: DbClient, appId: number, roots: string[]): number {
+  const rows = db
+    .select({ id: links.id, dstPath: links.dstPath })
+    .from(links)
+    .where(and(eq(links.appId, appId), inArray(links.status, ['active', 'stale'])))
+    .all()
+  let removed = 0
+  for (const row of rows) {
+    const r = removeLink(row.dstPath, roots)
+    if (r.ok) removed += 1
+    db.update(links).set({ status: 'missing' }).where(eq(links.id, row.id)).run()
+  }
+  return removed
+}
+
 /** Create one planned link (idempotent). */
 function create(
   db: DbClient,
