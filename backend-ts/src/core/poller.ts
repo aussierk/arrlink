@@ -242,44 +242,74 @@ export class Poller {
     return ts === null || Date.now() / 1000 - ts > maxAge
   }
 
-  /** Observed collections (every poll) + quality/language profiles (throttled
-   * HTTP calls). Best-effort: never fails the poll. */
+  /** One category's vocabulary, derived purely from what this poll's items
+   * already carry (collection names, genres, certifications, studio/network,
+   * file mediaInfo -- all real Radarr/Sonarr fields, see arr/types.ts). Only
+   * writes when the observed set actually changed, so a static library's
+   * poll stays write-free. */
+  private syncObservedVocabulary(
+    appId: number,
+    appType: string,
+    category: string,
+    values: Iterable<string | null | undefined>,
+  ): void {
+    const distinct = [...new Set([...values].filter((v): v is string => Boolean(v)))].sort()
+    const stored = new Set(
+      this.db
+        .select({ value: vocabulary.value })
+        .from(vocabulary)
+        .where(
+          and(
+            eq(vocabulary.category, category),
+            eq(vocabulary.appType, appType),
+            eq(vocabulary.appId, appId),
+            eq(vocabulary.source, 'observed'),
+          ),
+        )
+        .all()
+        .map((r) => r.value),
+    )
+    if (distinct.length !== stored.size || distinct.some((v) => !stored.has(v))) {
+      syncVocabularyRows(
+        this.db,
+        category,
+        appType,
+        appId,
+        distinct.map((v): [string, null] => [v, null]),
+        'observed',
+      )
+    }
+  }
+
+  /** Observed collection/genre/certification/studio/network/series-type/
+   * mediaInfo values (every poll) + quality/language profiles (throttled
+   * HTTP calls). Best-effort: never fails the poll -- each category is
+   * sync'd independently so one failing field doesn't block the rest. */
   private async syncInstanceVocabulary(
     appId: number,
     appType: string,
     items: Item[],
   ): Promise<void> {
-    try {
-      const collections = [
-        ...new Set(items.map((i) => i.collection).filter((c): c is string => Boolean(c))),
-      ].sort()
-      const stored = new Set(
-        this.db
-          .select({ value: vocabulary.value })
-          .from(vocabulary)
-          .where(
-            and(
-              eq(vocabulary.category, 'collection'),
-              eq(vocabulary.appType, appType),
-              eq(vocabulary.appId, appId),
-              eq(vocabulary.source, 'observed'),
-            ),
-          )
-          .all()
-          .map((r) => r.value),
-      )
-      if (collections.length !== stored.size || collections.some((c) => !stored.has(c))) {
-        syncVocabularyRows(
-          this.db,
-          'collection',
-          appType,
-          appId,
-          collections.map((c): [string, null] => [c, null]),
-          'observed',
-        )
+    const observed: Array<[string, Iterable<string | null | undefined>]> = [
+      ['collection', items.map((i) => i.collection)],
+      ['genre', items.flatMap((i) => i.genres)],
+      ['certification', items.map((i) => i.certification)],
+      // studio is Radarr-only, network/series_type Sonarr-only -- always null
+      // on the other type's items, so these are simply no-ops there.
+      ['studio', items.map((i) => i.studio)],
+      ['network', items.map((i) => i.network)],
+      ['series_type', items.map((i) => i.seriesType)],
+      ['video_codec', items.flatMap((i) => i.videoCodec ?? [])],
+      ['video_dynamic_range', items.flatMap((i) => i.videoDynamicRange ?? [])],
+      ['audio_codec', items.flatMap((i) => i.audioCodec ?? [])],
+      ['audio_channels', items.flatMap((i) => i.audioChannels ?? [])],
+    ]
+    for (const [category, values] of observed) {
+      try {
+        this.syncObservedVocabulary(appId, appType, category, values)
+      } catch (e) {
+        console.warn(`${category} vocabulary sync failed for app ${appId}: ${String(e)}`)
       }
-    } catch (e) {
-      console.warn(`collection vocabulary sync failed for app ${appId}: ${String(e)}`)
     }
 
     const stale =

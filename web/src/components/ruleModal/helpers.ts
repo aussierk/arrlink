@@ -9,7 +9,10 @@ import {
   type TagItem,
   type VocabularyEntry,
 } from '../../lib/api'
+import { CATEGORY_ORDER } from '../../lib/categoryMeta'
 import { CUSTOM_TAG_SUGGESTIONS, joinList, parseList } from '../../lib/tagOptions'
+
+export { CATEGORY_ORDER, categoriesForServiceType } from '../../lib/categoryMeta'
 
 export const RICH = new Set<string>(RICH_CATEGORIES)
 
@@ -21,49 +24,13 @@ export const NUMERIC = new Set<string>(NUMERIC_CATEGORIES)
 
 export const CUSTOM = '__custom__'
 
-export const CATEGORY_ORDER: ConditionCategory[] = [
-  'user',
-  'title',
-  'genre',
-  'language',
-  'audio_language',
-  'quality',
-  'certification',
-  'collection',
-  'studio',
-  'network',
-  'series_type',
-  'video_codec',
-  'video_dynamic_range',
-  'audio_codec',
-  'audio_channels',
-  'rating',
-  'popularity',
-  'runtime',
-  'custom',
-]
-
-const CATEGORY_LABEL_KEY: Record<string, string> = {
-  user: 'ruleModal.categoryLabel.user',
-  title: 'ruleModal.categoryLabel.title',
-  genre: 'ruleModal.categoryLabel.genre',
-  language: 'ruleModal.categoryLabel.language',
-  audio_language: 'ruleModal.categoryLabel.audio_language',
-  quality: 'ruleModal.categoryLabel.quality',
-  certification: 'ruleModal.categoryLabel.certification',
-  collection: 'ruleModal.categoryLabel.collection',
-  studio: 'ruleModal.categoryLabel.studio',
-  network: 'ruleModal.categoryLabel.network',
-  series_type: 'ruleModal.categoryLabel.series_type',
-  video_codec: 'ruleModal.categoryLabel.video_codec',
-  video_dynamic_range: 'ruleModal.categoryLabel.video_dynamic_range',
-  audio_codec: 'ruleModal.categoryLabel.audio_codec',
-  audio_channels: 'ruleModal.categoryLabel.audio_channels',
-  rating: 'ruleModal.categoryLabel.rating',
-  popularity: 'ruleModal.categoryLabel.popularity',
-  runtime: 'ruleModal.categoryLabel.runtime',
-  custom: 'ruleModal.categoryLabel.custom',
-}
+// Single canonical label set, shared by the rule modal, the Rules list
+// (filter dropdown + condition summary column), and the Tags page
+// classifier -- previously three of these existed independently and had
+// drifted (e.g. "Genre" vs "Genres", "Custom" vs "Custom tags").
+const CATEGORY_LABEL_KEY: Record<string, string> = Object.fromEntries(
+  CATEGORY_ORDER.map((cat) => [cat, `category.label.${cat}`]),
+)
 
 export function categoryLabel(cat: string): string {
   const key = CATEGORY_LABEL_KEY[cat]

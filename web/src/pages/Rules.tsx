@@ -6,7 +6,7 @@ import Button from '../components/ui/Button'
 import PageHeader from '../components/ui/PageHeader'
 import SortHeader from '../components/ui/SortHeader'
 import { Table, TableEmpty, Th, Thead } from '../components/ui/Table'
-import { encodeServiceValue } from '../components/ruleModal/helpers'
+import { categoryLabel, CATEGORY_ORDER, encodeServiceValue } from '../components/ruleModal/helpers'
 import { pruneSelection } from '../lib/pruneSelection'
 import { useAsyncLoad } from '../lib/useAsyncLoad'
 import { useConfirm } from '../lib/useConfirm'
@@ -46,48 +46,6 @@ const MATCH_TYPE_LABEL_KEY: Record<string, string> = {
   regex: 'rules.matchTypeLabel.regex',
   vocabulary: 'rules.matchTypeLabel.vocabulary',
   range: 'rules.matchTypeLabel.range',
-}
-
-const CATEGORIES: ConditionCategory[] = [
-  'user',
-  'genre',
-  'language',
-  'audio_language',
-  'quality',
-  'certification',
-  'collection',
-  'studio',
-  'network',
-  'series_type',
-  'video_codec',
-  'video_dynamic_range',
-  'audio_codec',
-  'audio_channels',
-  'rating',
-  'popularity',
-  'runtime',
-  'custom',
-]
-
-const CATEGORY_LABEL_KEY: Record<string, string> = {
-  user: 'rules.categoryLabel.user',
-  genre: 'rules.categoryLabel.genre',
-  language: 'rules.categoryLabel.language',
-  audio_language: 'rules.categoryLabel.audio_language',
-  quality: 'rules.categoryLabel.quality',
-  certification: 'rules.categoryLabel.certification',
-  collection: 'rules.categoryLabel.collection',
-  studio: 'rules.categoryLabel.studio',
-  network: 'rules.categoryLabel.network',
-  series_type: 'rules.categoryLabel.series_type',
-  video_codec: 'rules.categoryLabel.video_codec',
-  video_dynamic_range: 'rules.categoryLabel.video_dynamic_range',
-  audio_codec: 'rules.categoryLabel.audio_codec',
-  audio_channels: 'rules.categoryLabel.audio_channels',
-  rating: 'rules.categoryLabel.rating',
-  popularity: 'rules.categoryLabel.popularity',
-  runtime: 'rules.categoryLabel.runtime',
-  custom: 'rules.categoryLabel.custom',
 }
 
 /** Render one condition's match value readably: exact as-is, list as
@@ -166,9 +124,7 @@ function conditionRows(r: RuleItem): ConditionRow[] {
         </span>
       ) : null,
     category: (
-      <span className="whitespace-nowrap text-fg-subtle">
-        {CATEGORY_LABEL_KEY[c.category] ? t(CATEGORY_LABEL_KEY[c.category]) : c.category}
-      </span>
+      <span className="whitespace-nowrap text-fg-subtle">{categoryLabel(c.category)}</span>
     ),
     type: (
       <span className="whitespace-nowrap text-fg-subtle">
@@ -505,9 +461,9 @@ export default function Rules() {
               }
             >
               <option value="">{t('rules.categoryFilterAll')}</option>
-              {CATEGORIES.map((cat) => (
+              {CATEGORY_ORDER.map((cat) => (
                 <option key={cat} value={cat}>
-                  {t(CATEGORY_LABEL_KEY[cat])}
+                  {categoryLabel(cat)}
                 </option>
               ))}
             </select>

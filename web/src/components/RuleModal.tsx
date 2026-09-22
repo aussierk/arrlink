@@ -10,7 +10,7 @@ import Field from './ui/Field'
 import ConditionRow from './ruleModal/ConditionRow'
 import { useRuleVocabulary } from './ruleModal/useRuleVocabulary'
 import {
-  CATEGORY_ORDER,
+  categoriesForServiceType,
   decodeServiceValue,
   DEFAULT_BASE_ROOT,
   dirTemplateFor,
@@ -171,7 +171,7 @@ export default function RuleModal({
 
   function addCondition(join: 'AND' | 'OR' | null) {
     const used = new Set(conditions.map((c) => c.category))
-    const next = CATEGORY_ORDER.find((cat) => !used.has(cat))
+    const next = categoriesForServiceType(serviceType).find((cat) => !used.has(cat))
     if (!next) return
     const block: ConditionItem = {
       category: next,
@@ -264,7 +264,8 @@ export default function RuleModal({
   }
 
   const usedCategories = new Set(conditions.map((c) => c.category))
-  const allCategoriesUsed = CATEGORY_ORDER.every((cat) => usedCategories.has(cat))
+  const categoryOptions = categoriesForServiceType(serviceType)
+  const allCategoriesUsed = categoryOptions.every((cat) => usedCategories.has(cat))
   const previewRule: RuleInput = { ...form, conditions }
   const noServiceScoped = form.app_scope === null && form.app_type_scope === null
 
@@ -372,6 +373,7 @@ export default function RuleModal({
                   condition={c}
                   index={i}
                   total={conditions.length}
+                  categoryOptions={categoryOptions}
                   usedCategories={usedCategories}
                   optionsFor={optionsFor}
                   onUpdate={(patch) => updateBlock(i, patch)}

@@ -13,6 +13,7 @@ import Button from '../components/ui/Button'
 import PageHeader from '../components/ui/PageHeader'
 import SortHeader from '../components/ui/SortHeader'
 import { Table, TableEmpty, Thead } from '../components/ui/Table'
+import { categoryLabel } from '../components/ruleModal/helpers'
 import { useAsyncLoad } from '../lib/useAsyncLoad'
 import { useConfirm } from '../lib/useConfirm'
 import { useSort } from '../lib/useSort'
@@ -316,7 +317,7 @@ export default function Tags() {
                     <option value="">{t('tags.appTags.unclassified')}</option>
                     {CLASSIFIABLE_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
-                        {t(`ruleModal.categoryLabel.${cat}`)}
+                        {categoryLabel(cat)}
                       </option>
                     ))}
                   </select>

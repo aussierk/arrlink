@@ -7,10 +7,10 @@ import {
   type ConditionSource,
 } from '../../lib/api'
 import { inputCls } from '../../lib/ui'
+import CategorySelect from './CategorySelect'
 import Field from '../ui/Field'
 import TagSelect from '../ui/TagSelect'
 import {
-  CATEGORY_ORDER,
   CUSTOM,
   NUMERIC,
   RICH,
@@ -25,6 +25,10 @@ type Props = {
   condition: ConditionItem
   index: number
   total: number
+  // Categories valid for the rule's current service type (see
+  // categoriesForServiceType), already excluding e.g. `studio` for a
+  // Sonarr-scoped rule.
+  categoryOptions: ConditionCategory[]
   usedCategories: Set<string>
   optionsFor: (category: ConditionCategory, source?: ConditionSource | null) => string[]
   onUpdate: (patch: Partial<ConditionItem>) => void
@@ -41,6 +45,7 @@ export default function ConditionRow({
   condition: c,
   index: i,
   total,
+  categoryOptions,
   usedCategories,
   optionsFor,
   onUpdate,
@@ -52,6 +57,12 @@ export default function ConditionRow({
 }: Props) {
   const { t } = useTranslation()
   const selected = selectedFor(c)
+  // Always keep the row's current category selectable even if it's since
+  // fallen outside categoryOptions (e.g. the service scope changed after
+  // this condition was set to a now-invalid category like `studio`).
+  const categorySelectOptions = categoryOptions.includes(c.category)
+    ? categoryOptions
+    : [...categoryOptions, c.category]
 
   function renderValue() {
     if (NUMERIC.has(c.category)) {
@@ -218,11 +229,11 @@ export default function ConditionRow({
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label={t('ruleModal.category')}>
-                <select
-                  className={inputCls}
+                <CategorySelect
                   value={c.category}
-                  onChange={(e) => {
-                    const cat = e.target.value as ConditionCategory
+                  options={categorySelectOptions}
+                  usedCategories={usedCategories}
+                  onChange={(cat) => {
                     // Numeric categories (rating/popularity/runtime) only ever
                     // make sense as a native range comparison -- no tag
                     // equivalent, no exact/list/regex/vocabulary mode.
@@ -266,17 +277,7 @@ export default function ConditionRow({
                         cat === 'genre' ? 'native' : RICH.has(cat) ? c.source : null,
                     })
                   }}
-                >
-                  {CATEGORY_ORDER.map((cat) => (
-                    <option
-                      key={cat}
-                      value={cat}
-                      disabled={usedCategories.has(cat) && cat !== c.category}
-                    >
-                      {categoryLabel(cat)}
-                    </option>
-                  ))}
-                </select>
+                />
               </Field>
               {/* Numeric categories (rating/popularity/runtime) only ever
                   compare as a native range -- no exact/list/regex/vocabulary
