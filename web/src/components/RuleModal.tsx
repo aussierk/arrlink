@@ -17,6 +17,7 @@ import {
   dirTemplateFor,
   emptyForm,
   encodeServiceValue,
+  joinFolderName,
   nextMatchValueForSelection,
   pristineDirs,
   reorderConditions,
@@ -81,6 +82,14 @@ export default function RuleModal({
   const [busy, setBusy] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [presets, setPresets] = useState<PresetItem[]>([])
+  // UI-only: the custom folder-name template, joined onto dir_template at
+  // submit time. Left blank/untouched, the rule's existing dir_naming_mode
+  // and dir_template are sent through unchanged -- this only overrides them
+  // once the user actually interacts with the field, so editing a legacy
+  // 'custom' rule without touching this box can't silently flip it to
+  // 'source' (see submit()).
+  const [folderName, setFolderName] = useState('')
+  const [folderNameTouched, setFolderNameTouched] = useState(false)
   // First configured allowed root, used as the base for new-rule/preset dir
   // templates instead of a hardcoded /media -- falls back to it until loaded.
   const [baseRoot, setBaseRoot] = useState(DEFAULT_BASE_ROOT)
@@ -244,8 +253,20 @@ export default function RuleModal({
     }
     setBusy(true)
     try {
+      const trimmedFolderName = folderName.trim()
+      const dirNamingMode: FormState['dir_naming_mode'] = folderNameTouched
+        ? trimmedFolderName
+          ? 'custom'
+          : 'source'
+        : form.dir_naming_mode
+      const dirTemplate =
+        folderNameTouched && trimmedFolderName
+          ? joinFolderName(form.dir_template, trimmedFolderName)
+          : form.dir_template
       const body: RuleInput = {
         ...form,
+        dir_template: dirTemplate,
+        dir_naming_mode: dirNamingMode,
         filename_template: form.filename_template || null,
         conditions: conditions.map((c, i) => ({
           ...c,
@@ -421,39 +442,19 @@ export default function RuleModal({
                   : 'ruleModal.dirTemplatePlaceholderMovies',
               )}
             />
-            <p className="text-xs text-fg-subtle">
-              {form.dir_naming_mode === 'source'
-                ? t('ruleModal.dirTemplateHintSource')
-                : t('ruleModal.dirTemplateHintCustom')}
-            </p>
+            <p className="text-xs text-fg-subtle">{t('ruleModal.dirTemplateHint')}</p>
           </Field>
-          <Field label={t('ruleModal.dirNamingMode')}>
-            <div className="inline-flex rounded-md border border-line-strong p-0.5">
-              <button
-                type="button"
-                onClick={() => setForm({ ...form, dir_naming_mode: 'source' })}
-                aria-pressed={form.dir_naming_mode === 'source'}
-                className={`rounded px-2.5 py-1 text-xs ${
-                  form.dir_naming_mode === 'source'
-                    ? 'bg-accent-bg text-accent'
-                    : 'text-fg-soft hover:bg-fill'
-                }`}
-              >
-                {t('ruleModal.dirNamingModeSource')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setForm({ ...form, dir_naming_mode: 'custom' })}
-                aria-pressed={form.dir_naming_mode === 'custom'}
-                className={`rounded px-2.5 py-1 text-xs ${
-                  form.dir_naming_mode === 'custom'
-                    ? 'bg-accent-bg text-accent'
-                    : 'text-fg-soft hover:bg-fill'
-                }`}
-              >
-                {t('ruleModal.dirNamingModeCustom')}
-              </button>
-            </div>
+          <Field label={t('ruleModal.folderName')}>
+            <input
+              className={inputCls}
+              value={folderName}
+              onChange={(e) => {
+                setFolderName(e.target.value)
+                setFolderNameTouched(true)
+              }}
+              placeholder={t('ruleModal.folderNamePlaceholder')}
+            />
+            <p className="text-xs text-fg-subtle">{t('ruleModal.folderNameHint')}</p>
           </Field>
           <Field label={t('ruleModal.filenameTemplate')}>
             <input

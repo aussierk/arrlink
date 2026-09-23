@@ -118,6 +118,14 @@ export type AppItem = {
   item_count: number
 }
 
+export type MediaItem = {
+  id: number
+  item_id: number
+  title: string
+  year: number | null
+  tags: string[]
+}
+
 export type AppTestResult = {
   ok: boolean
   name?: string
@@ -390,6 +398,18 @@ export const api = {
       method: 'POST',
     }),
   listTags: (appId: number) => req<TagItem[]>(`/api/apps/${appId}/tags`),
+
+  // Media items: browsing an app's library and writing tags back to it.
+  listItems: (appId: number) => req<MediaItem[]>(`/api/apps/${appId}/items`),
+  setItemTags: (appId: number, body: { item_ids: number[]; add: string[]; remove: string[] }) =>
+    req<{
+      ok: number
+      failed: number
+      results: { item_id: number; ok: boolean; detail: string | null }[]
+    }>(`/api/apps/${appId}/items/tags`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   setTagCategory: (appId: number, tagId: number, category: ConditionCategory | null) =>
     req<TagItem>(`/api/apps/${appId}/tags/${tagId}/category`, {
       method: 'PATCH',

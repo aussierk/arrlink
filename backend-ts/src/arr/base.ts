@@ -34,6 +34,10 @@ export abstract class BaseAdapter {
     tags?: Tag[],
   ): Promise<Item[]>
 
+  /** `/api/v3/movie/{id}` (Radarr) or `/api/v3/series/{id}` (Sonarr) -- the
+   * single-item detail/update path setItemTags PUTs the full object back to. */
+  protected abstract itemPath(itemId: number): string
+
   /** Items + tag vocabulary in one call -- avoids fetching /v3/tag twice
    * (here, and again inside fetchItems for id->label translation). */
   async fetchSnapshot(
@@ -99,6 +103,26 @@ export abstract class BaseAdapter {
     }
   }
 
+  /** Sets a single item's full tag list on the live app. Radarr/Sonarr's PUT
+   * contract replaces the entire movie/series object -- there's no partial-
+   * update endpoint -- so this fetches the current object and PUTs it back
+   * with only `tags` changed. `tagIds` must already be resolved to this app's
+   * real numeric tag ids (see api/items.ts, which creates any missing tags
+   * first). */
+  async setItemTags(itemId: number, tagIds: number[]): Promise<void> {
+    const path = this.itemPath(itemId)
+    const current = await this.getJson(path)
+    if (!current || typeof current !== 'object') {
+      throw new AdapterError(`unexpected item payload from ${path}`)
+    }
+    const r = await this.putJson(path, { ...current, tags: tagIds })
+    if (r.status === 401 || r.status === 403)
+      throw new AdapterError('bad API key (401)', 401)
+    if (r.status !== 200 && r.status !== 202) {
+      throw new AdapterError(`HTTP ${r.status} updating tags for item ${itemId}`, r.status)
+    }
+  }
+
   /** This instance's known languages. Same shared-implementation rationale as fetchQualityProfiles. */
   async fetchLanguages(): Promise<Language[]> {
     const data = await this.getJson('/api/v3/language')
@@ -142,13 +166,21 @@ export abstract class BaseAdapter {
   }
 
   protected async postJson(path: string, body: unknown): Promise<Response> {
+    return this.sendJson('POST', path, body)
+  }
+
+  protected async putJson(path: string, body: unknown): Promise<Response> {
+    return this.sendJson('PUT', path, body)
+  }
+
+  private async sendJson(method: 'POST' | 'PUT', path: string, body: unknown): Promise<Response> {
     const controller = new AbortController()
     const timer = setTimeout(() => {
       controller.abort()
     }, this.timeoutMs)
     try {
       return await fetch(`${this.url}${path}`, {
-        method: 'POST',
+        method,
         headers: { 'X-Api-Key': this.apiKey, 'content-type': 'application/json' },
         body: JSON.stringify(body),
         signal: controller.signal,

@@ -23,6 +23,7 @@ import { registerHealthRoutes } from './api/health.js'
 import { registerAuthRoutes } from './api/auth.js'
 import { registerAppsRoutes } from './api/apps.js'
 import { registerTagsRoutes } from './api/tags.js'
+import { registerItemsRoutes } from './api/items.js'
 import { registerRulesRoutes } from './api/rules.js'
 import { registerSettingsRoutes } from './api/settings.js'
 import { registerLinksRoutes } from './api/links.js'
@@ -105,6 +106,7 @@ export async function createApp(settings: Settings): Promise<AppContext> {
   registerAuthRoutes(app, routeOpts)
   registerAppsRoutes(app, { ...routeOpts, getPoller: () => poller })
   registerTagsRoutes(app, routeOpts)
+  registerItemsRoutes(app, routeOpts)
   registerRulesRoutes(app, { ...routeOpts, getPoller: () => poller })
   registerSettingsRoutes(app, routeOpts)
   registerLinksRoutes(app, routeOpts)

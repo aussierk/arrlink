@@ -65,6 +65,13 @@ export function pristineDirs(base: string): string[] {
   return [dirTemplateFor(base, 'radarr'), dirTemplateFor(base, 'sonarr')]
 }
 
+/** Joins the directory template (category prefix) with a custom folder
+ * name template into the single absolute path the backend expects for
+ * dir_naming_mode 'custom'. */
+export function joinFolderName(dirTemplate: string, folderName: string): string {
+  return `${dirTemplate.replace(/\/+$/, '')}/${folderName.replace(/^\/+/, '')}`
+}
+
 type ServiceScope = Pick<FormState, 'app_scope' | 'app_type_scope'>
 
 // The Service <select> encodes three kinds of scope in one string value:

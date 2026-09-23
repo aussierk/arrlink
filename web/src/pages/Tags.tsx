@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useBlocker } from 'react-router-dom'
 import {
@@ -11,6 +12,7 @@ import {
 } from '../lib/api'
 import { useBeforeUnloadGuard } from '../lib/unsavedGuard'
 import Button from '../components/ui/Button'
+import CreateTagModal from '../components/CreateTagModal'
 import PageHeader from '../components/ui/PageHeader'
 import SortHeader from '../components/ui/SortHeader'
 import { Table, TableEmpty, Thead } from '../components/ui/Table'
@@ -70,6 +72,7 @@ export default function Tags() {
   const [tags, setTags] = useState<TagItem[]>([])
   const [busy, setBusy] = useState(false)
   const [filter, setFilter] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
   const {
     sorted: sortedTags,
     sortKey,
@@ -206,59 +209,69 @@ export default function Tags() {
         title={t('tags.appTags.title')}
         subtitle={t('tags.appTags.subtitle')}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {apps.length > 0 && (
-              <select
-                className={selectCls}
-                value={appId ?? ''}
-                onChange={(e) => void switchApp(Number(e.target.value))}
-              >
-                {apps.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.type})
-                  </option>
-                ))}
-              </select>
-            )}
-            <Button
-              onClick={() => void doImport()}
-              disabled={appId === null || busy}
-              loading={busy}
+          apps.length > 0 && (
+            <select
+              className={selectCls}
+              value={appId ?? ''}
+              onChange={(e) => void switchApp(Number(e.target.value))}
             >
-              {busy ? t('tags.appTags.importing') : t('tags.appTags.importTags')}
-            </Button>
-            <Button
-              variant="warning"
-              onClick={() => void saveTagEdits()}
-              disabled={!hasPending || saving}
-            >
-              {saving
-                ? t('tags.appTags.saving')
-                : t('tags.appTags.saveChanges', {
-                    count: Object.keys(pendingEdits).length,
-                  })}
-            </Button>
-          </div>
+              {apps.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.type})
+                </option>
+              ))}
+            </select>
+          )
         }
       />
 
-      {tags.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="search"
-            className={`${selectCls} w-56`}
-            placeholder={t('tags.appTags.filterPlaceholder')}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          <span className="text-xs text-fg-subtle">
-            {t('tags.appTags.countShown', {
-              shown: visibleTags.length,
-              total: tags.length,
-            })}
-          </span>
+      <div className="flex flex-wrap items-center gap-2">
+        {tags.length > 0 && (
+          <>
+            <input
+              type="search"
+              className={`${selectCls} w-56`}
+              placeholder={t('tags.appTags.filterPlaceholder')}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <span className="text-xs text-fg-subtle">
+              {t('tags.appTags.countShown', {
+                shown: visibleTags.length,
+                total: tags.length,
+              })}
+            </span>
+          </>
+        )}
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => setCreateOpen(true)}
+            disabled={appId === null}
+          >
+            <Plus className="size-4" />
+            {t('tags.appTags.createTag')}
+          </Button>
+          <Button
+            onClick={() => void doImport()}
+            disabled={appId === null || busy}
+            loading={busy}
+          >
+            {busy ? t('tags.appTags.importing') : t('tags.appTags.importTags')}
+          </Button>
+          <Button
+            variant="warning"
+            onClick={() => void saveTagEdits()}
+            disabled={!hasPending || saving}
+          >
+            {saving
+              ? t('tags.appTags.saving')
+              : t('tags.appTags.saveChanges', {
+                  count: Object.keys(pendingEdits).length,
+                })}
+          </Button>
         </div>
-      )}
+      </div>
 
       <Table className="min-w-2xl">
         <Thead>
@@ -367,6 +380,14 @@ export default function Tags() {
           })}
         </tbody>
       </Table>
+
+      {createOpen && appId !== null && (
+        <CreateTagModal
+          appId={appId}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => void loadTags()}
+        />
+      )}
     </div>
   )
 }

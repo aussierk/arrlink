@@ -20,6 +20,7 @@ const MOVIES = [
     title: 'Inception',
     year: 2010,
     tags: [3, 2], // 4k, ## - alice
+    collection: { title: 'Inception Collection', tmdbId: 1 }, // Radarr sends `title`, not `name`
     movieFile: {
       path: '/media/movies/Inception.2010.2160p.mkv',
       size: 12345,
@@ -64,6 +65,16 @@ function stubRadarr(apiKey: string): ReturnType<typeof vi.fn> {
     }
     if (u.pathname === '/api/v3/movie') {
       return Promise.resolve(jsonResponse(MOVIES))
+    }
+    const movieMatch = /^\/api\/v3\/movie\/(\d+)$/.exec(u.pathname)
+    if (movieMatch) {
+      const id = Number(movieMatch[1])
+      const movie = MOVIES.find((m) => m.id === id)
+      if (!movie) return Promise.resolve(new Response('not found', { status: 404 }))
+      if (init?.method === 'PUT') {
+        return Promise.resolve(jsonResponse(JSON.parse(init.body as string)))
+      }
+      return Promise.resolve(jsonResponse(movie))
     }
     if (u.pathname === '/api/v3/qualityprofile') {
       return Promise.resolve(jsonResponse([]))
@@ -123,6 +134,7 @@ describe('RadarrAdapter.fetchItems normalization', () => {
     // movieFile.languages -- the file's own audio track(s), distinct from
     // originalLanguage (the title's production language).
     expect(inception.audioLanguages).toEqual(['English'])
+    expect(inception.collection).toBe('Inception Collection')
 
     const kids = items[1]
     expect(kids.path).toBe('/media/movies/Kids Movie')
@@ -137,5 +149,30 @@ describe('createTag', () => {
       new RadarrAdapter('http://radarr.local', API_KEY, 5000).createTag('   '),
     ).rejects.toThrow(AdapterError)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('setItemTags', () => {
+  it('GETs the current movie and PUTs it back with only tags replaced', async () => {
+    const fetchMock = stubRadarr(API_KEY)
+    await new RadarrAdapter('http://radarr.local', API_KEY, 5000).setItemTags(1, [1, 3])
+
+    const putCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PUT',
+    ) as [string | URL, RequestInit] | undefined
+    expect(putCall).toBeDefined()
+    const [url, init] = putCall!
+    expect(new URL(String(url)).pathname).toBe('/api/v3/movie/1')
+    const body = JSON.parse(init.body as string) as { tags: number[]; title: string }
+    expect(body.tags).toEqual([1, 3])
+    // every other field from the GET response is preserved, not dropped
+    expect(body.title).toBe('Inception')
+  })
+
+  it('throws AdapterError for an unknown item id', async () => {
+    stubRadarr(API_KEY)
+    await expect(
+      new RadarrAdapter('http://radarr.local', API_KEY, 5000).setItemTags(999, [1]),
+    ).rejects.toThrow(AdapterError)
   })
 })

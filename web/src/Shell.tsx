@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react'
 import {
+  Clapperboard,
   LayoutDashboard,
   ListChecks,
   Menu,
@@ -20,6 +21,7 @@ import ThemeToggle from './components/ui/ThemeToggle'
 // Links live on the Dashboard (not a standalone tab). Apps live under Settings → Services.
 const nav = [
   { to: '/', labelKey: 'nav.dashboard', end: true, icon: LayoutDashboard },
+  { to: '/library', labelKey: 'nav.library', end: false, icon: Clapperboard },
   { to: '/tags', labelKey: 'nav.tags', end: false, icon: TagsIcon },
   { to: '/rules', labelKey: 'nav.rules', end: false, icon: ListChecks },
   { to: '/logs', labelKey: 'nav.logs', end: false, icon: ScrollText },

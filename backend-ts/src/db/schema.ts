@@ -256,7 +256,7 @@ export const vocabulary = sqliteTable(
     // migration SQL -- Drizzle's schema DSL can't express expression indexes.
     categoryCheck: check(
       'vocabulary_category_check',
-      sql`${t.category} IN ('genre','certification','collection','quality','language','audio_language')`,
+      sql`${t.category} IN ('genre','certification','collection','quality','language','audio_language','studio','network','series_type','video_codec','video_dynamic_range','audio_codec','audio_channels')`,
     ),
     appTypeCheck: check(
       'vocabulary_app_type_check',

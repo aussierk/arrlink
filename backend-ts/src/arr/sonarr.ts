@@ -88,6 +88,10 @@ async function mapWithConcurrency<T, R>(
 export class SonarrAdapter extends BaseAdapter {
   readonly appType = 'sonarr' as const
 
+  protected itemPath(itemId: number): string {
+    return `/api/v3/series/${itemId}`
+  }
+
   async ping(): Promise<AppInfo> {
     const data = (await this.getJson('/api/v3/system/status')) as { version?: unknown }
     if (!data || typeof data !== 'object' || !('version' in data)) {

@@ -5,6 +5,7 @@ import RouteError from './components/RouteError'
 import Shell from './Shell'
 import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
+import Library from './pages/Library'
 import Tags from './pages/Tags'
 import Rules from './pages/Rules'
 import Logs from './pages/Logs'
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Dashboard /> },
           { path: 'apps', element: <Navigate to="/settings/services" replace /> },
+          { path: 'library', element: <Library /> },
           { path: 'tags', element: <Tags /> },
           { path: 'rules', element: <Rules /> },
           { path: 'logs', element: <Logs /> },

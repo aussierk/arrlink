@@ -28,7 +28,7 @@ interface RadarrMovieRow {
   movieFile?: RadarrMovieFile | null
   genres?: unknown
   certification?: string
-  collection?: { name?: string } | null
+  collection?: { title?: string; name?: string } | null
   qualityProfileId?: number | null
   originalLanguage?: { name?: string } | null
   studio?: string
@@ -42,6 +42,10 @@ interface RadarrMovieRow {
 
 export class RadarrAdapter extends BaseAdapter {
   readonly appType = 'radarr' as const
+
+  protected itemPath(itemId: number): string {
+    return `/api/v3/movie/${itemId}`
+  }
 
   async ping(): Promise<AppInfo> {
     const data = (await this.getJson('/api/v3/system/status')) as { version?: unknown }
@@ -77,7 +81,7 @@ export class RadarrAdapter extends BaseAdapter {
         .map((g) => String(g).trim())
         .filter(Boolean)
       const certification = (row.certification ?? '').trim() || null
-      const collection = row.collection?.name?.trim() || null
+      const collection = (row.collection?.title ?? row.collection?.name)?.trim() || null
       const qpId = toNumberOrNull(row.qualityProfileId)
       const qpName = qpId !== null ? (profileById.get(qpId) ?? null) : null
       const originalLanguage = row.originalLanguage?.name?.trim() || null

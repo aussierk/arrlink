@@ -146,6 +146,16 @@ function stubSonarr(tv: Tv, apiKey = API_KEY): ReturnType<typeof vi.fn> {
     if (u.pathname === '/api/v3/qualityprofile') {
       return Promise.resolve(jsonResponse([]))
     }
+    const seriesMatch = /^\/api\/v3\/series\/(\d+)$/.exec(u.pathname)
+    if (seriesMatch) {
+      const id = Number(seriesMatch[1])
+      const series = tv.series.find((s) => s.id === id)
+      if (!series) return Promise.resolve(new Response('not found', { status: 404 }))
+      if (init?.method === 'PUT') {
+        return Promise.resolve(jsonResponse(JSON.parse(init.body as string)))
+      }
+      return Promise.resolve(jsonResponse(series))
+    }
     return Promise.resolve(new Response('not found', { status: 404 }))
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -278,6 +288,23 @@ describe('delta fetch', () => {
     expect(tv.episodefileCalls).toContain(1)
     expect(tv.episodefileCalls).not.toContain(2)
     expect(third.find((i) => i.id === 1)?.files).toHaveLength(3)
+  })
+})
+
+describe('setItemTags', () => {
+  it('PUTs /api/v3/series/{id} (not /movie), replacing only tags', async () => {
+    const fetchMock = stubSonarr(tv)
+    await new SonarrAdapter(mediaOrigin(), API_KEY, 5000).setItemTags(1, [5])
+
+    const putCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PUT',
+    ) as [string | URL, RequestInit] | undefined
+    expect(putCall).toBeDefined()
+    const [url, init] = putCall!
+    expect(new URL(String(url)).pathname).toBe('/api/v3/series/1')
+    const body = JSON.parse(init.body as string) as { tags: number[]; title: string }
+    expect(body.tags).toEqual([5])
+    expect(body.title).toBe('The Show')
   })
 })
 
